@@ -37,7 +37,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/articles", s.handleArticles)
 	mux.HandleFunc("/api/v1/articles/", s.handleArticleByID)
 	mux.HandleFunc("/healthz", s.handleHealth)
-	return mux
+	return corsMiddleware(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -209,4 +209,18 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

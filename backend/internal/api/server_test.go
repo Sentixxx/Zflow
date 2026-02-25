@@ -138,3 +138,36 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 		t.Fatalf("is_read = false, want true")
 	}
 }
+
+func TestCORSPreflightAndHeaders(t *testing.T) {
+	feedStore, err := store.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewFeedStore() error = %v", err)
+	}
+	server := NewServer(feedStore)
+
+	preflight := httptest.NewRequest(http.MethodOptions, "/api/v1/articles", nil)
+	preflight.Header.Set("Origin", "http://localhost:5173")
+	preflight.Header.Set("Access-Control-Request-Method", "GET")
+	rrPreflight := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrPreflight, preflight)
+
+	if rrPreflight.Code != http.StatusNoContent {
+		t.Fatalf("OPTIONS /api/v1/articles status = %d, want %d", rrPreflight.Code, http.StatusNoContent)
+	}
+	if rrPreflight.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want *", rrPreflight.Header().Get("Access-Control-Allow-Origin"))
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /healthz status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want *", rr.Header().Get("Access-Control-Allow-Origin"))
+	}
+}

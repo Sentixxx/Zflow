@@ -1,6 +1,9 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change022 日期:2026-02-25 | 文件:backend/internal/api/server.go | 操作:Modify | 影响:HTTP中间件 | 说明:新增全局CORS中间件并处理OPTIONS预检请求 | 关联:task013
+- change023 日期:2026-02-25 | 文件:backend/internal/api/server_test.go | 操作:Modify | 影响:API测试 | 说明:新增CORS预检与响应头测试覆盖 | 关联:task013
+- change024 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task013 | 说明:新增并完成前端跨域联调任务 | 关联:task013
 - change021 日期:2026-02-25 | 文件:frontend/index.html | 操作:Add | 影响:联调界面 | 说明:新增最小前端页用于订阅创建、文章列表/详情和已读切换联调 | 关联:task002
 - change014 日期:2026-02-25 | 文件:backend/internal/domain/article.go | 操作:Add | 影响:文章领域模型 | 说明:新增Article结构用于列表/详情与已读状态 | 关联:task002
 - change015 日期:2026-02-25 | 文件:backend/internal/store/store.go | 操作:Modify | 影响:持久化与查询接口 | 说明:扩展FeedStore以保存文章并支持详情与已读更新 | 关联:task002
