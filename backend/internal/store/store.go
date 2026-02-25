@@ -309,19 +309,19 @@ func (s *FeedStore) AddInFolder(url, title string, items []ArticleSeed, fetchErr
 	}
 
 	return domain.Feed{
-		ID:              feedID,
-		URL:             url,
-		Title:           title,
-		FolderID:        folderID,
-		CustomScript:    "",
+		ID:               feedID,
+		URL:              url,
+		Title:            title,
+		FolderID:         folderID,
+		CustomScript:     "",
 		CustomScriptLang: "shell",
-		ItemCount:       insertedCount,
-		LastFetchedAt:   now,
-		LastFetchStatus: status,
-		LastFetchError:  fetchErr,
-		ETag:            etag,
-		LastModified:    lastModified,
-		CreatedAt:       now,
+		ItemCount:        insertedCount,
+		LastFetchedAt:    now,
+		LastFetchStatus:  status,
+		LastFetchError:   fetchErr,
+		ETag:             etag,
+		LastModified:     lastModified,
+		CreatedAt:        now,
 	}, nil
 }
 
@@ -557,6 +557,28 @@ func cleanSeed(seed ArticleSeed) ArticleSeed {
 func (s *FeedStore) UpdateFeedScript(id int64, script string, lang string) (domain.Feed, bool, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := s.db.Exec(`UPDATE feeds SET custom_script = ?, custom_script_lang = ?, updated_at = ? WHERE id = ?`, strings.TrimSpace(script), strings.TrimSpace(lang), now, id)
+	if err != nil {
+		return domain.Feed{}, false, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return domain.Feed{}, false, nil
+	}
+	feed, ok, err := s.GetFeed(id)
+	if err != nil {
+		return domain.Feed{}, false, err
+	}
+	return feed, ok, nil
+}
+
+func (s *FeedStore) UpdateFeedTitle(id int64, title string) (domain.Feed, bool, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return domain.Feed{}, false, errors.New("title is required")
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(`UPDATE feeds SET title = ?, updated_at = ? WHERE id = ?`, title, now, id)
 	if err != nil {
 		return domain.Feed{}, false, err
 	}

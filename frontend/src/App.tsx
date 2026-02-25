@@ -17,7 +17,9 @@ type ReadFilter = "all" | "unread" | "read";
 type SortMode = "latest" | "oldest" | "unread-first";
 type ResizeTarget = "sidebar" | "list";
 type FolderContextMenu = { folder: Folder; x: number; y: number } | null;
+type FeedContextMenu = { feed: Feed; x: number; y: number } | null;
 type ScriptLang = "shell" | "python" | "javascript";
+type SettingsTab = "connection" | "subscription" | "script";
 
 function normalizeScriptLang(raw: string | undefined): ScriptLang {
   if (raw === "python" || raw === "javascript") {
@@ -58,6 +60,13 @@ export function App() {
   const [listWidth, setListWidth] = useState<number>(360);
   const [isNarrow, setIsNarrow] = useState<boolean>(() => window.innerWidth <= 900);
   const [folderContextMenu, setFolderContextMenu] = useState<FolderContextMenu>(null);
+  const [feedContextMenu, setFeedContextMenu] = useState<FeedContextMenu>(null);
+  const [renamingFeedID, setRenamingFeedID] = useState<number | null>(null);
+  const [renamingFeedTitle, setRenamingFeedTitle] = useState<string>("");
+  const [renamingFeedOriginalTitle, setRenamingFeedOriginalTitle] = useState<string>("");
+  const [manageCategoryFeed, setManageCategoryFeed] = useState<Feed | null>(null);
+  const [manageCategoryFolderID, setManageCategoryFolderID] = useState<number | null>(null);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("subscription");
   const [collapsedFolders, setCollapsedFolders] = useState<Record<number, boolean>>({});
   const [draggingFeedID, setDraggingFeedID] = useState<number | null>(null);
   const [dragOverFolderID, setDragOverFolderID] = useState<number | null>(null);
@@ -91,6 +100,11 @@ export function App() {
     folders.forEach((folder) => map.set(folder.id, folder.name));
     return map;
   }, [folders]);
+  const feedNameByID = useMemo(() => {
+    const map = new Map<number, string>();
+    feeds.forEach((feed) => map.set(feed.id, feed.title || feed.url || `#${feed.id}`));
+    return map;
+  }, [feeds]);
 
   const rootFolders = useMemo(() => folders.filter((folder) => folder.parent_id == null), [folders]);
   const childFoldersByParent = useMemo(() => {
@@ -181,6 +195,15 @@ export function App() {
     () => filteredAndSortedArticles.slice(0, Math.min(visibleCount, effectiveBufferedCount)),
     [filteredAndSortedArticles, visibleCount, effectiveBufferedCount],
   );
+  const articleListTitle = useMemo(() => {
+    if (selectedFeedID != null) {
+      return `订阅文章（${feedNameByID.get(selectedFeedID) || `#${selectedFeedID}`}）`;
+    }
+    if (selectedFolderID != null) {
+      return `分类文章（${folderNameByID.get(selectedFolderID) || `#${selectedFolderID}`}）`;
+    }
+    return "全部文章";
+  }, [selectedFeedID, selectedFolderID, feedNameByID, folderNameByID]);
 
   const setMessage = (message: string, isError = false) => {
     if (isError) {
@@ -386,11 +409,6 @@ export function App() {
   };
 
   const toggleSettings = () => {
-    if (sidebarCollapsed) {
-      setSidebarCollapsed(false);
-      setSettingsOpen(true);
-      return;
-    }
     setSettingsOpen((v) => !v);
   };
 
@@ -479,7 +497,10 @@ export function App() {
   }, [folders]);
 
   useEffect(() => {
-    const closeMenu = () => setFolderContextMenu(null);
+    const closeMenu = () => {
+      setFolderContextMenu(null);
+      setFeedContextMenu(null);
+    };
     window.addEventListener("click", closeMenu);
     return () => window.removeEventListener("click", closeMenu);
   }, []);
@@ -505,6 +526,22 @@ export function App() {
       x,
       y,
     });
+    setFeedContextMenu(null);
+  };
+
+  const openFeedContextMenu = (event: React.MouseEvent, feed: Feed) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const menuWidth = 196;
+    const menuHeight = 206;
+    const x = Math.max(10, Math.min(event.clientX, window.innerWidth - menuWidth - 10));
+    const y = Math.max(10, Math.min(event.clientY, window.innerHeight - menuHeight - 10));
+    setFeedContextMenu({
+      feed,
+      x,
+      y,
+    });
+    setFolderContextMenu(null);
   };
 
   const createSubFolder = async () => {
@@ -581,6 +618,67 @@ export function App() {
     } finally {
       setPendingDeleteFeed(null);
     }
+  };
+
+  const startRenameFeed = (feed: Feed) => {
+    const original = feed.title || feed.url || "";
+    setRenamingFeedID(feed.id);
+    setRenamingFeedTitle(original);
+    setRenamingFeedOriginalTitle(original);
+    setFeedContextMenu(null);
+  };
+
+  const clearRenameFeed = () => {
+    setRenamingFeedID(null);
+    setRenamingFeedTitle("");
+    setRenamingFeedOriginalTitle("");
+  };
+
+  const renameFeed = async (feedID: number) => {
+    if (renamingFeedID !== feedID) {
+      return;
+    }
+    const currentName = feedNameByID.get(feedID) || "";
+    const nextTitle = renamingFeedTitle.trim();
+    const targetTitle = nextTitle === "" ? renamingFeedOriginalTitle : nextTitle;
+    clearRenameFeed();
+    if (targetTitle === currentName || targetTitle === "") {
+      return;
+    }
+    try {
+      await client.updateFeedTitle(feedID, targetTitle);
+      await loadFeeds();
+      setMessage("订阅源已重命名");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const openFeedCategoryDialog = (feed: Feed) => {
+    setManageCategoryFeed(feed);
+    setManageCategoryFolderID(feed.folder_id ?? null);
+    setFeedContextMenu(null);
+  };
+
+  const saveFeedCategory = async () => {
+    if (!manageCategoryFeed) {
+      return;
+    }
+    try {
+      await client.updateFeedFolder(manageCategoryFeed.id, manageCategoryFolderID);
+      await Promise.all([loadFeeds(), loadArticles()]);
+      setMessage("订阅分类已更新");
+      setManageCategoryFeed(null);
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const openScriptSettingsForFeed = (feed: Feed) => {
+    selectScriptFeed(feed.id);
+    setSettingsTab("script");
+    setSettingsOpen(true);
+    setFeedContextMenu(null);
   };
 
   const toggleFolderCollapsed = (folderID: number) => {
@@ -712,26 +810,61 @@ export function App() {
     });
   };
 
-  const renderFeedNode = (feed: Feed, paddingLeft: number) => (
-    <div key={`feed-${feed.id}`} className="tree-row feed-row">
+  const renderFeedNode = (feed: Feed, paddingLeft: number) => {
+    const isRenaming = renamingFeedID === feed.id;
+    return (
+    <div key={`feed-${feed.id}`} className={`tree-row feed-row ${isRenaming ? "editing" : ""}`}>
       <button
         className={`item feed-item ${selectedFeedID === feed.id ? "active" : ""} ${draggingFeedID === feed.id ? "dragging" : ""}`}
         style={{ paddingLeft }}
-        onClick={() => selectFeed(feed.id)}
-        draggable
-        onDragStart={(event) => onFeedDragStart(event, feed.id)}
+        onClick={() => {
+          if (!isRenaming) {
+            selectFeed(feed.id);
+          }
+        }}
+        draggable={!isRenaming}
+        onDragStart={(event) => {
+          if (isRenaming) return;
+          onFeedDragStart(event, feed.id);
+        }}
         onDragEnd={onFeedDragEnd}
       >
-        <div>
-          <strong>{feed.title || "(未命名源)"}</strong>
-        </div>
+        {isRenaming ? (
+          <div className="feed-rename-row" onClick={(event) => event.stopPropagation()}>
+            <input
+              className="feed-rename-input"
+              value={renamingFeedTitle}
+              onChange={(event) => setRenamingFeedTitle(event.target.value)}
+              autoFocus
+              onBlur={() => {
+                void renameFeed(feed.id);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void renameFeed(feed.id);
+                }
+              }}
+            />
+          </div>
+        ) : (
+          <div>
+            <strong>{feed.title || "(未命名源)"}</strong>
+          </div>
+        )}
         <div className="meta">
           {feed.url} · items={feed.item_count} · {feed.last_fetch_status}
           {feed.last_fetch_status === "failed" && feed.last_fetch_error ? ` · 错误: ${feed.last_fetch_error}` : ""}
         </div>
       </button>
+      {!isRenaming && (
+        <button className="node-action-btn" onClick={(event) => openFeedContextMenu(event, feed)} title="管理订阅源" aria-label={`管理订阅源 ${feed.title || feed.url}`}>
+          ⋯
+        </button>
+      )}
     </div>
-  );
+    );
+  };
 
   const renderFolderNode = (folder: Folder, depth = 0) => {
     const children = childFoldersByParent.get(folder.id) || [];
@@ -762,7 +895,7 @@ export function App() {
             </span>
             <span className="folder-name">{folder.name}</span>
           </button>
-          <button className="folder-action-btn" onClick={(event) => openFolderContextMenu(event, folder)} title="管理分类" aria-label={`管理分类 ${folder.name}`}>
+          <button className="node-action-btn" onClick={(event) => openFolderContextMenu(event, folder)} title="管理分类" aria-label={`管理分类 ${folder.name}`}>
             ⋯
           </button>
         </div>
@@ -839,105 +972,6 @@ export function App() {
             </div>
           )}
 
-          {!sidebarCollapsed && settingsOpen && (
-            <div className="settings-card">
-              <div className="settings-card-header">
-                <h3>设置</h3>
-                <button className="sidebar-toggle" onClick={() => setSettingsOpen(false)} aria-label="关闭设置">
-                  ✕
-                </button>
-              </div>
-
-              <h4 className="section-title">连接设置</h4>
-              <label htmlFor="apiBase">API Base URL</label>
-              <div className="row">
-                <input id="apiBase" value={apiBase} onChange={(e) => setApiBase(e.target.value)} />
-                <button className="secondary" onClick={handleSaveAPIBase}>
-                  保存
-                </button>
-              </div>
-
-              <h4 className="section-title">添加订阅</h4>
-              <label htmlFor="feedUrl">RSS/Atom URL</label>
-              <input
-                id="feedUrl"
-                value={feedURL}
-                placeholder="https://example.com/feed.xml"
-                onChange={(e) => setFeedURL(e.target.value)}
-              />
-              <label htmlFor="folderSelect">归类到文件夹</label>
-              <div className="row">
-                <select id="folderSelect" value={newFeedFolderID ?? ""} onChange={(e) => setNewFeedFolderID(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">未分类</option>
-                  {folders.map((folder) => (
-                    <option key={folder.id} value={folder.id}>
-                      {folder.name}
-                    </option>
-                  ))}
-                </select>
-                <button className="secondary" onClick={createRootFolder}>
-                  新建分类
-                </button>
-              </div>
-
-              <div className="row">
-                <button onClick={addFeed}>添加并首抓</button>
-                <button className="secondary" onClick={loadFeeds}>
-                  刷新订阅
-                </button>
-                <button className="secondary" onClick={refreshFeedsFromNetwork}>
-                  远端抓取
-                </button>
-                <button className="secondary" onClick={loadArticles}>
-                  刷新文章
-                </button>
-              </div>
-
-              <h4 className="section-title">脚本设置（当前订阅源）</h4>
-              <label htmlFor="scriptFeed">订阅源</label>
-              <select id="scriptFeed" value={scriptFeedID ?? ""} onChange={(e) => selectScriptFeed(e.target.value ? Number(e.target.value) : null)}>
-                <option value="">请选择</option>
-                {feeds.map((feed) => (
-                  <option key={feed.id} value={feed.id}>
-                    {feed.title || feed.url}
-                  </option>
-                ))}
-              </select>
-              <label htmlFor="scriptUpload">上传脚本文件</label>
-              <input id="scriptUpload" type="file" accept=".sh,.txt,.js,.py,.rb,.pl,.bash" onChange={uploadScriptFile} />
-              <label htmlFor="scriptLang">脚本语言</label>
-              <select
-                id="scriptLang"
-                value={scriptLang}
-                onChange={(e) => {
-                  setScriptLang(e.target.value as ScriptLang);
-                  setScriptDirty(true);
-                }}
-              >
-                <option value="shell">shell</option>
-                <option value="python">python</option>
-                <option value="javascript">javascript</option>
-              </select>
-              <label htmlFor="scriptContent">脚本内容（stdin 为 JSON v1，stdout 必须返回 JSON，content_html 为最终全文）</label>
-              <textarea
-                id="scriptContent"
-                className="script-editor"
-                rows={8}
-                value={scriptContent}
-                onChange={(e) => {
-                  setScriptContent(e.target.value);
-                  setScriptDirty(true);
-                }}
-                placeholder={`#!/bin/sh\n# stdin 为 JSON v1，stdout 返回 JSON（示例）\necho '{"ok":true,"content_html":"<article>...</article>"}'`}
-              />
-              <div className="row">
-                <button className="secondary" onClick={saveFeedScript}>
-                  保存脚本
-                </button>
-              </div>
-            </div>
-          )}
-
           <div className={`sidebar-footer ${sidebarCollapsed ? "collapsed" : ""}`}>
             <button className="settings-entry" onClick={toggleSettings} title="设置" aria-label="打开设置">
               <span className="gear">⚙</span>
@@ -957,11 +991,7 @@ export function App() {
         )}
 
         <section className="panel list-panel">
-          <h2>
-            {selectedFeedID != null && `订阅文章（#${selectedFeedID}）`}
-            {selectedFeedID == null && selectedFolderID != null && `分类文章（${folderNameByID.get(selectedFolderID) || `#${selectedFolderID}`}）`}
-            {selectedFeedID == null && selectedFolderID == null && "全部文章"}
-          </h2>
+          <h2>{articleListTitle}</h2>
           <div className="filters">
             <label>
               已读筛选
@@ -1076,6 +1106,172 @@ export function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {manageCategoryFeed && (
+        <div className="modal-backdrop" onClick={() => setManageCategoryFeed(null)}>
+          <div className="confirm-modal category-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>修改订阅分类</h3>
+            <p>{manageCategoryFeed.title || manageCategoryFeed.url}</p>
+            <label htmlFor="manageFeedFolder">目标分类</label>
+            <select id="manageFeedFolder" value={manageCategoryFolderID ?? ""} onChange={(e) => setManageCategoryFolderID(e.target.value ? Number(e.target.value) : null)}>
+              <option value="">未分类</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
+            <div className="row">
+              <button className="secondary" onClick={() => setManageCategoryFeed(null)}>
+                取消
+              </button>
+              <button onClick={saveFeedCategory}>保存</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <div className="modal-backdrop settings-backdrop" onClick={() => setSettingsOpen(false)}>
+          <div className="settings-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="settings-modal-header">
+              <h3>设置</h3>
+              <button className="sidebar-toggle" onClick={() => setSettingsOpen(false)} aria-label="关闭设置">
+                ✕
+              </button>
+            </div>
+            <div className="settings-modal-body">
+              <aside className="settings-nav">
+                <button className={`settings-tab ${settingsTab === "subscription" ? "active" : ""}`} onClick={() => setSettingsTab("subscription")}>
+                  订阅管理
+                </button>
+                <button className={`settings-tab ${settingsTab === "script" ? "active" : ""}`} onClick={() => setSettingsTab("script")}>
+                  脚本设置
+                </button>
+                <button className={`settings-tab ${settingsTab === "connection" ? "active" : ""}`} onClick={() => setSettingsTab("connection")}>
+                  连接设置
+                </button>
+              </aside>
+              <section className="settings-page">
+                {settingsTab === "subscription" && (
+                  <div className="settings-page-inner settings-section-card">
+                    <h4 className="section-title">添加订阅</h4>
+                    <label htmlFor="feedUrl">RSS/Atom URL</label>
+                    <input id="feedUrl" value={feedURL} placeholder="https://example.com/feed.xml" onChange={(e) => setFeedURL(e.target.value)} />
+                    <label htmlFor="folderSelect">归类到文件夹</label>
+                    <div className="row">
+                      <select id="folderSelect" value={newFeedFolderID ?? ""} onChange={(e) => setNewFeedFolderID(e.target.value ? Number(e.target.value) : null)}>
+                        <option value="">未分类</option>
+                        {folders.map((folder) => (
+                          <option key={folder.id} value={folder.id}>
+                            {folder.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="secondary" onClick={createRootFolder}>
+                        新建分类
+                      </button>
+                    </div>
+                    <div className="row settings-actions">
+                      <button onClick={addFeed}>添加并首抓</button>
+                      <button className="secondary" onClick={loadFeeds}>
+                        刷新订阅
+                      </button>
+                      <button className="secondary" onClick={refreshFeedsFromNetwork}>
+                        远端抓取
+                      </button>
+                      <button className="secondary" onClick={loadArticles}>
+                        刷新文章
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {settingsTab === "script" && (
+                  <div className="settings-page-inner settings-section-card">
+                    <h4 className="section-title">脚本设置（按订阅源）</h4>
+                    <label htmlFor="scriptFeed">订阅源</label>
+                    <select id="scriptFeed" value={scriptFeedID ?? ""} onChange={(e) => selectScriptFeed(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">请选择</option>
+                      {feeds.map((feed) => (
+                        <option key={feed.id} value={feed.id}>
+                          {feed.title || feed.url}
+                        </option>
+                      ))}
+                    </select>
+                    <label htmlFor="scriptUpload">上传脚本文件</label>
+                    <input id="scriptUpload" type="file" accept=".sh,.txt,.js,.py,.rb,.pl,.bash" onChange={uploadScriptFile} />
+                    <label htmlFor="scriptLang">脚本语言</label>
+                    <select
+                      id="scriptLang"
+                      value={scriptLang}
+                      onChange={(e) => {
+                        setScriptLang(e.target.value as ScriptLang);
+                        setScriptDirty(true);
+                      }}
+                    >
+                      <option value="shell">shell</option>
+                      <option value="python">python</option>
+                      <option value="javascript">javascript</option>
+                    </select>
+                    <label htmlFor="scriptContent">脚本内容（stdin 为 JSON v1，stdout 必须返回 JSON，content_html 为最终全文）</label>
+                    <textarea
+                      id="scriptContent"
+                      className="script-editor"
+                      rows={8}
+                      value={scriptContent}
+                      onChange={(e) => {
+                        setScriptContent(e.target.value);
+                        setScriptDirty(true);
+                      }}
+                      placeholder={`#!/bin/sh\n# stdin 为 JSON v1，stdout 返回 JSON（示例）\necho '{"ok":true,"content_html":"<article>...</article>"}'`}
+                    />
+                    <div className="row">
+                      <button className="secondary" onClick={saveFeedScript}>
+                        保存脚本
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {settingsTab === "connection" && (
+                  <div className="settings-page-inner settings-section-card">
+                    <h4 className="section-title">连接设置</h4>
+                    <label htmlFor="apiBase">API Base URL</label>
+                    <div className="row">
+                      <input id="apiBase" value={apiBase} onChange={(e) => setApiBase(e.target.value)} />
+                      <button className="secondary" onClick={handleSaveAPIBase}>
+                        保存
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {feedContextMenu && (
+        <div className="context-menu" style={{ left: feedContextMenu.x, top: feedContextMenu.y }} onClick={(e) => e.stopPropagation()}>
+          <button className="context-item" onClick={() => startRenameFeed(feedContextMenu.feed)}>
+            重命名订阅
+          </button>
+          <button className="context-item" onClick={() => openFeedCategoryDialog(feedContextMenu.feed)}>
+            修改分类
+          </button>
+          <button className="context-item" onClick={() => openScriptSettingsForFeed(feedContextMenu.feed)}>
+            设置脚本
+          </button>
+          <button
+            className="context-item danger"
+            onClick={() => {
+              setPendingDeleteFeed(feedContextMenu.feed);
+              setFeedContextMenu(null);
+            }}
+          >
+            删除订阅
+          </button>
         </div>
       )}
 

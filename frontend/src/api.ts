@@ -85,6 +85,13 @@ export class ApiClient {
     });
   }
 
+  async updateFeedTitle(id: number, title: string): Promise<Feed> {
+    return this.request<Feed>(`/api/v1/feeds/${id}/title`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    });
+  }
+
   async getArticle(id: number): Promise<Article> {
     return this.request<Article>(`/api/v1/articles/${id}`);
   }

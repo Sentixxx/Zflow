@@ -50,6 +50,10 @@ type updateFeedScriptRequest struct {
 	ScriptLang string `json:"script_lang"`
 }
 
+type updateFeedTitleRequest struct {
+	Title string `json:"title"`
+}
+
 func NewServer(feedStore *store.FeedStore) *Server {
 	return &Server{
 		store: feedStore,
@@ -150,6 +154,14 @@ func (s *Server) handleFeedByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.updateFeedScript(w, r, id)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "title" {
+		if r.Method != http.MethodPatch {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		s.updateFeedTitle(w, r, id)
 		return
 	}
 
@@ -322,6 +334,31 @@ func (s *Server) updateFeedScript(w http.ResponseWriter, r *http.Request, id int
 	feed, ok, err := s.store.UpdateFeedScript(id, req.Script, lang)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update feed script"})
+		return
+	}
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "feed not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, feed)
+}
+
+func (s *Server) updateFeedTitle(w http.ResponseWriter, r *http.Request, id int64) {
+	defer r.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	var req updateFeedTitleRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+
+	feed, ok, err := s.store.UpdateFeedTitle(id, req.Title)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	if !ok {

@@ -1,5 +1,20 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change121 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:订阅重命名行为 | 说明:移除保存/取消按钮并改为失焦或回车自动提交且空值回退原名称 | 关联:task038
+change122 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Modify | 影响:分类弹窗与设置表单间距 | 说明:放宽修改分类弹窗尺寸与留白并增加设置卡片内控件纵向间距 | 关联:task038
+change123 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task038 | 说明:新增并完成自动重命名语义与分类弹窗松弛化任务 | 关联:task038
+change118 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:订阅源重命名交互 | 说明:将订阅源重命名从prompt改为侧栏内联编辑并支持保存/取消快捷键 | 关联:task037
+change119 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Modify | 影响:侧栏编辑与设置布局 | 说明:新增内联重命名样式并将设置页升级为分组卡片与更松弛的按钮间距 | 关联:task037
+change120 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task037 | 说明:新增并完成侧栏内联重命名与设置松弛化任务 | 关联:task037
+change114 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:设置页布局结构 | 说明:为设置各标签页增加内层容器以实现内容区居中对齐 | 关联:task036
+change115 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Modify | 影响:控件与操作按钮视觉 | 说明:优化select下拉箭头与内边距并将树节点...按钮改为垂直居中显示 | 关联:task036
+change116 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Modify | 影响:设置中心对齐 | 说明:设置页改为居中主列并调整行内控件弹性与移动端适配 | 关联:task036
+change117 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task036 | 说明:新增并完成UI对齐优化任务 | 关联:task036
+change109 日期:2026-02-25 | 文件:backend/internal/store/store.go,backend/internal/api/server.go,frontend/src/api.ts | 操作:Modify | 影响:订阅源管理API | 说明:新增订阅源重命名接口并打通前端调用 | 关联:task035
+change110 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:侧栏交互与设置信息架构 | 说明:新增订阅源...子菜单（重命名/改分类/设置脚本/删除）并将设置改为居中弹窗+左侧标签页 | 关联:task035
+change111 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:文章列表标题语义 | 说明:中栏标题改为展示订阅源名称或分类名称而非ID | 关联:task035
+change112 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Modify | 影响:设置与菜单样式 | 说明:新增设置中心弹窗与标签页样式并统一订阅/分类节点操作按钮视觉 | 关联:task035
+change113 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task035 | 说明:新增并完成订阅菜单与设置中心重构任务 | 关联:task035
 change105 日期:2026-02-25 | 文件:backend/internal/api/server.go | 操作:Modify | 影响:订阅脚本执行链路 | 说明:将脚本阶段切换为stdin/stdout JSON契约并按ok/title/summary_html/content_html合并字段且失败按条目回退 | 关联:task034
 change106 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:设置与阅读详情 | 说明:新增脚本语言选择与文件扩展名识别并优先渲染full_content安全HTML | 关联:task034
 change107 日期:2026-02-25 | 文件:frontend/src/api.ts,frontend/src/types.ts | 操作:Modify | 影响:前端脚本接口类型 | 说明:补齐script_lang请求参数与Feed/Article脚本字段类型定义 | 关联:task034
