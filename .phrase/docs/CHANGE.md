@@ -1,6 +1,9 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change126 日期:2026-02-25 | 文件:frontend/package.json | 操作:Modify | 影响:前端依赖解析 | 说明:新增overrides将yallist锁定到3.1.0以规避CI中3.1.1 tarball被策略拦截 | 关联:task040
+- change127 日期:2026-02-25 | 文件:.github/workflows/ci-cd.yml | 操作:Modify | 影响:前端安装步骤 | 说明:将CI前端依赖安装由npm ci调整为npm install以应用overrides重新解析依赖 | 关联:task040
+- change128 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task040 | 说明:新增并完成CI依赖403修复任务 | 关联:task040
 - change124 日期:2026-02-25 | 文件:.github/workflows/ci-cd.yml | 操作:Add | 影响:CI流水线 | 说明:新增GitHub Actions工作流并覆盖后端测试构建与前端测试构建且不发布二进制产物 | 关联:task039
 - change125 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task039 | 说明:新增并完成CI/CD工作流任务 | 关联:task039
 - change121 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:订阅重命名行为 | 说明:移除保存/取消按钮并改为失焦或回车自动提交且空值回退原名称 | 关联:task038
