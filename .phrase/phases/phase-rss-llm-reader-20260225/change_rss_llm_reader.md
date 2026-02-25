@@ -1,5 +1,7 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change124 日期:2026-02-25 | 文件:.github/workflows/ci-cd.yml | 操作:Add | 影响:CI流水线 | 说明:新增GitHub Actions工作流并覆盖后端测试构建与前端测试构建且不发布二进制产物 | 关联:task039
+change125 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task039 | 说明:新增并完成CI/CD工作流任务 | 关联:task039
 change121 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:订阅重命名行为 | 说明:移除保存/取消按钮并改为失焦或回车自动提交且空值回退原名称 | 关联:task038
 change122 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Modify | 影响:分类弹窗与设置表单间距 | 说明:放宽修改分类弹窗尺寸与留白并增加设置卡片内控件纵向间距 | 关联:task038
 change123 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task038 | 说明:新增并完成自动重命名语义与分类弹窗松弛化任务 | 关联:task038
