@@ -1,6 +1,8 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change025 日期:2026-02-25 | 文件:.rules | 操作:Add | 影响:项目核心规范 | 说明:新增统一规范入口并覆盖架构/API/提交/分层记忆约束 | 关联:task014
+- change026 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task014 | 说明:新增并完成项目规范落地任务 | 关联:task014
 - change022 日期:2026-02-25 | 文件:backend/internal/api/server.go | 操作:Modify | 影响:HTTP中间件 | 说明:新增全局CORS中间件并处理OPTIONS预检请求 | 关联:task013
 - change023 日期:2026-02-25 | 文件:backend/internal/api/server_test.go | 操作:Modify | 影响:API测试 | 说明:新增CORS预检与响应头测试覆盖 | 关联:task013
 - change024 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task013 | 说明:新增并完成前端跨域联调任务 | 关联:task013
