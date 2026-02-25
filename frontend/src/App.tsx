@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import DOMPurify from "dompurify";
 import { ApiClient } from "./api";
 import type { Article, Feed, Folder } from "./types";
 import { filterAndSortArticles, formatArticleTime } from "./lib/article-list";
 import type { ReadFilter, SortMode } from "./lib/article-list";
+import { sanitizeRichHTML } from "./lib/sanitize";
+import { buildFeedIconURLByHost, feedHost } from "./lib/feed-utils";
+import { RssFallbackIcon } from "./components/RssFallbackIcon";
 
 const DEFAULT_API_BASE = "http://localhost:8080";
 const PREFETCH_BATCH_SIZE = 20;
@@ -34,16 +36,6 @@ function scriptLangByFileName(name: string): ScriptLang | null {
   if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) return "javascript";
   if (lower.endsWith(".sh") || lower.endsWith(".bash") || lower.endsWith(".zsh")) return "shell";
   return null;
-}
-
-function feedHost(rawURL: string | undefined): string {
-  const text = (rawURL || "").trim();
-  if (!text) return "";
-  try {
-    return new URL(text).host.toLowerCase();
-  } catch {
-    return "";
-  }
 }
 
 export function App() {
@@ -91,20 +83,8 @@ export function App() {
   const lastLoadAtRef = useRef<number>(0);
   const bounceTimerRef = useRef<number | null>(null);
   const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
-  const sanitizedSummaryHTML = useMemo(() => {
-    const raw = selectedArticle?.summary ?? "";
-    if (!raw.trim()) {
-      return "";
-    }
-    return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
-  }, [selectedArticle?.summary]);
-  const sanitizedFullContentHTML = useMemo(() => {
-    const raw = selectedArticle?.full_content ?? "";
-    if (!raw.trim()) {
-      return "";
-    }
-    return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
-  }, [selectedArticle?.full_content]);
+  const sanitizedSummaryHTML = useMemo(() => sanitizeRichHTML(selectedArticle?.summary), [selectedArticle?.summary]);
+  const sanitizedFullContentHTML = useMemo(() => sanitizeRichHTML(selectedArticle?.full_content), [selectedArticle?.full_content]);
 
   const folderNameByID = useMemo(() => {
     const map = new Map<number, string>();
@@ -116,17 +96,7 @@ export function App() {
     feeds.forEach((feed) => map.set(feed.id, feed.title || feed.url || `#${feed.id}`));
     return map;
   }, [feeds]);
-  const feedIconURLByHost = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const feed of feeds) {
-      const host = feedHost(feed.url);
-      if (!host || !feed.icon_url || map.has(host)) {
-        continue;
-      }
-      map.set(host, `${apiBase.replace(/\/$/, "")}${feed.icon_url}`);
-    }
-    return map;
-  }, [feeds, apiBase]);
+  const feedIconURLByHost = useMemo(() => buildFeedIconURLByHost(feeds, apiBase), [feeds, apiBase]);
 
   const rootFolders = useMemo(() => folders.filter((folder) => folder.parent_id == null), [folders]);
   const childFoldersByParent = useMemo(() => {
@@ -978,22 +948,12 @@ export function App() {
                   }}
                 />
                 <span className="feed-icon-fallback" style={{ display: "none" }} aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                    <circle cx="6" cy="18" r="2.2" />
-                    <path d="M6 13.8a4.2 4.2 0 0 1 4.2 4.2" />
-                    <path d="M6 9.2a8.8 8.8 0 0 1 8.8 8.8" />
-                    <path d="M6 4.8A13.2 13.2 0 0 1 19.2 18" />
-                  </svg>
+                  <RssFallbackIcon />
                 </span>
               </>
             ) : (
               <span className="feed-icon-fallback" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                  <circle cx="6" cy="18" r="2.2" />
-                  <path d="M6 13.8a4.2 4.2 0 0 1 4.2 4.2" />
-                  <path d="M6 9.2a8.8 8.8 0 0 1 8.8 8.8" />
-                  <path d="M6 4.8A13.2 13.2 0 0 1 19.2 18" />
-                </svg>
+                <RssFallbackIcon />
               </span>
             )}
             <strong>{feed.title || "(未命名源)"}</strong>

@@ -1,6 +1,11 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change202 日期:2026-02-26 | 文件:.rules | 操作:Modify | 影响:前端工程规范 | 说明:融合Gist前端规范并补齐架构组件、性能工程、安全渲染、深色模式、状态与资源管理、PWA边界与Vitest测试约束 | 关联:task070
+- change203 日期:2026-02-26 | 文件:frontend/src/App.tsx,frontend/src/lib/feed-utils.ts,frontend/src/lib/sanitize.ts,frontend/src/components/RssFallbackIcon.tsx,frontend/src/types.ts | 操作:Modify | 影响:前端架构与安全渲染 | 说明:抽离feed域名图标复用与HTML清洗工具、提取RSS占位组件并同步前端类型，降低App复杂度且保持功能不变 | 关联:task070
+- change204 日期:2026-02-26 | 文件:frontend/src/styles.css | 操作:Modify | 影响:主题系统 | 说明:引入语义化主题变量并支持prefers-color-scheme深色模式，不改变现有交互逻辑 | 关联:task070
+- change205 日期:2026-02-26 | 文件:frontend/package.json,frontend/vitest.config.ts,frontend/src/lib/article-list.test.ts | 操作:Add | 影响:前端测试基线 | 说明:接入Vitest脚本与配置并新增列表工具函数单元测试 | 关联:task070
+- change206 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task070 | 说明:新增并完成前端规范融合与轻量重构任务记录 | 关联:task070
 - change199 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:图标落盘命名策略 | 说明:图标文件改为host-域名前缀-内容哈希格式存储并保留同域复用语义，减少按feed_id分散存储 | 关联:task069
 - change200 日期:2026-02-26 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:同域图标渲染复用 | 说明:前端新增按feed.url host聚合的图标映射，缺少icon_url时自动回退到同域已加载图标 | 关联:task069
 - change201 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task069 | 说明:新增并完成域名级图标存储与前端复用任务记录 | 关联:task069

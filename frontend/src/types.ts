@@ -28,6 +28,7 @@ export type Article = {
   link: string;
   summary?: string;
   full_content?: string;
+  cover_url?: string;
   published_at?: string;
   is_read: boolean;
   created_at: string;

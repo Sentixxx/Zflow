@@ -7,6 +7,31 @@
   --accent-soft: #eceef3;
   --bg-a: #f2f4f8;
   --bg-b: #f2f4f8;
+  --topbar-bg: #f3f4f6;
+  --btn-bg: #ffffff;
+  --btn-bg-soft: #f8fafd;
+  --btn-line: #d7deea;
+  --resizer-line: #d9dde6;
+  --resizer-line-hover: #94a3b8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e5e7eb;
+    --muted: #9ca3af;
+    --line: #283241;
+    --paper: #0f1722;
+    --accent: #f8fafc;
+    --accent-soft: #1f2937;
+    --bg-a: #0b1220;
+    --bg-b: #111827;
+    --topbar-bg: #111827;
+    --btn-bg: #1f2937;
+    --btn-bg-soft: #111827;
+    --btn-line: #334155;
+    --resizer-line: #334155;
+    --resizer-line-hover: #64748b;
+  }
 }
 
 * {
@@ -50,7 +75,7 @@ body {
   height: 56px;
   padding: 0 16px;
   border-bottom: 1px solid var(--line);
-  background: #f3f4f6;
+  background: var(--topbar-bg);
 }
 
 .top-status {
@@ -91,9 +116,9 @@ body {
   width: 36px;
   height: 36px;
   border-radius: 999px;
-  border: 1px solid #d7deea;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafd 100%);
-  color: #334155;
+  border: 1px solid var(--btn-line);
+  background: linear-gradient(180deg, var(--btn-bg) 0%, var(--btn-bg-soft) 100%);
+  color: var(--ink);
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -102,9 +127,9 @@ body {
 }
 
 .icon-btn:hover {
-  border-color: #b7c3d6;
-  background: linear-gradient(180deg, #ffffff 0%, #f1f5fb 100%);
-  color: #0f172a;
+  border-color: color-mix(in srgb, var(--btn-line) 72%, #ffffff 28%);
+  background: linear-gradient(180deg, var(--btn-bg) 0%, color-mix(in srgb, var(--btn-bg-soft) 78%, #ffffff 22%) 100%);
+  color: var(--ink);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
 }
 
@@ -145,12 +170,12 @@ body {
   bottom: 0;
   left: 3px;
   width: 1px;
-  background: #d9dde6;
+  background: var(--resizer-line);
   transition: background-color 0.15s ease;
 }
 
 .resizer:hover::after {
-  background: #94a3b8;
+  background: var(--resizer-line-hover);
 }
 
 .resizer.disabled {
@@ -1170,5 +1195,42 @@ a {
 
   .settings-actions {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .item {
+    color: var(--ink);
+  }
+
+  .item:hover {
+    background: rgba(148, 163, 184, 0.14);
+  }
+
+  .feed-item.active,
+  .folder-item.active,
+  .article.active {
+    background: rgba(14, 165, 233, 0.2);
+  }
+
+  .meta,
+  .meta-row,
+  .top-status {
+    color: var(--muted);
+  }
+
+  input,
+  select,
+  textarea {
+    background: #0b1220;
+    color: var(--ink);
+    border-color: var(--line);
+  }
+
+  .settings-modal,
+  .confirm-modal {
+    background: #0f1722;
+    border-color: var(--line);
+    color: var(--ink);
   }
 }
