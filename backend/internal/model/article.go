@@ -7,6 +7,7 @@ type Article struct {
 	Link        string `json:"link"`
 	Summary     string `json:"summary,omitempty"`
 	FullContent string `json:"full_content,omitempty"`
+	CoverURL    string `json:"cover_url,omitempty"`
 	PublishedAt string `json:"published_at,omitempty"`
 	IsRead      bool   `json:"is_read"`
 	CreatedAt   string `json:"created_at"`

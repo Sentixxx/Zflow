@@ -165,4 +165,15 @@ export class ApiClient {
     }
     return data as { imported_feeds?: number; updated_feeds?: number; imported_folders?: number };
   }
+
+  async getNetworkSettings(): Promise<{ proxy_url?: string }> {
+    return this.request<{ proxy_url?: string }>("/api/v1/settings/network");
+  }
+
+  async updateNetworkSettings(proxyURL: string): Promise<{ proxy_url?: string }> {
+    return this.request<{ proxy_url?: string }>("/api/v1/settings/network", {
+      method: "PATCH",
+      body: JSON.stringify({ proxy_url: proxyURL }),
+    });
+  }
 }

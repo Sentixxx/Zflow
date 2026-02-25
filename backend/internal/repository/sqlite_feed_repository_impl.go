@@ -22,6 +22,7 @@ type ArticleSeed struct {
 	Link        string
 	Summary     string
 	FullContent string
+	CoverURL    string
 	PublishedAt string
 }
 
@@ -86,6 +87,7 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 			link TEXT NOT NULL DEFAULT '',
 			summary TEXT NOT NULL DEFAULT '',
 			full_content TEXT NOT NULL DEFAULT '',
+			cover_url TEXT NOT NULL DEFAULT '',
 			published_at TEXT NOT NULL DEFAULT '',
 			is_read INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL,
@@ -95,6 +97,11 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_feeds_folder_id ON feeds(folder_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_entries_feed_id ON entries(feed_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_entries_created_at ON entries(created_at);`,
+		`CREATE TABLE IF NOT EXISTS app_settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL
+		);`,
 	}
 
 	for _, stmt := range stmts {
@@ -103,6 +110,9 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 		}
 	}
 	if err := s.ensureColumn(ctx, "entries", "full_content", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "cover_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "feeds", "custom_script", "TEXT NOT NULL DEFAULT ''"); err != nil {
@@ -519,7 +529,7 @@ func (s *SQLiteFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string
 }
 
 func (s *SQLiteFeedRepository) ListArticles() []model.Article {
-	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, full_content, published_at, is_read, created_at FROM entries ORDER BY id DESC`)
+	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, full_content, cover_url, published_at, is_read, created_at FROM entries ORDER BY id DESC`)
 	if err != nil {
 		return []model.Article{}
 	}
@@ -529,7 +539,7 @@ func (s *SQLiteFeedRepository) ListArticles() []model.Article {
 	for rows.Next() {
 		var article model.Article
 		var readFlag int
-		if err := rows.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
+		if err := rows.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.CoverURL, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
 			continue
 		}
 		article.IsRead = readFlag == 1
@@ -548,10 +558,10 @@ func (s *SQLiteFeedRepository) DeleteArticle(id int64) (bool, error) {
 }
 
 func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
-	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, full_content, published_at, is_read, created_at FROM entries WHERE id = ?`, id)
+	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, full_content, cover_url, published_at, is_read, created_at FROM entries WHERE id = ?`, id)
 	var article model.Article
 	var readFlag int
-	if err := row.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
+	if err := row.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.CoverURL, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
 		return model.Article{}, false
 	}
 	article.IsRead = readFlag == 1
@@ -615,9 +625,9 @@ func (s *SQLiteFeedRepository) insertEntriesTx(tx *sql.Tx, feedID int64, items [
 		existingKeys[key] = struct{}{}
 
 		if _, err := tx.Exec(
-			`INSERT INTO entries(feed_id, title, link, summary, full_content, published_at, is_read, created_at, updated_at)
-			 VALUES(?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, cleaned.FullContent, cleaned.PublishedAt, now, now,
+			`INSERT INTO entries(feed_id, title, link, summary, full_content, cover_url, published_at, is_read, created_at, updated_at)
+			 VALUES(?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, cleaned.FullContent, cleaned.CoverURL, cleaned.PublishedAt, now, now,
 		); err != nil {
 			return insertedCount, err
 		}
@@ -650,6 +660,7 @@ func cleanSeed(seed ArticleSeed) ArticleSeed {
 	seed.Link = strings.TrimSpace(seed.Link)
 	seed.Summary = strings.TrimSpace(seed.Summary)
 	seed.FullContent = strings.TrimSpace(seed.FullContent)
+	seed.CoverURL = strings.TrimSpace(seed.CoverURL)
 	seed.PublishedAt = strings.TrimSpace(seed.PublishedAt)
 	return seed
 }
@@ -739,6 +750,28 @@ func nullableInt(v *int64) any {
 		return nil
 	}
 	return *v
+}
+
+func (s *SQLiteFeedRepository) GetSetting(key string) (string, bool, error) {
+	row := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = ?`, strings.TrimSpace(key))
+	var value string
+	if err := row.Scan(&value); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return value, true, nil
+}
+
+func (s *SQLiteFeedRepository) SetSetting(key, value string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.Exec(
+		`INSERT INTO app_settings(key, value, updated_at) VALUES(?, ?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+		strings.TrimSpace(key), strings.TrimSpace(value), now,
+	)
+	return err
 }
 
 func isUniqueViolation(err error) bool {

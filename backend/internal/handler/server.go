@@ -15,8 +15,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sentixxx/Zflow/backend/internal/feedparser"
@@ -26,11 +28,15 @@ import (
 )
 
 type Server struct {
-	store   service.FeedService
-	client  *http.Client
-	iconDir string
-	logger  *logger.ModuleLogger
+	store         service.FeedService
+	client        *http.Client
+	clientMu      sync.RWMutex
+	iconDir       string
+	legacyIconDir string
+	logger        *logger.ModuleLogger
 }
+
+const settingKeyNetworkProxy = "network_proxy_url"
 
 type createFeedRequest struct {
 	URL        string `json:"url"`
@@ -62,17 +68,33 @@ type updateFeedTitleRequest struct {
 	Title string `json:"title"`
 }
 
+type updateNetworkSettingsRequest struct {
+	ProxyURL string `json:"proxy_url"`
+}
+
 func NewServer(feedStore service.FeedService, dataDir string) *Server {
-	iconDir := filepath.Join(dataDir, "icons")
+	iconDir := filepath.Join(dataDir, "feed-icons")
+	legacyIconDir := filepath.Join(dataDir, "icons")
 	_ = os.MkdirAll(iconDir, 0o755)
-	return &Server{
-		store: feedStore,
-		client: &http.Client{
-			Timeout: 8 * time.Second,
-		},
-		iconDir: iconDir,
-		logger:  logger.NewModuleFromEnv("handler"),
+	_ = os.MkdirAll(legacyIconDir, 0o755)
+	server := &Server{
+		store:         feedStore,
+		iconDir:       iconDir,
+		legacyIconDir: legacyIconDir,
+		logger:        logger.NewModuleFromEnv("handler"),
 	}
+	proxyURL, ok, err := feedStore.GetSetting(settingKeyNetworkProxy)
+	if err != nil {
+		server.logger.Warn("settings", "network", "failed", "load network proxy setting failed", "error", err.Error())
+	}
+	if !ok {
+		proxyURL = firstNonEmpty(os.Getenv("ZFLOW_HTTP_PROXY"), os.Getenv("HTTPS_PROXY"), os.Getenv("HTTP_PROXY"))
+	}
+	if err := server.applyNetworkProxy(proxyURL); err != nil {
+		server.logger.Warn("settings", "network", "failed", "apply initial network proxy failed", "proxy_url", proxyURL, "error", err.Error())
+		_ = server.applyNetworkProxy("")
+	}
+	return server
 }
 
 func (s *Server) Handler() http.Handler {
@@ -88,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/data/import/profile", s.handleImportProfile)
 	mux.HandleFunc("/api/v1/data/export/opml", s.handleExportOPML)
 	mux.HandleFunc("/api/v1/data/import/opml", s.handleImportOPML)
+	mux.HandleFunc("/api/v1/settings/network", s.handleNetworkSettings)
 	mux.HandleFunc("/healthz", s.handleHealth)
 	return corsMiddleware(s.requestLogMiddleware(mux))
 }
@@ -430,6 +453,49 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (s *Server) handleNetworkSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		value, ok, err := s.store.GetSetting(settingKeyNetworkProxy)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load network settings"})
+			return
+		}
+		if !ok {
+			value = ""
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"proxy_url": strings.TrimSpace(value)})
+	case http.MethodPatch:
+		defer r.Body.Close()
+		raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		var req updateNetworkSettingsRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+			return
+		}
+		proxyURL := strings.TrimSpace(req.ProxyURL)
+		if err := validateProxyURL(proxyURL); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := s.store.SetSetting(settingKeyNetworkProxy, proxyURL); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save network settings"})
+			return
+		}
+		if err := s.applyNetworkProxy(proxyURL); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to apply proxy setting"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"proxy_url": proxyURL})
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
+}
+
 func (s *Server) handleFeedIcon(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
@@ -447,7 +513,16 @@ func (s *Server) handleFeedIcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	iconFile := filepath.Join(s.iconDir, filepath.Base(feed.IconPath))
-	http.ServeFile(w, r, iconFile)
+	if fileExists(iconFile) {
+		http.ServeFile(w, r, iconFile)
+		return
+	}
+	legacyIconFile := filepath.Join(s.legacyIconDir, filepath.Base(feed.IconPath))
+	if fileExists(legacyIconFile) {
+		http.ServeFile(w, r, legacyIconFile)
+		return
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "icon file not found"})
 }
 
 func (s *Server) handleFeeds(w http.ResponseWriter, r *http.Request) {
@@ -651,7 +726,7 @@ func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
 			feed = updated
 		}
 	}
-	s.tryRefreshFeedIcon(feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt)
+	s.tryRefreshFeedIcon(feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt, result.IconHints)
 
 	writeJSON(w, http.StatusCreated, feed)
 }
@@ -825,6 +900,7 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 type fetchResult struct {
 	Title        string
 	Items        []repository.ArticleSeed
+	IconHints    []string
 	ETag         string
 	LastModified string
 	NotModified  bool
@@ -845,7 +921,7 @@ func (s *Server) fetchAndParse(feedURL, etag, lastModified string) fetchResult {
 		req.Header.Set("If-Modified-Since", lastModified)
 	}
 
-	resp, err := s.client.Do(req)
+	resp, err := s.httpClient().Do(req)
 	if err != nil {
 		return fetchResult{Error: err.Error()}
 	}
@@ -879,6 +955,7 @@ func (s *Server) fetchAndParse(feedURL, etag, lastModified string) fetchResult {
 			Title:       item.Title,
 			Link:        item.Link,
 			Summary:     item.Summary,
+			CoverURL:    item.CoverURL,
 			PublishedAt: item.PublishedAt,
 		})
 	}
@@ -886,6 +963,7 @@ func (s *Server) fetchAndParse(feedURL, etag, lastModified string) fetchResult {
 	return fetchResult{
 		Title:        parsed.Title,
 		Items:        items,
+		IconHints:    parsed.IconHints,
 		ETag:         resp.Header.Get("ETag"),
 		LastModified: resp.Header.Get("Last-Modified"),
 	}
@@ -915,7 +993,7 @@ func (s *Server) refreshFeedByID(feedID int64) error {
 			result.Items = items
 		}
 	}
-	s.tryRefreshFeedIcon(feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt)
+	s.tryRefreshFeedIcon(feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt, result.IconHints)
 	return s.store.UpdateFeedAfterRefresh(feedID, result.Title, result.Items, "", result.ETag, result.LastModified)
 }
 
@@ -1049,23 +1127,85 @@ func isSupportedScriptLang(lang string) bool {
 	}
 }
 
-func (s *Server) tryRefreshFeedIcon(feedID int64, feedURL, existingIconPath, iconFetchedAt string) {
-	if strings.TrimSpace(existingIconPath) != "" && !needsIconRefresh(iconFetchedAt) {
+func (s *Server) tryRefreshFeedIcon(feedID int64, feedURL, existingIconPath, iconFetchedAt string, feedIconHints []string) {
+	if s.hasFreshIconAsset(existingIconPath, iconFetchedAt) {
+		s.logger.Info("icon", "refresh", "skipped", "icon refresh skipped because local asset is fresh", "feed_id", feedID, "feed_url", feedURL)
 		return
 	}
-	iconURL, ok := discoverIconURL(feedURL)
-	if !ok {
+	if s.tryReuseIconFromSameHost(feedID, feedURL) {
 		return
 	}
-	iconBytes, ext, err := s.fetchIcon(iconURL)
-	if err != nil {
+	iconCandidates := s.discoverIconURLs(feedURL, feedIconHints)
+	s.logger.Info("icon", "refresh", "started", "icon refresh started", "feed_id", feedID, "feed_url", feedURL, "candidate_count", len(iconCandidates))
+	for idx, iconURL := range iconCandidates {
+		iconBytes, ext, err := s.fetchIcon(iconURL)
+		if err != nil {
+			s.logger.Info("icon", "fetch", "failed", "icon candidate failed", "feed_id", feedID, "candidate_index", idx+1, "candidate_url", iconURL, "error", err.Error())
+			continue
+		}
+		relativePath, err := s.persistIcon(feedURL, iconBytes, ext)
+		if err != nil {
+			s.logger.Warn("icon", "persist", "failed", "persist icon failed", "feed_id", feedID, "icon_url", iconURL, "error", err.Error())
+			return
+		}
+		if _, _, err := s.store.UpdateFeedIcon(feedID, relativePath); err != nil {
+			s.logger.Warn("icon", "update", "failed", "update icon path failed", "feed_id", feedID, "icon_url", iconURL, "error", err.Error())
+		}
+		s.logger.Info("icon", "refresh", "ok", "icon refresh succeeded", "feed_id", feedID, "icon_url", iconURL, "stored_path", relativePath)
 		return
 	}
-	relativePath, err := s.persistIcon(feedID, iconBytes, ext)
-	if err != nil {
-		return
+	s.logger.Warn("icon", "refresh", "failed", "icon refresh exhausted candidates", "feed_id", feedID, "feed_url", feedURL, "candidate_count", len(iconCandidates))
+}
+
+func (s *Server) tryReuseIconFromSameHost(feedID int64, feedURL string) bool {
+	targetHost := logger.ExtractHost(feedURL)
+	if strings.TrimSpace(targetHost) == "" {
+		return false
 	}
-	_, _, _ = s.store.UpdateFeedIcon(feedID, relativePath)
+	feeds := s.store.List()
+	for _, candidate := range feeds {
+		if candidate.ID == feedID {
+			continue
+		}
+		if !strings.EqualFold(logger.ExtractHost(candidate.URL), targetHost) {
+			continue
+		}
+		iconPath := strings.TrimSpace(candidate.IconPath)
+		if iconPath == "" {
+			continue
+		}
+		if !s.iconAssetExists(iconPath) {
+			continue
+		}
+		if _, _, err := s.store.UpdateFeedIcon(feedID, iconPath); err != nil {
+			s.logger.Warn("icon", "reuse", "failed", "reuse icon from same host failed", "feed_id", feedID, "source_feed_id", candidate.ID, "host", targetHost, "icon_path", iconPath, "error", err.Error())
+			return false
+		}
+		s.logger.Info("icon", "reuse", "ok", "reused icon from same host", "feed_id", feedID, "source_feed_id", candidate.ID, "host", targetHost, "icon_path", iconPath)
+		return true
+	}
+	return false
+}
+
+func (s *Server) hasFreshIconAsset(existingIconPath, iconFetchedAt string) bool {
+	iconPath := strings.TrimSpace(existingIconPath)
+	if iconPath == "" {
+		return false
+	}
+	if needsIconRefresh(iconFetchedAt) {
+		return false
+	}
+	return s.iconAssetExists(iconPath)
+}
+
+func (s *Server) iconAssetExists(iconPath string) bool {
+	iconName := filepath.Base(strings.TrimSpace(iconPath))
+	if iconName == "" {
+		return false
+	}
+	current := filepath.Join(s.iconDir, iconName)
+	legacy := filepath.Join(s.legacyIconDir, iconName)
+	return fileExists(current) || fileExists(legacy)
 }
 
 func needsIconRefresh(last string) bool {
@@ -1080,12 +1220,176 @@ func needsIconRefresh(last string) bool {
 	return time.Since(t) >= 7*24*time.Hour
 }
 
-func discoverIconURL(feedURL string) (string, bool) {
+func normalizeOrigin(feedURL string) (string, bool) {
 	u, err := url.Parse(feedURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return "", false
 	}
-	return u.Scheme + "://" + u.Host + "/favicon.ico", true
+	return u.Scheme + "://" + u.Host, true
+}
+
+func (s *Server) discoverIconURLs(feedURL string, feedIconHints []string) []string {
+	origin, ok := normalizeOrigin(feedURL)
+	if !ok {
+		return nil
+	}
+	candidates := make([]string, 0, 16)
+	candidates = append(candidates, normalizeIconHints(feedURL, origin, feedIconHints)...)
+	candidates = append(candidates, []string{
+		origin + "/favicon.ico",
+		origin + "/favicon.png",
+		origin + "/favicon.svg",
+		origin + "/favicon-32x32.png",
+		origin + "/favicon-16x16.png",
+		origin + "/static/favicon.ico",
+		origin + "/apple-touch-icon.png",
+		origin + "/apple-touch-icon-precomposed.png",
+	}...)
+	candidates = append(candidates, s.discoverIconURLsFromHTML(origin, origin)...)
+	if feedURL != origin {
+		candidates = append(candidates, s.discoverIconURLsFromHTML(feedURL, origin)...)
+	}
+	if googleFallback := googleFaviconURL(origin); googleFallback != "" {
+		candidates = append(candidates, googleFallback)
+	}
+	unique := uniqueURLs(candidates)
+	s.logger.Info("icon", "discover", "ok", "icon candidates prepared", "feed_url", feedURL, "candidate_count", len(unique), "google_fallback", googleFaviconURL(origin))
+	return unique
+}
+
+func normalizeIconHints(feedURL, origin string, hints []string) []string {
+	if len(hints) == 0 {
+		return nil
+	}
+	base, err := url.Parse(feedURL)
+	if err != nil {
+		base, _ = url.Parse(origin)
+	}
+	out := make([]string, 0, len(hints))
+	for _, hint := range hints {
+		trimmed := strings.TrimSpace(hint)
+		if trimmed == "" {
+			continue
+		}
+		u, err := url.Parse(trimmed)
+		if err != nil {
+			continue
+		}
+		if base != nil {
+			u = base.ResolveReference(u)
+		}
+		if u.Scheme == "" || u.Host == "" {
+			continue
+		}
+		if !sameHost(u.String(), origin) {
+			continue
+		}
+		out = append(out, u.String())
+	}
+	return out
+}
+
+func googleFaviconURL(origin string) string {
+	u, err := url.Parse(origin)
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	return "https://www.google.com/s2/favicons?sz=128&domain=" + url.QueryEscape(u.Hostname())
+}
+
+var (
+	reHTMLLinkTag = regexp.MustCompile(`(?is)<link\b[^>]*>`)
+	reHrefAttr    = regexp.MustCompile(`(?is)\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>` + "`" + `]+))`)
+	reRelAttr     = regexp.MustCompile(`(?is)\brel\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>` + "`" + `]+))`)
+)
+
+func (s *Server) discoverIconURLsFromHTML(pageURL, origin string) []string {
+	req, err := http.NewRequest(http.MethodGet, pageURL, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("User-Agent", "Zflow/0.1 (+https://github.com/Sentixxx/Zflow)")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1")
+	resp, err := s.httpClient().Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+	if err != nil || len(raw) == 0 {
+		return nil
+	}
+	pageBase, err := url.Parse(pageURL)
+	if err != nil {
+		return nil
+	}
+	icons := make([]string, 0, 4)
+	linkTags := reHTMLLinkTag.FindAllString(string(raw), -1)
+	for _, tag := range linkTags {
+		rel := firstMatchGroup(reRelAttr, tag)
+		if rel == "" || !strings.Contains(strings.ToLower(rel), "icon") {
+			continue
+		}
+		href := firstMatchGroup(reHrefAttr, tag)
+		if href == "" {
+			continue
+		}
+		parsedHref, err := url.Parse(strings.TrimSpace(href))
+		if err != nil {
+			continue
+		}
+		absURL := pageBase.ResolveReference(parsedHref).String()
+		if !sameHost(absURL, origin) {
+			continue
+		}
+		icons = append(icons, absURL)
+	}
+	return icons
+}
+
+func firstMatchGroup(re *regexp.Regexp, input string) string {
+	match := re.FindStringSubmatch(input)
+	if len(match) == 0 {
+		return ""
+	}
+	for i := 2; i < len(match); i++ {
+		if strings.TrimSpace(match[i]) != "" {
+			return strings.TrimSpace(match[i])
+		}
+	}
+	return strings.TrimSpace(match[1])
+}
+
+func sameHost(rawURL, rawOrigin string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	origin, err := url.Parse(rawOrigin)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Hostname(), origin.Hostname())
+}
+
+func uniqueURLs(urls []string) []string {
+	seen := make(map[string]struct{}, len(urls))
+	out := make([]string, 0, len(urls))
+	for _, u := range urls {
+		trimmed := strings.TrimSpace(u)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
 }
 
 func (s *Server) fetchIcon(iconURL string) ([]byte, string, error) {
@@ -1094,17 +1398,17 @@ func (s *Server) fetchIcon(iconURL string) ([]byte, string, error) {
 		return nil, "", err
 	}
 	req.Header.Set("User-Agent", "Zflow/0.1 (+https://github.com/Sentixxx/Zflow)")
-	resp, err := s.client.Do(req)
+	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+	if u, err := url.Parse(iconURL); err == nil && u.Scheme != "" && u.Host != "" {
+		req.Header.Set("Referer", u.Scheme+"://"+u.Host+"/")
+	}
+	resp, err := s.httpClient().Do(req)
 	if err != nil {
 		return nil, "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return nil, "", fmt.Errorf("icon fetch failed: %d", resp.StatusCode)
-	}
-	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
-	if contentType != "" && !strings.HasPrefix(contentType, "image/") {
-		return nil, "", errors.New("icon is not image content")
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 512<<10))
 	if err != nil {
@@ -1113,11 +1417,35 @@ func (s *Server) fetchIcon(iconURL string) ([]byte, string, error) {
 	if len(raw) == 0 {
 		return nil, "", errors.New("icon is empty")
 	}
-	ext := iconExt(iconURL, contentType)
+	headerType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
+	detectedType := strings.ToLower(http.DetectContentType(raw))
+	if !isIconLikeContent(headerType, detectedType, raw) {
+		return nil, "", fmt.Errorf("icon is not image content: header=%q detected=%q", headerType, detectedType)
+	}
+	ext := iconExt(iconURL, headerType, detectedType, raw)
 	return raw, ext, nil
 }
 
-func iconExt(iconURL, contentType string) string {
+func isIconLikeContent(headerType, detectedType string, raw []byte) bool {
+	if strings.HasPrefix(strings.Split(headerType, ";")[0], "image/") {
+		return true
+	}
+	if strings.HasPrefix(strings.Split(detectedType, ";")[0], "image/") {
+		return true
+	}
+	return isICO(raw) || looksLikeSVG(raw)
+}
+
+func isICO(raw []byte) bool {
+	return len(raw) >= 4 && raw[0] == 0x00 && raw[1] == 0x00 && raw[2] == 0x01 && raw[3] == 0x00
+}
+
+func looksLikeSVG(raw []byte) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	return strings.HasPrefix(trimmed, "<svg") || strings.HasPrefix(trimmed, "<?xml")
+}
+
+func iconExt(iconURL, headerType, detectedType string, raw []byte) string {
 	ext := strings.ToLower(filepath.Ext(iconURL))
 	if ext == ".ico" || ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp" || ext == ".svg" {
 		if ext == ".jpeg" {
@@ -1125,26 +1453,119 @@ func iconExt(iconURL, contentType string) string {
 		}
 		return ext
 	}
-	if exts, _ := mime.ExtensionsByType(strings.Split(contentType, ";")[0]); len(exts) > 0 {
-		switch exts[0] {
-		case ".jpeg":
-			return ".jpg"
-		default:
-			return exts[0]
+	if isICO(raw) {
+		return ".ico"
+	}
+	if looksLikeSVG(raw) {
+		return ".svg"
+	}
+	for _, contentType := range []string{strings.Split(headerType, ";")[0], strings.Split(detectedType, ";")[0]} {
+		if strings.TrimSpace(contentType) == "" {
+			continue
+		}
+		if exts, _ := mime.ExtensionsByType(contentType); len(exts) > 0 {
+			switch exts[0] {
+			case ".jpeg":
+				return ".jpg"
+			default:
+				return exts[0]
+			}
 		}
 	}
 	return ".ico"
 }
 
-func (s *Server) persistIcon(feedID int64, raw []byte, ext string) (string, error) {
+func (s *Server) persistIcon(feedURL string, raw []byte, ext string) (string, error) {
 	h := fnv.New64a()
 	_, _ = h.Write(raw)
-	fileName := fmt.Sprintf("feed-%d-%x%s", feedID, h.Sum64(), ext)
+	hostPrefix := sanitizeHostPrefix(logger.ExtractHost(feedURL))
+	if hostPrefix == "" {
+		hostPrefix = "unknown-host"
+	}
+	fileName := fmt.Sprintf("host-%s-%x%s", hostPrefix, h.Sum64(), ext)
 	fullPath := filepath.Join(s.iconDir, fileName)
 	if err := os.WriteFile(fullPath, raw, 0o644); err != nil {
 		return "", err
 	}
 	return fileName, nil
+}
+
+func sanitizeHostPrefix(host string) string {
+	trimmed := strings.ToLower(strings.TrimSpace(host))
+	if trimmed == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(trimmed))
+	for _, ch := range trimmed {
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') {
+			b.WriteRune(ch)
+			continue
+		}
+		if ch == '.' || ch == '-' || ch == '_' {
+			b.WriteRune('-')
+		}
+	}
+	result := strings.Trim(b.String(), "-")
+	if result == "" {
+		return ""
+	}
+	if len(result) > 64 {
+		return result[:64]
+	}
+	return result
+}
+
+func (s *Server) httpClient() *http.Client {
+	s.clientMu.RLock()
+	client := s.client
+	s.clientMu.RUnlock()
+	return client
+}
+
+func (s *Server) applyNetworkProxy(rawProxyURL string) error {
+	proxyURL := strings.TrimSpace(rawProxyURL)
+	if err := validateProxyURL(proxyURL); err != nil {
+		return err
+	}
+
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+	}
+	if proxyURL != "" {
+		parsedProxyURL, _ := url.Parse(proxyURL)
+		transport.Proxy = http.ProxyURL(parsedProxyURL)
+	}
+
+	client := &http.Client{
+		Timeout:   8 * time.Second,
+		Transport: transport,
+	}
+
+	s.clientMu.Lock()
+	s.client = client
+	s.clientMu.Unlock()
+	return nil
+}
+
+func validateProxyURL(raw string) error {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return nil
+	}
+	parsed, err := url.Parse(text)
+	if err != nil {
+		return errors.New("proxy_url is invalid")
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https", "socks5":
+	default:
+		return errors.New("proxy_url scheme must be http/https/socks5")
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return errors.New("proxy_url host is required")
+	}
+	return nil
 }
 
 func (s *Server) RefreshAllFeeds(ctx context.Context) error {
@@ -1257,4 +1678,21 @@ func resourceFromPath(path string) string {
 	default:
 		return "http"
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
 }

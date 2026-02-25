@@ -1,5 +1,34 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change199 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:图标落盘命名策略 | 说明:图标文件改为host-域名前缀-内容哈希格式存储并保留同域复用语义，减少按feed_id分散存储 | 关联:task069
+change200 日期:2026-02-26 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:同域图标渲染复用 | 说明:前端新增按feed.url host聚合的图标映射，缺少icon_url时自动回退到同域已加载图标 | 关联:task069
+change201 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task069 | 说明:新增并完成域名级图标存储与前端复用任务记录 | 关联:task069
+
+change197 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:同域图标复用 | 说明:图标刷新新增同host复用逻辑，若其他订阅源已存在可用本地图标则直接复用更新映射并输出reuse日志，减少hnrss多路径重复抓取失败 | 关联:task068
+change198 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task068 | 说明:新增并完成同域图标复用任务记录 | 关联:task068
+
+change195 日期:2026-02-25 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:图标抓取可观测性 | 说明:图标刷新链路新增候选准备、逐候选失败原因、成功命中URL与跳过策略日志，覆盖/favicon.ico与Google s2兜底排查路径 | 关联:task067
+change196 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task067 | 说明:新增并完成图标抓取诊断日志任务记录 | 关联:task067
+
+change192 日期:2026-02-25 | 文件:backend/internal/repository/feed_repository.go,backend/internal/repository/sqlite_feed_repository_impl.go,backend/internal/handler/server.go | 操作:Modify | 影响:网络代理设置与抓取客户端 | 说明:新增app_settings持久化与/api/v1/settings/network接口，支持代理URL读取更新并即时重建后端HTTP客户端用于RSS和图标抓取 | 关联:task066
+change193 日期:2026-02-25 | 文件:frontend/src/api.ts,frontend/src/App.tsx | 操作:Modify | 影响:设置页连接配置 | 说明:连接设置页新增网络代理输入与保存动作并对接网络设置API | 关联:task066
+change194 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task066 | 说明:新增并完成网络代理配置任务记录 | 关联:task066
+
+change189 日期:2026-02-25 | 文件:backend/internal/feedparser/parser.go,backend/internal/feedparser/parser_test.go,backend/internal/handler/server.go | 操作:Modify | 影响:图标线索发现链路 | 说明:新增feed级icon hints提取(image/icon/logo/itunes:image)并在图标刷新时优先尝试同域绝对地址后再回退常规候选，提升hnrss类源命中率 | 关联:task065
+change190 日期:2026-02-25 | 文件:frontend/src/App.tsx,frontend/src/styles.css | 操作:Modify | 影响:默认RSS图标样式 | 说明:默认订阅源占位图标改为雷达信号SVG并统一线条与色彩风格 | 关联:task065
+change191 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task065 | 说明:新增并完成feed级图标线索与默认雷达图标任务记录 | 关联:task065
+
+change186 日期:2026-02-25 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:图标刷新命中率 | 说明:图标刷新仅在本地文件存在且未过期时跳过并增加favicon常见路径与Google domain兜底，候选耗尽时写告警日志便于排查hnrss类源 | 关联:task064
+change187 日期:2026-02-25 | 文件:frontend/src/App.tsx,frontend/src/styles.css | 操作:Modify | 影响:默认RSS图标视觉 | 说明:移除RSS文本占位并改为WiFi风格RSS符号作为缺省订阅源图标 | 关联:task064
+change188 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task064 | 说明:新增并完成hnrss图标抓取增强与默认图标样式调整任务记录 | 关联:task064
+
+change183 日期:2026-02-25 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:订阅源图标抓取 | 说明:图标发现链路扩展为默认路径+HTML rel=icon解析+Google Favicon API兜底并将新图标持久化到data/feed-icons且兼容读取旧data/icons | 关联:task063
+change184 日期:2026-02-25 | 文件:backend/internal/feedparser/parser.go,backend/internal/feedparser/parser_test.go,backend/internal/repository/sqlite_feed_repository_impl.go,backend/internal/model/article.go | 操作:Modify | 影响:文章封面媒体提取与存储 | 说明:新增media/enclosure封面提取并在ArticleSeed/entries.cover_url/model.Article中持久化封面URL | 关联:task063
+change185 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task063 | 说明:新增并完成图标抓取增强与封面提取任务记录 | 关联:task063
+
+change181 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:文章列表来源信息 | 说明:移除条件渲染限制并恢复每条文章始终显示订阅源标题 | 关联:task062
+change182 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task062 | 说明:新增并完成文章来源标题恢复任务记录 | 关联:task062
+
 change178 日期:2026-02-25 | 文件:frontend/src/App.tsx,frontend/src/lib/article-list.ts | 操作:Modify | 影响:未读筛选稳定性 | 说明:移除滚动隐藏补偿机制并改为未读快照策略，仅在切换订阅源/分类或切换已读筛选时统一刷新显示状态 | 关联:task061
 change179 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:交互提示 | 说明:为文章项状态与标记未读等按钮补充title提示，统一悬浮可见说明 | 关联:task061
 change180 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task061 | 说明:新增并完成未读筛选统一刷新策略任务记录 | 关联:task061

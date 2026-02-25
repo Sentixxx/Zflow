@@ -19,6 +19,8 @@ type FeedRepository interface {
 	UpdateFeedScript(id int64, script string, lang string) (model.Feed, bool, error)
 	UpdateFeedTitle(id int64, title string) (model.Feed, bool, error)
 	UpdateFeedIcon(id int64, iconPath string) (model.Feed, bool, error)
+	GetSetting(key string) (string, bool, error)
+	SetSetting(key, value string) error
 	ListArticles() []model.Article
 	DeleteArticle(id int64) (bool, error)
 	GetArticle(id int64) (model.Article, bool)

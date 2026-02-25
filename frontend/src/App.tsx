@@ -36,8 +36,19 @@ function scriptLangByFileName(name: string): ScriptLang | null {
   return null;
 }
 
+function feedHost(rawURL: string | undefined): string {
+  const text = (rawURL || "").trim();
+  if (!text) return "";
+  try {
+    return new URL(text).host.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 export function App() {
   const [apiBase, setApiBase] = useState<string>(localStorage.getItem("zflow_api_base") || DEFAULT_API_BASE);
+  const [networkProxyURL, setNetworkProxyURL] = useState<string>("");
   const [feedURL, setFeedURL] = useState("");
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -105,6 +116,17 @@ export function App() {
     feeds.forEach((feed) => map.set(feed.id, feed.title || feed.url || `#${feed.id}`));
     return map;
   }, [feeds]);
+  const feedIconURLByHost = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const feed of feeds) {
+      const host = feedHost(feed.url);
+      if (!host || !feed.icon_url || map.has(host)) {
+        continue;
+      }
+      map.set(host, `${apiBase.replace(/\/$/, "")}${feed.icon_url}`);
+    }
+    return map;
+  }, [feeds, apiBase]);
 
   const rootFolders = useMemo(() => folders.filter((folder) => folder.parent_id == null), [folders]);
   const childFoldersByParent = useMemo(() => {
@@ -200,6 +222,25 @@ export function App() {
   const handleSaveAPIBase = () => {
     localStorage.setItem("zflow_api_base", apiBase);
     setMessage("API Base 已保存");
+  };
+
+  const loadNetworkSettings = async () => {
+    try {
+      const data = await client.getNetworkSettings();
+      setNetworkProxyURL((data.proxy_url || "").trim());
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const saveNetworkSettings = async () => {
+    try {
+      const data = await client.updateNetworkSettings(networkProxyURL.trim());
+      setNetworkProxyURL((data.proxy_url || "").trim());
+      setMessage("网络代理设置已保存并应用");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
   };
 
   const loadFeeds = async () => {
@@ -440,6 +481,7 @@ export function App() {
     const bootstrap = async () => {
       const [, , loadedArticles] = await Promise.all([loadFeeds(), loadFolders(), loadArticles()]);
       rebuildStickyUnreadIDs(loadedArticles ?? [], selectedFeedID, selectedFolderID, readFilter);
+      await loadNetworkSettings();
     };
     void bootstrap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -881,7 +923,8 @@ export function App() {
 
   const renderFeedNode = (feed: Feed, paddingLeft: number) => {
     const isRenaming = renamingFeedID === feed.id;
-    const iconSrc = feed.icon_url ? `${apiBase.replace(/\/$/, "")}${feed.icon_url}` : "";
+    const host = feedHost(feed.url);
+    const iconSrc = feed.icon_url ? `${apiBase.replace(/\/$/, "")}${feed.icon_url}` : feedIconURLByHost.get(host) || "";
     return (
     <div key={`feed-${feed.id}`} className={`tree-row feed-row ${isRenaming ? "editing" : ""}`}>
       <button
@@ -935,12 +978,22 @@ export function App() {
                   }}
                 />
                 <span className="feed-icon-fallback" style={{ display: "none" }} aria-hidden="true">
-                  RSS
+                  <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                    <circle cx="6" cy="18" r="2.2" />
+                    <path d="M6 13.8a4.2 4.2 0 0 1 4.2 4.2" />
+                    <path d="M6 9.2a8.8 8.8 0 0 1 8.8 8.8" />
+                    <path d="M6 4.8A13.2 13.2 0 0 1 19.2 18" />
+                  </svg>
                 </span>
               </>
             ) : (
               <span className="feed-icon-fallback" aria-hidden="true">
-                RSS
+                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                  <circle cx="6" cy="18" r="2.2" />
+                  <path d="M6 13.8a4.2 4.2 0 0 1 4.2 4.2" />
+                  <path d="M6 9.2a8.8 8.8 0 0 1 8.8 8.8" />
+                  <path d="M6 4.8A13.2 13.2 0 0 1 19.2 18" />
+                </svg>
               </span>
             )}
             <strong>{feed.title || "(未命名源)"}</strong>
@@ -1115,9 +1168,7 @@ export function App() {
                 onClick={() => selectArticle(article.id)}
                 title={article.is_read ? "已读文章，点击查看详情" : "未读文章，点击查看并自动标记已读"}
               >
-                {selectedFeedID == null && (
-                  <div className="article-source">{feedNameByID.get(article.feed_id) || `订阅源 #${article.feed_id}`}</div>
-                )}
+                <div className="article-source">{feedNameByID.get(article.feed_id) || `订阅源 #${article.feed_id}`}</div>
                 <div>
                   <strong className="article-title">{article.title || "(无标题)"}</strong>
                   <span className={`pill ${article.is_read ? "read" : "unread"}`} title={article.is_read ? "已读状态" : "未读状态"}>
@@ -1346,6 +1397,13 @@ export function App() {
                       <input id="apiBase" value={apiBase} onChange={(e) => setApiBase(e.target.value)} />
                       <button className="secondary" onClick={handleSaveAPIBase}>
                         保存
+                      </button>
+                    </div>
+                    <label htmlFor="networkProxy">网络代理 URL（可选，支持 http/https/socks5）</label>
+                    <div className="row">
+                      <input id="networkProxy" value={networkProxyURL} placeholder="http://127.0.0.1:7890" onChange={(e) => setNetworkProxyURL(e.target.value)} />
+                      <button className="secondary" onClick={saveNetworkSettings}>
+                        保存代理
                       </button>
                     </div>
                   </div>
