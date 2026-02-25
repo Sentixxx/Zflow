@@ -1,70 +1,149 @@
-# Zflow 开发规范 (SPEC)
+# Zflow 开发规范 (Merged SPEC)
 
-> 本文件是项目规范入口。任务执行仍遵循 `AGENTS.md` 的意图识别与文档驱动流程；本文件用于补齐工程实现规范。
+> 本文件融合 Zflow 与 Gist 约束。流程上仍遵循 `AGENTS.md`（意图识别 + 文档驱动）。
 
 ## 1. 目标与技术基线
 
-- 项目目标：构建开源、自托管 RSS 阅读器，逐步接入 LLM 评分、分类与探索推荐。
-- 后端语言固定：Go。
-- 首版输入源：RSS/Atom。
-- 数据策略：默认零遥测（Zero Telemetry by Default）。
+- 目标：开源、自托管 RSS 阅读器，逐步接入 LLM 评分/分类/探索推荐。
+- 后端：Go + Echo；SQLite 驱动必须使用 `modernc.org/sqlite`（无 CGO）。
+- 前端：React + TypeScript + Vite。
+- 首版输入：标准 RSS/Atom。
+- 默认隐私：Zero Telemetry by Default。
 
-## 2. 仓库与模块边界
+## 2. 后端目录结构（强约束）
 
-- `backend/`：Go 后端服务（API、抓取、持久化、调度）。
-- `frontend/`：前端（当前为联调页，后续演进为正式 Web/PWA）。
-- `.phrase/`：phase 文档、任务、变更、决策。
-- `.claude/`：协作命令、提交规范、记忆索引。
+必须遵循以下结构并按职责放置代码：
 
-约束：
-- 前端只能通过 HTTP API 调用后端，禁止直接耦合抓取与存储实现。
-- 业务逻辑优先放后端，前端负责交互与展示。
+```text
+backend/
+  cmd/server/              # 启动入口
+  pkg/                     # 可复用基础设施（无业务状态）
+    logger/
+  internal/                # 业务私有实现
+    handler/               # HTTP 协议适配层
+    service/               # 业务编排层
+    repository/            # 数据访问层
+    model/                 # 领域模型
+    db/                    # DB 初始化与迁移
+    config/                # 配置加载
+    scheduler/             # 定时任务
+    feedparser/            # RSS/Atom 解析器
+```
 
-## 3. Go 后端规范
+规则：
+- `handler` 不直接写 SQL。
+- `repository` 不承载业务规则。
+- `service` 不处理 HTTP 协议细节。
+- `pkg` 禁止依赖 `internal`。
 
-- 依赖注入：通过构造函数注入依赖，避免全局可变状态。
-- 并发安全：共享状态必须使用 `sync.Mutex` / `sync/atomic` / channel。
-- 错误处理：API 返回结构化错误，避免静默失败。
-- 输入校验：所有外部输入（URL、JSON、查询参数）必须校验。
-- 可维护性：函数保持小而直；超过 3 层嵌套必须重构。
-- 测试要求：每个新增接口至少有一个成功路径测试和一个边界/失败路径测试。
+## 3. 分层职责与依赖方向
 
-## 4. API 与联调规范
+- 依赖方向：`handler -> service -> repository -> db`
+- `model` 作为共享领域对象，供 `service/repository` 使用。
+- 所有依赖通过构造函数注入，禁止全局可变状态。
+- 共享并发状态必须使用 `sync.Mutex` / `sync/atomic` / channel。
 
-- API 前缀：`/api/v1`。
-- 健康检查：`/healthz`。
-- CORS：后端必须支持浏览器预检请求（`OPTIONS`）和标准跨域头。
-- 联调基线：
-  - 后端默认 `http://localhost:8080`
-  - 前端静态服务默认 `http://localhost:5173`
+## 4. 测试与 Mock 规范
 
-## 5. 文档驱动闭环
+- 新增后端接口至少包含：
+  - 1 条成功路径测试
+  - 1 条失败或边界路径测试
+- 优先黑盒测试（通过公开 API 验证行为）。
+- Mock 规则：
+  - 接口定义在 `service` 或 `repository` 层；
+  - Mock 文件放在接口所在包的 `mock/` 子目录；
+  - 不允许集中式 `testutil/mock_*` 大杂烩。
+- 提交前最低要求：`go test ./...` 必须通过。
 
-- 任何实现必须能追溯到 `taskNNN`。
-- 完成实现后必须回写：
-  - phase `task_*`（状态更新）
-  - phase `change_*`（单行变更）
-  - `.phrase/docs/CHANGE.md`（全局索引）
-- 涉及不可逆技术决策必须新增/更新 ADR。
+## 5. 数据库规范（不含具体表索引细节）
 
-## 6. Git 与提交规范
+- SQLite 使用 WAL，启用 `foreign_keys` 与合理 `busy_timeout`。
+- 修改 schema 时必须提供迁移路径，不允许破坏旧数据读取。
+- 禁止字符串拼接 SQL（统一参数绑定）。
+- 数据更新遵循：
+  - 无效空值不覆盖有效旧值；
+  - 批量操作优先单 SQL；
+  - 层级关系变更要防循环引用。
+- 表/索引细节在实际引入时补充进 phase 文档与本规范。
 
-- 提交标题采用 Conventional Commits（`feat/fix/docs/test/chore`）。
-- 禁止使用“实现 taskXXX”作为提交标题，标题必须描述具体改动。
-- 提交正文必须包含：
-  - 背景/问题
-  - 关键改动
-  - 行为变化
-- 提交正文必须使用真实换行，禁止字面 `\\n`。
-- 改写历史后推送使用 `git push --force-with-lease`。
+## 6. 网络解析与抓取规范
 
-## 7. 分层记忆与上下文控制
+- Feed 解析使用宽容策略，兼容非标准 RSS/Atom。
+- 必须支持 Conditional GET：
+  - 请求：`If-None-Match` / `If-Modified-Since`
+  - 响应：处理 `304 Not Modified`
+- 请求失败需返回可诊断错误（至少包含 HTTP 状态或错误原因）。
+- 默认 UA 清晰标识项目身份；避免伪装造成不可控兼容风险。
 
-- 记忆索引：`.claude/memory/MEMORY_INDEX.md`
-- 分层加载：
-  - 立项阶段：`memory_init.md`
-  - 编码阶段：`memory_coding.md`
-  - 文档阶段：`memory_docs.md`
-  - 发布阶段：`memory_release.md`
-- 规则：每次仅加载当前阶段所需记忆，避免全量加载造成 token 浪费。
+## 7. 安全规范
 
+- 所有输入均视为不可信（Path/Query/Body/URL/脚本）。
+- Handler 层必须做参数校验和 body 大小限制。
+- 文件路径必须使用 `filepath.Clean` 与目录边界控制，防路径穿越。
+- 禁止硬编码密钥；禁止日志输出 token/password/api key 原文。
+- 前端 HTML 渲染必须先清洗（当前使用 DOMPurify）。
+
+## 8. 环境变量规范
+
+推荐统一前缀 `ZFLOW_`，并兼容通用变量回退：
+
+- `PORT` / `ZFLOW_ADDR`
+- `DATA_DIR` / `ZFLOW_DATA_DIR`
+- `ZFLOW_DB_PATH`
+- `ZFLOW_LOG_LEVEL`（`debug/info/warn/error`，默认 `info`）
+- `ZFLOW_LOG_FORMAT`（`text/json`，默认 `text`）
+- 兼容：`LOG_LEVEL`、`LOG_INFO_LEVEL`、`LOG_FORMAT`
+
+## 9. 日志规范（前后端）
+
+后端：
+- 使用统一结构化日志（`pkg/logger`），禁止散落 `fmt.Print/log.Printf`。
+- 标准字段：
+  - `module`：`http/handler/service/repository/scheduler/network`
+  - `action`：`create/fetch/update/delete/refresh/list/request`
+  - `resource`：`feed/entry/folder/icon/settings/http`
+  - `result`：`ok/failed/skipped/cancelled`
+- 字段命名统一 `snake_case`。
+- URL 日志只记录 host，不记录敏感 query/token。
+
+前端：
+- 统一通过 `src/lib/logger.ts` 输出日志，避免页面层散落 `console.*`。
+- 默认仅在开发环境输出 `debug/info`；`warn/error` 可在生产保留。
+- 日志只记录请求路径与状态，不打印敏感 payload。
+
+## 10. 前后端接口一致性（强约束）
+
+- 后端 DTO 变更后，必须同步更新前端 `types` 与 `api` 调用层。
+- API 错误语义要稳定（错误码 + 错误文本）；前端统一拦截非 2xx。
+- 时间字段统一格式（RFC3339/UTC）并在前端统一展示转换。
+- 若 ID 超过 JS 安全整数，后端需返回字符串并同步前端类型。
+
+## 11. 前端工程约束
+
+- UI 与逻辑分离：复杂逻辑优先抽到 `lib/hooks/services`。
+- 长列表优先增量加载，避免一次性全渲染。
+- 移动端可交互控件建议触控尺寸 >= 40px。
+- 新增功能需保持现有交互不回退。
+
+## 12. 文档驱动闭环
+
+- 所有实现必须可追溯到 `taskNNN`。
+- 完成后必须回写：
+  - phase `task_*`
+  - phase `change_*`
+  - `.phrase/docs/CHANGE.md`
+- 不可逆决策必须更新 ADR。
+
+## 13. Git 提交规范
+
+- 使用 Conventional Commits（`feat/fix/docs/test/chore`）。
+- 标题必须描述具体改动，禁止“实现 taskXXX”。
+- 正文必须包含：背景、关键改动、行为变化（真实换行，禁止字面 `\n`）。
+- 每次提交默认追加动态 Co-Author trailer：
+  - `Co-Authored-By: <当前代理名> <noreply@assistant.local>`
+
+## 14. 验收基线
+
+- 前端改动至少执行：`npm run build`。
+- 后端改动至少执行：`go test ./...`。
+- 交互改动需提供最小手动验证路径。

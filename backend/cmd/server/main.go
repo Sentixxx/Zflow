@@ -2,38 +2,41 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"time"
+	"os/signal"
+	"syscall"
 
-	"github.com/Sentixxx/Zflow/backend/internal/api"
-	"github.com/Sentixxx/Zflow/backend/internal/store"
+	"github.com/Sentixxx/Zflow/backend/internal/config"
+	"github.com/Sentixxx/Zflow/backend/internal/handler"
+	"github.com/Sentixxx/Zflow/backend/internal/repository"
+	"github.com/Sentixxx/Zflow/backend/internal/scheduler"
+	"github.com/Sentixxx/Zflow/backend/internal/service"
+	"github.com/Sentixxx/Zflow/backend/pkg/logger"
 )
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	cfg := config.Load()
+	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	dataDir := os.Getenv("DATA_DIR")
-	if dataDir == "" {
-		dataDir = "./data"
-	}
-
-	feedStore, err := store.NewFeedStore(filepath.Join(dataDir, "zflow.db"))
+	feedStore, err := repository.NewSQLiteFeedRepository(cfg.DBPath)
 	if err != nil {
-		log.Fatalf("failed to init feed store: %v", err)
+		l := logger.NewModuleFromEnv("http")
+		l.Error("create", "settings", "failed", "failed to init feed store", "error", err.Error())
+		os.Exit(1)
 	}
 	defer feedStore.Close()
 
-	srv := api.NewServer(feedStore, dataDir)
-	go srv.StartRefreshLoop(context.Background(), 15*time.Minute)
+	feedService := service.NewFeedService(feedStore)
+	srv := handler.NewServer(feedService, cfg.DataDir)
+	refreshScheduler := scheduler.NewFeedRefreshScheduler(srv, cfg.RefreshInterval)
+	go refreshScheduler.Start(rootCtx)
 
-	log.Printf("server listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, srv.Handler()); err != nil {
-		log.Fatalf("server stopped: %v", err)
+	l := logger.NewModuleFromEnv("http")
+	l.Info("request", "http", "ok", "server started", "addr", cfg.Addr, "data_dir", cfg.DataDir, "refresh_interval", cfg.RefreshInterval.String())
+	if err := http.ListenAndServe(cfg.Addr, srv.Handler()); err != nil {
+		l.Error("request", "http", "failed", "server stopped", "error", err.Error())
+		os.Exit(1)
 	}
 }

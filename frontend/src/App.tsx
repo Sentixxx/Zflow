@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import { ApiClient } from "./api";
 import type { Article, Feed, Folder } from "./types";
+import { filterAndSortArticles, formatArticleTime } from "./lib/article-list";
+import type { ReadFilter, SortMode } from "./lib/article-list";
 
 const DEFAULT_API_BASE = "http://localhost:8080";
 const PREFETCH_BATCH_SIZE = 20;
@@ -13,8 +15,6 @@ const MAX_LIST_WIDTH = 620;
 const COLLAPSED_SIDEBAR_WIDTH = 56;
 const RESIZER_WIDTH = 8;
 const LOAD_MORE_COOLDOWN_MS = 80;
-type ReadFilter = "all" | "unread" | "read";
-type SortMode = "latest" | "oldest" | "unread-first";
 type ResizeTarget = "sidebar" | "list";
 type FolderContextMenu = { folder: Folder; x: number; y: number } | null;
 type FeedContextMenu = { feed: Feed; x: number; y: number } | null;
@@ -34,42 +34,6 @@ function scriptLangByFileName(name: string): ScriptLang | null {
   if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) return "javascript";
   if (lower.endsWith(".sh") || lower.endsWith(".bash") || lower.endsWith(".zsh")) return "shell";
   return null;
-}
-
-function formatArticleTime(raw: string | undefined): string {
-  const text = (raw || "").trim();
-  if (!text) {
-    return "-";
-  }
-  const ts = Date.parse(text);
-  if (Number.isNaN(ts)) {
-    return "-";
-  }
-
-  const now = Date.now();
-  const deltaMs = now - ts;
-  if (deltaMs >= 0 && deltaMs < 60 * 1000) {
-    return "刚刚";
-  }
-  if (deltaMs >= 0 && deltaMs < 24 * 60 * 60 * 1000) {
-    const totalMinutes = Math.max(1, Math.floor(deltaMs / (60 * 1000)));
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    if (hours <= 0) {
-      return `${minutes}分钟前`;
-    }
-    if (minutes === 0) {
-      return `${hours}小时前`;
-    }
-    return `${hours}小时${minutes}分钟前`;
-  }
-
-  const utc8Ms = ts + 8*60*60*1000;
-  const d = new Date(utc8Ms);
-  const year = d.getUTCFullYear();
-  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${year}/${month}/${day}`;
 }
 
 export function App() {
@@ -192,40 +156,8 @@ export function App() {
       const feedIDs = new Set(feeds.filter((feed) => feed.folder_id != null && folderIDs.has(feed.folder_id)).map((feed) => feed.id));
       filteredBySource = articles.filter((article) => feedIDs.has(article.feed_id));
     }
-    const filtered = filteredBySource.filter((article) => {
-      if (readFilter === "read") {
-        return article.is_read;
-      }
-      if (readFilter === "unread") {
-        return !article.is_read;
-      }
-      return true;
-    });
-
-    const withTimestamp = filtered.map((article) => {
-      const source = article.published_at || article.created_at || "";
-      const timestamp = Date.parse(source);
-      return {
-        article,
-        timestamp: Number.isNaN(timestamp) ? 0 : timestamp,
-      };
-    });
-
-    withTimestamp.sort((a, b) => {
-      if (sortMode === "latest") {
-        return b.timestamp - a.timestamp;
-      }
-      if (sortMode === "oldest") {
-        return a.timestamp - b.timestamp;
-      }
-      if (a.article.is_read !== b.article.is_read) {
-        return Number(a.article.is_read) - Number(b.article.is_read);
-      }
-      return b.timestamp - a.timestamp;
-    });
-
-    return withTimestamp.map((entry) => entry.article);
-  }, [articles, readFilter, sortMode, selectedFeedID, selectedFolderID, feeds, childFoldersByParent]);
+    return filterAndSortArticles(filteredBySource, readFilter, sortMode, selectedArticle?.id ?? null);
+  }, [articles, readFilter, sortMode, selectedFeedID, selectedFolderID, feeds, childFoldersByParent, selectedArticle?.id]);
   const effectiveBufferedCount = Math.min(bufferedCount, filteredAndSortedArticles.length);
   const pagedArticles = useMemo(
     () => filteredAndSortedArticles.slice(0, Math.min(visibleCount, effectiveBufferedCount)),
@@ -366,22 +298,30 @@ export function App() {
   const selectArticle = async (id: number) => {
     try {
       const article = await client.getArticle(id);
-      setSelectedArticle(article);
-      setMessage(`已打开文章 #${id}`);
+      if (article.is_read) {
+        setSelectedArticle(article);
+        setMessage(`已打开文章 #${id}`);
+        return;
+      }
+
+      const updated = await client.setArticleRead(id, true);
+      setSelectedArticle(updated);
+      setArticles((current) => current.map((entry) => (entry.id === id ? { ...entry, is_read: true } : entry)));
+      setMessage(`已打开文章 #${id}（已自动标记已读）`);
     } catch (e) {
       setMessage((e as Error).message, true);
     }
   };
 
-  const markRead = async (read: boolean) => {
+  const markUnread = async () => {
     if (!selectedArticle) {
       return;
     }
     try {
-      const updated = await client.setArticleRead(selectedArticle.id, read);
+      const updated = await client.setArticleRead(selectedArticle.id, false);
       setSelectedArticle(updated);
-      await loadArticles();
-      setMessage(`文章已标记为${read ? "已读" : "未读"}`);
+      setArticles((current) => current.map((entry) => (entry.id === updated.id ? { ...entry, is_read: updated.is_read } : entry)));
+      setMessage("文章已标记为未读");
     } catch (e) {
       setMessage((e as Error).message, true);
     }
@@ -397,6 +337,12 @@ export function App() {
     setSortMode(value);
     setBufferedCount(PREFETCH_BATCH_SIZE);
     setVisibleCount(VISIBLE_STEP_SIZE);
+  };
+  const toggleReadFilter = () => {
+    handleReadFilterChange(readFilter === "unread" ? "all" : "unread");
+  };
+  const toggleSortMode = () => {
+    handleSortModeChange(sortMode === "latest" ? "oldest" : "latest");
   };
   const computedSidebarWidth = sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : sidebarWidth;
   const layoutStyle = {
@@ -1115,24 +1061,26 @@ export function App() {
         )}
 
         <section className="panel list-panel">
-          <h2>{articleListTitle}</h2>
-          <div className="filters">
-            <label>
-              已读筛选
-              <select value={readFilter} onChange={(e) => handleReadFilterChange(e.target.value as ReadFilter)}>
-                <option value="all">全部</option>
-                <option value="unread">仅未读</option>
-                <option value="read">仅已读</option>
-              </select>
-            </label>
-            <label>
-              排序方式
-              <select value={sortMode} onChange={(e) => handleSortModeChange(e.target.value as SortMode)}>
-                <option value="latest">最新优先</option>
-                <option value="oldest">最早优先</option>
-                <option value="unread-first">未读优先</option>
-              </select>
-            </label>
+          <div className="list-header">
+            <h2>{articleListTitle}</h2>
+            <div className="list-toolbar">
+              <button
+                className={`list-icon-btn ${readFilter === "unread" ? "is-unread" : "is-read"}`}
+                onClick={toggleReadFilter}
+                title={readFilter === "unread" ? "当前仅显示未读，点击显示全部" : "当前显示全部，点击仅显示未读"}
+                aria-label={readFilter === "unread" ? "仅显示未读" : "显示全部（含已读）"}
+              >
+                <span className="glyph">{readFilter === "unread" ? "○" : "●"}</span>
+              </button>
+              <button
+                className={`list-icon-btn ${sortMode === "latest" ? "sort-latest" : "sort-oldest"}`}
+                onClick={toggleSortMode}
+                title={sortMode === "latest" ? "当前最新优先，点击切换最早优先" : "当前最早优先，点击切换最新优先"}
+                aria-label={sortMode === "latest" ? "最新优先" : "最早优先"}
+              >
+                <span className="glyph">{sortMode === "latest" ? "↓" : "↑"}</span>
+              </button>
+            </div>
           </div>
           <div className={`list article-list ${listBounce ? "bounce" : ""}`} onScroll={onArticleListScroll}>
             {pagedArticles.length === 0 && <div className="item">暂无文章</div>}
@@ -1196,8 +1144,7 @@ export function App() {
                   <p className="detail-summary">(无摘要)</p>
                 )}
                 <div className="row detail-actions">
-                  <button onClick={() => markRead(true)}>标记已读</button>
-                  <button className="secondary" onClick={() => markRead(false)}>
+                  <button className="secondary" onClick={markUnread}>
                     标记未读
                   </button>
                 </div>

@@ -1,4 +1,4 @@
-package api
+package handler
 
 import (
 	"bytes"
@@ -9,7 +9,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/Sentixxx/Zflow/backend/internal/store"
+	"github.com/Sentixxx/Zflow/backend/internal/repository"
+	"github.com/Sentixxx/Zflow/backend/internal/service"
 )
 
 func TestCreateFeedAndList(t *testing.T) {
@@ -30,11 +31,12 @@ func TestCreateFeedAndList(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	feedStore, err := store.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
-		t.Fatalf("NewFeedStore() error = %v", err)
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	server := NewServer(feedStore, t.TempDir())
+	feedService := service.NewFeedService(repo)
+	server := NewServer(feedService, t.TempDir())
 
 	body, _ := json.Marshal(map[string]string{"url": upstream.URL})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/feeds", bytes.NewReader(body))
@@ -72,11 +74,12 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	feedStore, err := store.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
-		t.Fatalf("NewFeedStore() error = %v", err)
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	server := NewServer(feedStore, t.TempDir())
+	feedService := service.NewFeedService(repo)
+	server := NewServer(feedService, t.TempDir())
 
 	createBody, _ := json.Marshal(map[string]string{"url": upstream.URL})
 	reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/feeds", bytes.NewReader(createBody))
@@ -140,11 +143,12 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 }
 
 func TestCORSPreflightAndHeaders(t *testing.T) {
-	feedStore, err := store.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
-		t.Fatalf("NewFeedStore() error = %v", err)
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	server := NewServer(feedStore, t.TempDir())
+	feedService := service.NewFeedService(repo)
+	server := NewServer(feedService, t.TempDir())
 
 	preflight := httptest.NewRequest(http.MethodOptions, "/api/v1/articles", nil)
 	preflight.Header.Set("Origin", "http://localhost:5173")

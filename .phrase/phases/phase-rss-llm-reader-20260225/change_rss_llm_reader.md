@@ -1,5 +1,46 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change170 日期:2026-02-25 | 文件:backend/internal/repository/sqlite_feed_repository_impl.go,backend/internal/repository/feed_repository.go | 操作:Modify | 影响:repository主实现 | 说明:将SQLite存储实现从store迁移到repository并重写仓储接口以直接暴露主实现能力 | 关联:task058
+change171 日期:2026-02-25 | 文件:backend/internal/store/store.go,backend/internal/store/store_test.go | 操作:Modify | 影响:store兼容层 | 说明:store改为兼容别名入口并复用repository实现以保持历史测试与调用兼容 | 关联:task058
+change172 日期:2026-02-25 | 文件:backend/internal/handler/server.go,backend/internal/handler/server_test.go,backend/cmd/server/main.go | 操作:Modify | 影响:主链路依赖方向 | 说明:主流程改为直接依赖repository类型与ArticleSeed/错误常量减少对store实现包耦合 | 关联:task058
+change173 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task058 | 说明:新增并完成store向repository主实现迁移任务 | 关联:task058
+
+change166 日期:2026-02-25 | 文件:backend/internal/model/feed.go,backend/internal/model/article.go,backend/internal/model/folder.go,backend/internal/store/store.go,backend/internal/repository/feed_repository.go | 操作:Add | 影响:model迁移 | 说明:新增model实体并将store/repository链路从domain切换到model | 关联:task056
+change167 日期:2026-02-25 | 文件:backend/internal/domain/feed.go,backend/internal/domain/article.go,backend/internal/domain/folder.go,backend/internal/model/README.md | 操作:Modify | 影响:domain兼容层 | 说明:domain改为兼容type alias并标注弃用，模型定义统一收敛到model目录 | 关联:task056
+change168 日期:2026-02-25 | 文件:backend/internal/db/sqlite.go,backend/internal/store/store.go | 操作:Add | 影响:数据库连接层 | 说明:新增db.OpenSQLite并将store中的SQLite连接创建与DSN配置下沉到db层 | 关联:task057
+change169 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task056/task057 | 说明:新增并完成model迁移与db连接下沉任务 | 关联:task057
+
+change162 日期:2026-02-25 | 文件:backend/internal/config/config.go,backend/cmd/server/main.go | 操作:Add | 影响:启动配置层 | 说明:新增internal/config集中解析地址/数据目录/数据库路径/刷新间隔/日志配置并替换main中散落环境变量逻辑 | 关联:task054
+change163 日期:2026-02-25 | 文件:backend/internal/scheduler/feed_refresh.go,backend/internal/handler/server.go,backend/cmd/server/main.go | 操作:Add | 影响:刷新调度层 | 说明:新增scheduler并迁移刷新循环到调度层且通过RefreshAllFeeds接口保持启动即刷新与定时刷新行为 | 关联:task055
+change164 日期:2026-02-25 | 文件:backend/internal/service/feed_service.go,backend/internal/repository/feed_repository.go | 操作:Modify | 影响:分层依赖导入 | 说明:修正分层包导入路径并保证service/repository链路可编译可测试 | 关联:task055
+change165 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task054/task055 | 说明:新增并完成配置层与调度层落地任务 | 关联:task055
+
+change155 日期:2026-02-25 | 文件:.rules | 操作:Modify | 影响:项目治理规范 | 说明:补齐后端目录结构、分层职责、Mock测试、数据库、网络安全、环境变量与日志规范并新增前后端接口一致性强约束 | 关联:task051
+change156 日期:2026-02-25 | 文件:backend/internal/handler/server.go,backend/internal/handler/server_test.go,backend/cmd/server/main.go | 操作:Modify | 影响:后端分层与入口编排 | 说明:将internal/api迁移到handler并改为通过service层注入以替代handler直连store | 关联:task052
+change157 日期:2026-02-25 | 文件:backend/internal/repository/feed_repository.go,backend/internal/service/feed_service.go | 操作:Add | 影响:后端分层实现 | 说明:新增repository/service适配层并保持原有存储行为兼容 | 关联:task052
+change158 日期:2026-02-25 | 文件:backend/internal/README.md,backend/internal/config/README.md,backend/internal/db/README.md,backend/internal/model/README.md,backend/internal/scheduler/README.md,backend/internal/handler/README.md | 操作:Add | 影响:后端目录结构 | 说明:补齐internal目录职责说明以明确后续迁移路径与代码落位 | 关联:task052
+change159 日期:2026-02-25 | 文件:backend/pkg/logger/logger.go,backend/internal/handler/server.go,backend/cmd/server/main.go | 操作:Add | 影响:后端日志体系 | 说明:新增结构化日志模块并接入HTTP请求日志与抓取脚本/刷新链路日志输出 | 关联:task053
+change160 日期:2026-02-25 | 文件:frontend/src/lib/logger.ts,frontend/src/api.ts,frontend/src/vite-env.d.ts | 操作:Add | 影响:前端日志与接口层 | 说明:新增前端统一logger并接入API请求日志与错误上下文以提升前后端联调可观测性 | 关联:task053
+change161 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task051-task053 | 说明:新增并完成规范补齐、后端分层迁移与统一日志任务 | 关联:task053
+
+change151 日期:2026-02-25 | 文件:.rules | 操作:Modify | 影响:项目工程规范 | 说明:融合Gist分层/安全/测试/提交流程约束并按Zflow当前技术栈做兼容化落地 | 关联:task049
+change152 日期:2026-02-25 | 文件:frontend/src/lib/article-list.ts | 操作:Add | 影响:前端逻辑分层 | 说明:抽离文章时间格式化与筛选排序纯函数以降低App组件复杂度 | 关联:task050
+change153 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:文章列表计算链路 | 说明:改用lib纯函数处理文章筛选排序并移除组件内重复算法实现 | 关联:task050
+change154 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task049/task050 | 说明:新增并完成规则融合与前端重构任务 | 关联:task050
+
+change149 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:仅未读筛选行为 | 说明:当前选中文章在自动标记已读后仍保留在列表中并在切换文章后再按未读规则隐藏 | 关联:task048
+change150 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task048 | 说明:新增并完成仅未读视图下当前阅读项保留任务 | 关联:task048
+
+change147 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:文章详情操作区 | 说明:移除标记已读按钮并将状态操作收敛为仅保留标记未读入口 | 关联:task047
+change148 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task047 | 说明:新增并完成详情区仅保留标记未读任务 | 关联:task047
+
+change145 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Modify | 影响:顶部刷新按钮视觉 | 说明:优化右上角刷新按钮的尺寸、边框、渐变与悬停按压反馈使风格更自然 | 关联:task046
+change146 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task046 | 说明:新增并完成顶部刷新按钮样式优化任务 | 关联:task046
+
+change142 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:文章列表筛选与已读状态 | 说明:将已读筛选和排序改为右上角双态图标并在点击文章时自动标记为已读且本地同步列表状态 | 关联:task045
+change143 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Modify | 影响:列表工具栏视觉与触控 | 说明:新增图标工具栏按钮样式并优化移动端触控尺寸与状态反馈以贴合现有页面风格 | 关联:task045
+change144 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task045 | 说明:新增并完成文章列表图标双态筛选与自动已读任务 | 关联:task045
+
 change138 日期:2026-02-25 | 文件:backend/internal/store/store.go,backend/internal/domain/feed.go | 操作:Modify | 影响:订阅源图标元数据 | 说明:新增图标字段迁移并在Feed模型中暴露icon_url以支持图标缓存展示 | 关联:task044
 change139 日期:2026-02-25 | 文件:backend/internal/api/server.go,backend/cmd/server/main.go | 操作:Modify | 影响:图标抓取与访问 | 说明:新增favicon抓取缓存逻辑与/api/v1/icons/{feedID}访问接口并在新增/刷新订阅时触发抓取 | 关联:task044
 change140 日期:2026-02-25 | 文件:frontend/src/types.ts,frontend/src/App.tsx,frontend/src/styles.css | 操作:Modify | 影响:订阅列表UI | 说明:订阅列表显示站点图标并在加载失败时回退默认RSS图标 | 关联:task044

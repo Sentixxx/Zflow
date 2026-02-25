@@ -1,4 +1,7 @@
 import type { Article, Feed, Folder } from "./types";
+import { createLogger } from "./lib/logger";
+
+const apiLogger = createLogger("api");
 
 export class ApiClient {
   constructor(private readonly baseURL: string) {}
@@ -8,15 +11,39 @@ export class ApiClient {
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(this.buildURL(path), {
-      headers: { "Content-Type": "application/json" },
-      ...options,
-    });
-    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!response.ok) {
-      throw new Error((data.error as string) || `HTTP ${response.status}`);
+    const startedAt = Date.now();
+    apiLogger.debug("request:start", { method: options.method || "GET", path });
+    try {
+      const response = await fetch(this.buildURL(path), {
+        headers: { "Content-Type": "application/json" },
+        ...options,
+      });
+      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      const durationMs = Date.now() - startedAt;
+      if (!response.ok) {
+        apiLogger.warn("request:failed", {
+          method: options.method || "GET",
+          path,
+          status_code: response.status,
+          duration_ms: durationMs,
+        });
+        throw new Error((data.error as string) || `HTTP ${response.status}`);
+      }
+      apiLogger.debug("request:ok", {
+        method: options.method || "GET",
+        path,
+        status_code: response.status,
+        duration_ms: durationMs,
+      });
+      return data as T;
+    } catch (error) {
+      apiLogger.error("request:error", {
+        method: options.method || "GET",
+        path,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-    return data as T;
   }
 
   async listFeeds(): Promise<Feed[]> {

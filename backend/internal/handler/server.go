@@ -1,4 +1,4 @@
-package api
+package handler
 
 import (
 	"bytes"
@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
-	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -21,13 +20,16 @@ import (
 	"time"
 
 	"github.com/Sentixxx/Zflow/backend/internal/feedparser"
-	"github.com/Sentixxx/Zflow/backend/internal/store"
+	"github.com/Sentixxx/Zflow/backend/internal/repository"
+	"github.com/Sentixxx/Zflow/backend/internal/service"
+	"github.com/Sentixxx/Zflow/backend/pkg/logger"
 )
 
 type Server struct {
-	store   *store.FeedStore
+	store   service.FeedService
 	client  *http.Client
 	iconDir string
+	logger  *logger.ModuleLogger
 }
 
 type createFeedRequest struct {
@@ -60,7 +62,7 @@ type updateFeedTitleRequest struct {
 	Title string `json:"title"`
 }
 
-func NewServer(feedStore *store.FeedStore, dataDir string) *Server {
+func NewServer(feedStore service.FeedService, dataDir string) *Server {
 	iconDir := filepath.Join(dataDir, "icons")
 	_ = os.MkdirAll(iconDir, 0o755)
 	return &Server{
@@ -69,6 +71,7 @@ func NewServer(feedStore *store.FeedStore, dataDir string) *Server {
 			Timeout: 8 * time.Second,
 		},
 		iconDir: iconDir,
+		logger:  logger.NewModuleFromEnv("handler"),
 	}
 }
 
@@ -86,7 +89,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/data/export/opml", s.handleExportOPML)
 	mux.HandleFunc("/api/v1/data/import/opml", s.handleImportOPML)
 	mux.HandleFunc("/healthz", s.handleHealth)
-	return corsMiddleware(mux)
+	return corsMiddleware(s.requestLogMiddleware(mux))
 }
 
 type profileFolderRecord struct {
@@ -632,7 +635,7 @@ func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
 
 	result := s.fetchAndParse(req.URL, "", "")
 	feed, err := s.store.AddInFolder(req.URL, result.Title, result.Items, result.Error, req.FolderID, result.ETag, result.LastModified)
-	if err == store.ErrFeedExists {
+	if err == repository.ErrFeedExists {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "feed already exists"})
 		return
 	}
@@ -821,7 +824,7 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 
 type fetchResult struct {
 	Title        string
-	Items        []store.ArticleSeed
+	Items        []repository.ArticleSeed
 	ETag         string
 	LastModified string
 	NotModified  bool
@@ -870,9 +873,9 @@ func (s *Server) fetchAndParse(feedURL, etag, lastModified string) fetchResult {
 		return fetchResult{Error: err.Error()}
 	}
 
-	items := make([]store.ArticleSeed, 0, len(parsed.Items))
+	items := make([]repository.ArticleSeed, 0, len(parsed.Items))
 	for _, item := range parsed.Items {
-		items = append(items, store.ArticleSeed{
+		items = append(items, repository.ArticleSeed{
 			Title:       item.Title,
 			Link:        item.Link,
 			Summary:     item.Summary,
@@ -907,7 +910,7 @@ func (s *Server) refreshFeedByID(feedID int64) error {
 	if script := strings.TrimSpace(feed.CustomScript); script != "" {
 		items, err := s.applyScriptToItems(feed.ID, feed.URL, script, normalizeScriptLang(feed.CustomScriptLang), result.Items)
 		if err != nil {
-			log.Printf("feed %d custom script failed, fallback to raw summary: %v", feed.ID, err)
+			s.logger.Warn("refresh", "feed", "failed", "custom script failed, fallback to raw summary", "feed_id", feed.ID, "error", err.Error())
 		} else {
 			result.Items = items
 		}
@@ -943,8 +946,8 @@ type scriptResultPayload struct {
 	Debug       string `json:"debug"`
 }
 
-func (s *Server) applyScriptToItems(feedID int64, feedURL, script, lang string, items []store.ArticleSeed) ([]store.ArticleSeed, error) {
-	out := make([]store.ArticleSeed, 0, len(items))
+func (s *Server) applyScriptToItems(feedID int64, feedURL, script, lang string, items []repository.ArticleSeed) ([]repository.ArticleSeed, error) {
+	out := make([]repository.ArticleSeed, 0, len(items))
 	for _, item := range items {
 		payload := scriptRequestPayload{
 			Version: "v1",
@@ -965,20 +968,20 @@ func (s *Server) applyScriptToItems(feedID int64, feedURL, script, lang string, 
 		}
 		stdout, err := runScript(lang, script, raw)
 		if err != nil {
-			log.Printf("feed %d script failed for item %q: %v", feedID, item.Link, err)
+			s.logger.Warn("refresh", "feed", "failed", "script execution failed", "feed_id", feedID, "item_host", logger.ExtractHost(item.Link), "error", err.Error())
 			out = append(out, item)
 			continue
 		}
 
 		var result scriptResultPayload
 		if err := json.Unmarshal(stdout, &result); err != nil {
-			log.Printf("feed %d script output is not valid JSON for item %q: %v", feedID, item.Link, err)
+			s.logger.Warn("refresh", "feed", "failed", "script output is not valid json", "feed_id", feedID, "item_host", logger.ExtractHost(item.Link), "error", err.Error())
 			out = append(out, item)
 			continue
 		}
 		if !result.OK {
 			if msg := strings.TrimSpace(result.Debug); msg != "" {
-				log.Printf("feed %d script returned ok=false for item %q: %s", feedID, item.Link, msg)
+				s.logger.Warn("refresh", "feed", "failed", "script returned ok=false", "feed_id", feedID, "item_host", logger.ExtractHost(item.Link), "debug", msg)
 			}
 			out = append(out, item)
 			continue
@@ -1144,23 +1147,19 @@ func (s *Server) persistIcon(feedID int64, raw []byte, ext string) (string, erro
 	return fileName, nil
 }
 
-func (s *Server) StartRefreshLoop(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
+func (s *Server) RefreshAllFeeds(ctx context.Context) error {
+	feeds := s.store.List()
+	for _, feed := range feeds {
 		select {
 		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			feeds := s.store.List()
-			for _, feed := range feeds {
-				if err := s.refreshFeedByID(feed.ID); err != nil {
-					log.Printf("refresh feed %d failed: %v", feed.ID, err)
-				}
-			}
+			return ctx.Err()
+		default:
+		}
+		if err := s.refreshFeedByID(feed.ID); err != nil {
+			s.logger.Warn("refresh", "feed", "failed", "scheduled refresh failed", "feed_id", feed.ID, "error", err.Error())
 		}
 	}
+	return nil
 }
 
 func pickHeaderOrDefault(v, fallback string) string {
@@ -1196,4 +1195,66 @@ func corsMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (s *Server) requestLogMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		recorder := &statusRecorder{
+			ResponseWriter: w,
+			status:         http.StatusOK,
+		}
+		next.ServeHTTP(recorder, r)
+
+		status := recorder.status
+		result := "ok"
+		if status >= 400 && status < 500 {
+			result = "failed"
+		} else if status >= 500 {
+			result = "failed"
+		}
+
+		action := "request"
+		switch r.Method {
+		case http.MethodGet:
+			action = "fetch"
+		case http.MethodPost:
+			action = "create"
+		case http.MethodPatch:
+			action = "update"
+		case http.MethodDelete:
+			action = "delete"
+		}
+
+		resource := resourceFromPath(r.URL.Path)
+		durationMS := time.Since(start).Milliseconds()
+		s.logger.Info(action, resource, result, "http request", "method", r.Method, "path", r.URL.Path, "status_code", status, "duration_ms", durationMS)
+	})
+}
+
+func resourceFromPath(path string) string {
+	switch {
+	case strings.HasPrefix(path, "/api/v1/feeds"):
+		return "feed"
+	case strings.HasPrefix(path, "/api/v1/folders"):
+		return "folder"
+	case strings.HasPrefix(path, "/api/v1/articles"):
+		return "entry"
+	case strings.HasPrefix(path, "/api/v1/icons"):
+		return "icon"
+	case strings.HasPrefix(path, "/api/v1/data"):
+		return "settings"
+	default:
+		return "http"
+	}
 }

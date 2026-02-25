@@ -84,17 +84,33 @@ body {
 
 .top-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 .icon-btn {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
-  border: 1px solid var(--line);
-  background: #fff;
-  color: var(--ink);
+  border: 1px solid #d7deea;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafd 100%);
+  color: #334155;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, transform 0.06s ease;
+}
+
+.icon-btn:hover {
+  border-color: #b7c3d6;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5fb 100%);
+  color: #0f172a;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.icon-btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
 }
 
 .layout {
@@ -423,11 +439,65 @@ button.secondary {
   min-height: 0;
 }
 
-.filters {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 10px;
+}
+
+.list-header h2 {
+  margin-bottom: 0;
+}
+
+.list-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.list-icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid #d8dee9;
+  background: #ffffff;
+  color: #374151;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.06s ease;
+}
+
+.list-icon-btn .glyph {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.list-icon-btn:hover {
+  background: #f5f7fb;
+  border-color: #c5cfde;
+}
+
+.list-icon-btn:active {
+  transform: translateY(1px);
+}
+
+.list-icon-btn.is-unread {
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.list-icon-btn.is-read {
+  color: #0f172a;
+}
+
+.list-icon-btn.sort-latest,
+.list-icon-btn.sort-oldest {
+  font-weight: 600;
 }
 
 .item {
@@ -1021,8 +1091,23 @@ a {
     grid-template-columns: 1fr !important;
   }
 
-  .filters {
-    grid-template-columns: 1fr;
+  .list-header {
+    align-items: center;
+    gap: 12px;
+  }
+
+  .list-toolbar {
+    gap: 10px;
+  }
+
+  .list-icon-btn {
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+  }
+
+  .list-icon-btn .glyph {
+    font-size: 19px;
   }
 
   .sidebar,
