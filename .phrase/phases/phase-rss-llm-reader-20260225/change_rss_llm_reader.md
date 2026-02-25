@@ -1,5 +1,18 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change138 日期:2026-02-25 | 文件:backend/internal/store/store.go,backend/internal/domain/feed.go | 操作:Modify | 影响:订阅源图标元数据 | 说明:新增图标字段迁移并在Feed模型中暴露icon_url以支持图标缓存展示 | 关联:task044
+change139 日期:2026-02-25 | 文件:backend/internal/api/server.go,backend/cmd/server/main.go | 操作:Modify | 影响:图标抓取与访问 | 说明:新增favicon抓取缓存逻辑与/api/v1/icons/{feedID}访问接口并在新增/刷新订阅时触发抓取 | 关联:task044
+change140 日期:2026-02-25 | 文件:frontend/src/types.ts,frontend/src/App.tsx,frontend/src/styles.css | 操作:Modify | 影响:订阅列表UI | 说明:订阅列表显示站点图标并在加载失败时回退默认RSS图标 | 关联:task044
+change141 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task044 | 说明:新增并完成订阅源图标抓取与回退展示任务 | 关联:task044
+change136 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:文章时间展示 | 说明:新增东八区时间格式化并在24小时内展示相对时间（刚刚/xx小时xx分钟前） | 关联:task043
+change137 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task043 | 说明:新增并完成文章时间格式规则任务 | 关联:task043
+change133 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:全部文章列表展示 | 说明:为全部文章视图中的每条文章新增来源订阅源小标题并移除feed_id数字展示 | 关联:task042
+change134 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Modify | 影响:文章来源信息样式 | 说明:新增article-source样式用于展示来源订阅源名称 | 关联:task042
+change135 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task042 | 说明:新增并完成文章来源小标题展示任务 | 关联:task042
+change129 日期:2026-02-25 | 文件:backend/internal/api/server.go | 操作:Modify | 影响:数据导入导出API | 说明:新增个人配置JSON与OPML的导入导出接口并实现订阅/分类映射逻辑 | 关联:task041
+change130 日期:2026-02-25 | 文件:backend/internal/store/store.go | 操作:Modify | 影响:存储层订阅管理 | 说明:新增按URL查询与占位订阅创建能力以支持离线导入 | 关联:task041
+change131 日期:2026-02-25 | 文件:frontend/src/api.ts,frontend/src/App.tsx | 操作:Modify | 影响:设置-数据管理标签页 | 说明:新增数据管理标签页并接入个人配置与OPML导入导出按钮和文件导入流 | 关联:task041
+change132 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task041 | 说明:新增并完成数据管理导入导出任务 | 关联:task041
 change126 日期:2026-02-25 | 文件:frontend/package.json | 操作:Modify | 影响:前端依赖解析 | 说明:新增overrides将yallist锁定到3.1.0以规避CI中3.1.1 tarball被策略拦截 | 关联:task040
 change127 日期:2026-02-25 | 文件:.github/workflows/ci-cd.yml | 操作:Modify | 影响:前端安装步骤 | 说明:将CI前端依赖安装由npm ci调整为npm install以应用overrides重新解析依赖 | 关联:task040
 change128 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task040 | 说明:新增并完成CI依赖403修复任务 | 关联:task040

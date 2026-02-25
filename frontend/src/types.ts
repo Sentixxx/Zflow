@@ -5,6 +5,7 @@ export type Feed = {
   folder_id?: number | null;
   custom_script?: string;
   custom_script_lang?: "shell" | "python" | "javascript";
+  icon_url?: string;
   item_count: number;
   last_fetched_at: string;
   last_fetch_status: string;

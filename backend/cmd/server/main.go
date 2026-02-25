@@ -29,7 +29,7 @@ func main() {
 	}
 	defer feedStore.Close()
 
-	srv := api.NewServer(feedStore)
+	srv := api.NewServer(feedStore, dataDir)
 	go srv.StartRefreshLoop(context.Background(), 15*time.Minute)
 
 	log.Printf("server listening on :%s", port)

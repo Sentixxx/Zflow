@@ -75,6 +75,8 @@ func (s *FeedStore) migrate(ctx context.Context) error {
 			folder_id INTEGER,
 			custom_script TEXT NOT NULL DEFAULT '',
 			custom_script_lang TEXT NOT NULL DEFAULT 'shell',
+			icon_path TEXT NOT NULL DEFAULT '',
+			icon_fetched_at TEXT NOT NULL DEFAULT '',
 			item_count INTEGER NOT NULL DEFAULT 0,
 			last_fetched_at TEXT NOT NULL,
 			last_fetch_status TEXT NOT NULL,
@@ -117,6 +119,12 @@ func (s *FeedStore) migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "feeds", "custom_script_lang", "TEXT NOT NULL DEFAULT 'shell'"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "feeds", "icon_path", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "feeds", "icon_fetched_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -146,7 +154,7 @@ func (s *FeedStore) ensureColumn(ctx context.Context, table, column, ddl string)
 }
 
 func (s *FeedStore) List() []domain.Feed {
-	rows, err := s.db.Query(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds ORDER BY id DESC`)
+	rows, err := s.db.Query(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds ORDER BY id DESC`)
 	if err != nil {
 		return []domain.Feed{}
 	}
@@ -163,6 +171,8 @@ func (s *FeedStore) List() []domain.Feed {
 			&folderID,
 			&feed.CustomScript,
 			&feed.CustomScriptLang,
+			&feed.IconPath,
+			&feed.IconFetchedAt,
 			&feed.ItemCount,
 			&feed.LastFetchedAt,
 			&feed.LastFetchStatus,
@@ -176,6 +186,9 @@ func (s *FeedStore) List() []domain.Feed {
 		if folderID.Valid {
 			id := folderID.Int64
 			feed.FolderID = &id
+		}
+		if feed.IconPath != "" {
+			feed.IconURL = fmt.Sprintf("/api/v1/icons/%d", feed.ID)
 		}
 		feeds = append(feeds, feed)
 	}
@@ -315,6 +328,8 @@ func (s *FeedStore) AddInFolder(url, title string, items []ArticleSeed, fetchErr
 		FolderID:         folderID,
 		CustomScript:     "",
 		CustomScriptLang: "shell",
+		IconPath:         "",
+		IconFetchedAt:    "",
 		ItemCount:        insertedCount,
 		LastFetchedAt:    now,
 		LastFetchStatus:  status,
@@ -352,7 +367,7 @@ func (s *FeedStore) DeleteFeed(id int64) (bool, error) {
 }
 
 func (s *FeedStore) GetFeed(id int64) (domain.Feed, bool, error) {
-	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE id = ?`, id)
+	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE id = ?`, id)
 	var feed domain.Feed
 	var folderID sql.NullInt64
 	if err := row.Scan(
@@ -362,6 +377,8 @@ func (s *FeedStore) GetFeed(id int64) (domain.Feed, bool, error) {
 		&folderID,
 		&feed.CustomScript,
 		&feed.CustomScriptLang,
+		&feed.IconPath,
+		&feed.IconFetchedAt,
 		&feed.ItemCount,
 		&feed.LastFetchedAt,
 		&feed.LastFetchStatus,
@@ -379,7 +396,98 @@ func (s *FeedStore) GetFeed(id int64) (domain.Feed, bool, error) {
 		id := folderID.Int64
 		feed.FolderID = &id
 	}
+	if feed.IconPath != "" {
+		feed.IconURL = fmt.Sprintf("/api/v1/icons/%d", feed.ID)
+	}
 	return feed, true, nil
+}
+
+func (s *FeedStore) GetFeedByURL(rawURL string) (domain.Feed, bool, error) {
+	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE url = ?`, strings.TrimSpace(rawURL))
+	var feed domain.Feed
+	var folderID sql.NullInt64
+	if err := row.Scan(
+		&feed.ID,
+		&feed.URL,
+		&feed.Title,
+		&folderID,
+		&feed.CustomScript,
+		&feed.CustomScriptLang,
+		&feed.IconPath,
+		&feed.IconFetchedAt,
+		&feed.ItemCount,
+		&feed.LastFetchedAt,
+		&feed.LastFetchStatus,
+		&feed.LastFetchError,
+		&feed.ETag,
+		&feed.LastModified,
+		&feed.CreatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Feed{}, false, nil
+		}
+		return domain.Feed{}, false, err
+	}
+	if folderID.Valid {
+		id := folderID.Int64
+		feed.FolderID = &id
+	}
+	if feed.IconPath != "" {
+		feed.IconURL = fmt.Sprintf("/api/v1/icons/%d", feed.ID)
+	}
+	return feed, true, nil
+}
+
+func (s *FeedStore) CreateFeedPlaceholder(url string, title string, folderID *int64) (domain.Feed, error) {
+	url = strings.TrimSpace(url)
+	title = strings.TrimSpace(title)
+	if url == "" {
+		return domain.Feed{}, errors.New("url is required")
+	}
+	if title == "" {
+		title = url
+	}
+	exists, err := s.feedExists(url)
+	if err != nil {
+		return domain.Feed{}, err
+	}
+	if exists {
+		return domain.Feed{}, ErrFeedExists
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(
+		`INSERT INTO feeds(url, title, folder_id, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at, updated_at)
+		 VALUES(?, ?, ?, 0, ?, 'idle', '', '', '', ?, ?)`,
+		url, title, nullableInt(folderID), now, now, now,
+	)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return domain.Feed{}, ErrFeedExists
+		}
+		return domain.Feed{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return domain.Feed{}, err
+	}
+	return domain.Feed{
+		ID:               id,
+		URL:              url,
+		Title:            title,
+		FolderID:         folderID,
+		CustomScript:     "",
+		CustomScriptLang: "shell",
+		IconPath:         "",
+		IconFetchedAt:    "",
+		ItemCount:        0,
+		LastFetchedAt:    now,
+		LastFetchStatus:  "idle",
+		LastFetchError:   "",
+		ETag:             "",
+		LastModified:     "",
+		CreatedAt:        now,
+	}, nil
 }
 
 func (s *FeedStore) UpdateFeedAfterRefresh(feedID int64, title string, items []ArticleSeed, fetchErr, etag, lastModified string) error {
@@ -579,6 +687,23 @@ func (s *FeedStore) UpdateFeedTitle(id int64, title string) (domain.Feed, bool, 
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := s.db.Exec(`UPDATE feeds SET title = ?, updated_at = ? WHERE id = ?`, title, now, id)
+	if err != nil {
+		return domain.Feed{}, false, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return domain.Feed{}, false, nil
+	}
+	feed, ok, err := s.GetFeed(id)
+	if err != nil {
+		return domain.Feed{}, false, err
+	}
+	return feed, ok, nil
+}
+
+func (s *FeedStore) UpdateFeedIcon(id int64, iconPath string) (domain.Feed, bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(`UPDATE feeds SET icon_path = ?, icon_fetched_at = ?, updated_at = ? WHERE id = ?`, strings.TrimSpace(iconPath), now, now, id)
 	if err != nil {
 		return domain.Feed{}, false, err
 	}

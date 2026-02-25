@@ -19,7 +19,7 @@ type ResizeTarget = "sidebar" | "list";
 type FolderContextMenu = { folder: Folder; x: number; y: number } | null;
 type FeedContextMenu = { feed: Feed; x: number; y: number } | null;
 type ScriptLang = "shell" | "python" | "javascript";
-type SettingsTab = "connection" | "subscription" | "script";
+type SettingsTab = "connection" | "subscription" | "script" | "data";
 
 function normalizeScriptLang(raw: string | undefined): ScriptLang {
   if (raw === "python" || raw === "javascript") {
@@ -34,6 +34,42 @@ function scriptLangByFileName(name: string): ScriptLang | null {
   if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) return "javascript";
   if (lower.endsWith(".sh") || lower.endsWith(".bash") || lower.endsWith(".zsh")) return "shell";
   return null;
+}
+
+function formatArticleTime(raw: string | undefined): string {
+  const text = (raw || "").trim();
+  if (!text) {
+    return "-";
+  }
+  const ts = Date.parse(text);
+  if (Number.isNaN(ts)) {
+    return "-";
+  }
+
+  const now = Date.now();
+  const deltaMs = now - ts;
+  if (deltaMs >= 0 && deltaMs < 60 * 1000) {
+    return "刚刚";
+  }
+  if (deltaMs >= 0 && deltaMs < 24 * 60 * 60 * 1000) {
+    const totalMinutes = Math.max(1, Math.floor(deltaMs / (60 * 1000)));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours <= 0) {
+      return `${minutes}分钟前`;
+    }
+    if (minutes === 0) {
+      return `${hours}小时前`;
+    }
+    return `${hours}小时${minutes}分钟前`;
+  }
+
+  const utc8Ms = ts + 8*60*60*1000;
+  const d = new Date(utc8Ms);
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
 }
 
 export function App() {
@@ -681,6 +717,69 @@ export function App() {
     setFeedContextMenu(null);
   };
 
+  const downloadBlob = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportProfileJSON = async () => {
+    try {
+      const blob = await client.exportProfile();
+      downloadBlob(blob, "zflow-profile.json");
+      setMessage("已导出个人配置");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const exportOPML = async () => {
+    try {
+      const blob = await client.exportOPML();
+      downloadBlob(blob, "zflow-subscriptions.opml");
+      setMessage("已导出 OPML");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const importProfileJSON = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    try {
+      const raw = await file.text();
+      const result = await client.importProfile(raw);
+      await Promise.all([loadFolders(), loadFeeds(), loadArticles()]);
+      setMessage(`个人配置导入完成：新增订阅 ${result.imported_feeds ?? 0}，更新订阅 ${result.updated_feeds ?? 0}`);
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const importOPML = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    try {
+      const raw = await file.text();
+      const result = await client.importOPML(raw);
+      await Promise.all([loadFolders(), loadFeeds(), loadArticles()]);
+      setMessage(`OPML 导入完成：新增订阅 ${result.imported_feeds ?? 0}，更新订阅 ${result.updated_feeds ?? 0}`);
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    } finally {
+      event.target.value = "";
+    }
+  };
+
   const toggleFolderCollapsed = (folderID: number) => {
     setCollapsedFolders((current) => ({
       ...current,
@@ -812,6 +911,7 @@ export function App() {
 
   const renderFeedNode = (feed: Feed, paddingLeft: number) => {
     const isRenaming = renamingFeedID === feed.id;
+    const iconSrc = feed.icon_url ? `${apiBase.replace(/\/$/, "")}${feed.icon_url}` : "";
     return (
     <div key={`feed-${feed.id}`} className={`tree-row feed-row ${isRenaming ? "editing" : ""}`}>
       <button
@@ -848,7 +948,31 @@ export function App() {
             />
           </div>
         ) : (
-          <div>
+          <div className="feed-title-row">
+            {iconSrc ? (
+              <>
+                <img
+                  className="feed-icon"
+                  src={iconSrc}
+                  alt=""
+                  loading="lazy"
+                  onError={(event) => {
+                    event.currentTarget.style.display = "none";
+                    const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
+                    if (fallback) {
+                      fallback.style.display = "inline-flex";
+                    }
+                  }}
+                />
+                <span className="feed-icon-fallback" style={{ display: "none" }} aria-hidden="true">
+                  RSS
+                </span>
+              </>
+            ) : (
+              <span className="feed-icon-fallback" aria-hidden="true">
+                RSS
+              </span>
+            )}
             <strong>{feed.title || "(未命名源)"}</strong>
           </div>
         )}
@@ -1018,12 +1142,15 @@ export function App() {
                 className={`item article ${selectedArticle?.id === article.id ? "active" : ""}`}
                 onClick={() => selectArticle(article.id)}
               >
+                {selectedFeedID == null && (
+                  <div className="article-source">{feedNameByID.get(article.feed_id) || `订阅源 #${article.feed_id}`}</div>
+                )}
                 <div>
                   <strong className="article-title">{article.title || "(无标题)"}</strong>
                   <span className={`pill ${article.is_read ? "read" : "unread"}`}>{article.is_read ? "已读" : "未读"}</span>
                 </div>
                 <div className="meta">
-                  feed={article.feed_id} · {article.published_at || article.created_at || "-"}
+                  {formatArticleTime(article.published_at || article.created_at)}
                 </div>
               </button>
             ))}
@@ -1153,6 +1280,9 @@ export function App() {
                 <button className={`settings-tab ${settingsTab === "connection" ? "active" : ""}`} onClick={() => setSettingsTab("connection")}>
                   连接设置
                 </button>
+                <button className={`settings-tab ${settingsTab === "data" ? "active" : ""}`} onClick={() => setSettingsTab("data")}>
+                  数据管理
+                </button>
               </aside>
               <section className="settings-page">
                 {settingsTab === "subscription" && (
@@ -1244,6 +1374,24 @@ export function App() {
                         保存
                       </button>
                     </div>
+                  </div>
+                )}
+                {settingsTab === "data" && (
+                  <div className="settings-page-inner settings-section-card">
+                    <h4 className="section-title">数据导出</h4>
+                    <div className="row settings-actions">
+                      <button onClick={exportProfileJSON}>导出个人配置（JSON）</button>
+                      <button className="secondary" onClick={exportOPML}>
+                        导出订阅源（OPML）
+                      </button>
+                    </div>
+
+                    <h4 className="section-title">数据导入</h4>
+                    <label htmlFor="importProfile">导入个人配置（JSON，含分类与脚本）</label>
+                    <input id="importProfile" type="file" accept=".json,application/json" onChange={importProfileJSON} />
+
+                    <label htmlFor="importOPML">导入订阅源（OPML）</label>
+                    <input id="importOPML" type="file" accept=".opml,.xml,text/xml,application/xml" onChange={importOPML} />
                   </div>
                 )}
               </section>

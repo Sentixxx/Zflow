@@ -34,7 +34,7 @@ func TestCreateFeedAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFeedStore() error = %v", err)
 	}
-	server := NewServer(feedStore)
+	server := NewServer(feedStore, t.TempDir())
 
 	body, _ := json.Marshal(map[string]string{"url": upstream.URL})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/feeds", bytes.NewReader(body))
@@ -76,7 +76,7 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFeedStore() error = %v", err)
 	}
-	server := NewServer(feedStore)
+	server := NewServer(feedStore, t.TempDir())
 
 	createBody, _ := json.Marshal(map[string]string{"url": upstream.URL})
 	reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/feeds", bytes.NewReader(createBody))
@@ -144,7 +144,7 @@ func TestCORSPreflightAndHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFeedStore() error = %v", err)
 	}
-	server := NewServer(feedStore)
+	server := NewServer(feedStore, t.TempDir())
 
 	preflight := httptest.NewRequest(http.MethodOptions, "/api/v1/articles", nil)
 	preflight.Header.Set("Origin", "http://localhost:5173")

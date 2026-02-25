@@ -102,4 +102,40 @@ export class ApiClient {
       body: JSON.stringify({ read }),
     });
   }
+
+  async exportProfile(): Promise<Blob> {
+    const response = await fetch(this.buildURL("/api/v1/data/export/profile"));
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response.blob();
+  }
+
+  async importProfile(rawJSON: string): Promise<{ imported_feeds?: number; updated_feeds?: number; imported_folders?: number }> {
+    return this.request<{ imported_feeds?: number; updated_feeds?: number; imported_folders?: number }>("/api/v1/data/import/profile", {
+      method: "POST",
+      body: rawJSON,
+    });
+  }
+
+  async exportOPML(): Promise<Blob> {
+    const response = await fetch(this.buildURL("/api/v1/data/export/opml"));
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response.blob();
+  }
+
+  async importOPML(rawOPML: string): Promise<{ imported_feeds?: number; updated_feeds?: number; imported_folders?: number }> {
+    const response = await fetch(this.buildURL("/api/v1/data/import/opml"), {
+      method: "POST",
+      headers: { "Content-Type": "text/xml; charset=utf-8" },
+      body: rawOPML,
+    });
+    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) {
+      throw new Error((data.error as string) || `HTTP ${response.status}`);
+    }
+    return data as { imported_feeds?: number; updated_feeds?: number; imported_folders?: number };
+  }
 }
