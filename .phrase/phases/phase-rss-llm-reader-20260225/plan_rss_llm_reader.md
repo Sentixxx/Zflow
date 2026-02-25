@@ -1,6 +1,12 @@
 # PLAN: RSS + LLM Reader (Phase 1)
 
 ## Milestones
+0.5 数据层升级（SQLite）
+- 迁移至SQLite持久化并启用WAL模式。
+- 提供Feed/Folder/Entry CRUD接口。
+- 接入Conditional GET（ETag/Last-Modified）。
+- 启动15分钟后台刷新任务。
+
 0. Go 后端基础
 - 初始化 Go 服务结构与配置。
 - 暴露订阅管理 API（创建/查询）。

@@ -41,7 +41,14 @@ func TestAddCleansAndDeduplicates(t *testing.T) {
 		t.Fatalf("len(articles) = %d, want 3", len(articles))
 	}
 
-	if articles[0].Title != "A" || articles[0].Summary != "first" {
-		t.Fatalf("first article not cleaned: %+v", articles[0])
+	var found bool
+	for _, article := range articles {
+		if article.Title == "A" && article.Summary == "first" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("cleaned article not found: %+v", articles)
 	}
 }

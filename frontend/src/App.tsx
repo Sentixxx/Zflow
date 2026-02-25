@@ -1,19 +1,159 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import DOMPurify from "dompurify";
 import { ApiClient } from "./api";
-import type { Article, Feed } from "./types";
+import type { Article, Feed, Folder } from "./types";
 
 const DEFAULT_API_BASE = "http://localhost:8080";
+const PREFETCH_BATCH_SIZE = 20;
+const VISIBLE_STEP_SIZE = 10;
+const MIN_SIDEBAR_WIDTH = 260;
+const MAX_SIDEBAR_WIDTH = 520;
+const MIN_LIST_WIDTH = 300;
+const MAX_LIST_WIDTH = 620;
+const COLLAPSED_SIDEBAR_WIDTH = 56;
+const RESIZER_WIDTH = 8;
+const LOAD_MORE_COOLDOWN_MS = 80;
+type ReadFilter = "all" | "unread" | "read";
+type SortMode = "latest" | "oldest" | "unread-first";
+type ResizeTarget = "sidebar" | "list";
+type FolderContextMenu = { folder: Folder; x: number; y: number } | null;
 
 export function App() {
   const [apiBase, setApiBase] = useState<string>(localStorage.getItem("zflow_api_base") || DEFAULT_API_BASE);
   const [feedURL, setFeedURL] = useState("");
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [selectedFeedID, setSelectedFeedID] = useState<number | null>(null);
+  const [selectedFolderID, setSelectedFolderID] = useState<number | null>(null);
+  const [newFeedFolderID, setNewFeedFolderID] = useState<number | null>(null);
+  const [readFilter, setReadFilter] = useState<ReadFilter>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("latest");
+  const [bufferedCount, setBufferedCount] = useState<number>(PREFETCH_BATCH_SIZE);
+  const [visibleCount, setVisibleCount] = useState<number>(VISIBLE_STEP_SIZE);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(360);
+  const [listWidth, setListWidth] = useState<number>(360);
+  const [isNarrow, setIsNarrow] = useState<boolean>(() => window.innerWidth <= 900);
+  const [folderContextMenu, setFolderContextMenu] = useState<FolderContextMenu>(null);
+  const [collapsedFolders, setCollapsedFolders] = useState<Record<number, boolean>>({});
+  const [draggingFeedID, setDraggingFeedID] = useState<number | null>(null);
+  const [dragOverFolderID, setDragOverFolderID] = useState<number | null>(null);
+  const [dragOverUncategorized, setDragOverUncategorized] = useState<boolean>(false);
+  const [dragOverDeleteZone, setDragOverDeleteZone] = useState<boolean>(false);
+  const [pendingDeleteFeed, setPendingDeleteFeed] = useState<Feed | null>(null);
+  const [listBounce, setListBounce] = useState<boolean>(false);
   const [status, setStatus] = useState("准备就绪");
   const [error, setError] = useState("");
+  const lastLoadAtRef = useRef<number>(0);
+  const bounceTimerRef = useRef<number | null>(null);
 
   const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
+  const sanitizedSummaryHTML = useMemo(() => {
+    const raw = selectedArticle?.summary ?? "";
+    if (!raw.trim()) {
+      return "";
+    }
+    return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
+  }, [selectedArticle?.summary]);
+
+  const folderNameByID = useMemo(() => {
+    const map = new Map<number, string>();
+    folders.forEach((folder) => map.set(folder.id, folder.name));
+    return map;
+  }, [folders]);
+
+  const rootFolders = useMemo(() => folders.filter((folder) => folder.parent_id == null), [folders]);
+  const childFoldersByParent = useMemo(() => {
+    const map = new Map<number, Folder[]>();
+    folders.forEach((folder) => {
+      if (folder.parent_id == null) {
+        return;
+      }
+      const list = map.get(folder.parent_id) || [];
+      list.push(folder);
+      map.set(folder.parent_id, list);
+    });
+    return map;
+  }, [folders]);
+  const feedsByFolder = useMemo(() => {
+    const map = new Map<number, Feed[]>();
+    feeds.forEach((feed) => {
+      if (feed.folder_id == null) {
+        return;
+      }
+      const list = map.get(feed.folder_id) || [];
+      list.push(feed);
+      map.set(feed.folder_id, list);
+    });
+    return map;
+  }, [feeds]);
+  const uncategorizedFeeds = useMemo(() => feeds.filter((feed) => feed.folder_id == null), [feeds]);
+  const collectDescendantFolderIDs = (rootID: number): Set<number> => {
+    const visited = new Set<number>();
+    const stack: number[] = [rootID];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (current == null || visited.has(current)) {
+        continue;
+      }
+      visited.add(current);
+      const children = childFoldersByParent.get(current) || [];
+      children.forEach((child) => stack.push(child.id));
+    }
+    return visited;
+  };
+
+  const filteredAndSortedArticles = useMemo(() => {
+    let filteredBySource = articles;
+    if (selectedFeedID != null) {
+      filteredBySource = articles.filter((article) => article.feed_id === selectedFeedID);
+    } else if (selectedFolderID != null) {
+      const folderIDs = collectDescendantFolderIDs(selectedFolderID);
+      const feedIDs = new Set(feeds.filter((feed) => feed.folder_id != null && folderIDs.has(feed.folder_id)).map((feed) => feed.id));
+      filteredBySource = articles.filter((article) => feedIDs.has(article.feed_id));
+    }
+    const filtered = filteredBySource.filter((article) => {
+      if (readFilter === "read") {
+        return article.is_read;
+      }
+      if (readFilter === "unread") {
+        return !article.is_read;
+      }
+      return true;
+    });
+
+    const withTimestamp = filtered.map((article) => {
+      const source = article.published_at || article.created_at || "";
+      const timestamp = Date.parse(source);
+      return {
+        article,
+        timestamp: Number.isNaN(timestamp) ? 0 : timestamp,
+      };
+    });
+
+    withTimestamp.sort((a, b) => {
+      if (sortMode === "latest") {
+        return b.timestamp - a.timestamp;
+      }
+      if (sortMode === "oldest") {
+        return a.timestamp - b.timestamp;
+      }
+      if (a.article.is_read !== b.article.is_read) {
+        return Number(a.article.is_read) - Number(b.article.is_read);
+      }
+      return b.timestamp - a.timestamp;
+    });
+
+    return withTimestamp.map((entry) => entry.article);
+  }, [articles, readFilter, sortMode, selectedFeedID, selectedFolderID, feeds, childFoldersByParent]);
+  const effectiveBufferedCount = Math.min(bufferedCount, filteredAndSortedArticles.length);
+  const pagedArticles = useMemo(
+    () => filteredAndSortedArticles.slice(0, Math.min(visibleCount, effectiveBufferedCount)),
+    [filteredAndSortedArticles, visibleCount, effectiveBufferedCount],
+  );
 
   const setMessage = (message: string, isError = false) => {
     if (isError) {
@@ -40,11 +180,38 @@ export function App() {
     }
   };
 
+  const loadFolders = async () => {
+    try {
+      const data = await client.listFolders();
+      setFolders(data);
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
   const loadArticles = async () => {
     try {
       const data = await client.listArticles();
       setArticles(data);
+      setBufferedCount(PREFETCH_BATCH_SIZE);
+      setVisibleCount(VISIBLE_STEP_SIZE);
       setMessage("文章列表已刷新");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const refreshFeedsFromNetwork = async () => {
+    try {
+      setMessage("正在刷新订阅源...");
+      const currentFeeds = await client.listFeeds();
+      if (currentFeeds.length === 0) {
+        setMessage("暂无订阅源可刷新");
+        return;
+      }
+      await Promise.all(currentFeeds.map((feed) => client.refreshFeed(feed.id)));
+      await Promise.all([loadFeeds(), loadArticles()]);
+      setMessage("订阅源刷新完成");
     } catch (e) {
       setMessage((e as Error).message, true);
     }
@@ -58,9 +225,9 @@ export function App() {
     }
     try {
       setMessage("正在添加订阅并抓取...");
-      await client.createFeed(url);
+      await client.createFeed(url, newFeedFolderID);
       setFeedURL("");
-      await Promise.all([loadFeeds(), loadArticles()]);
+      await Promise.all([loadFeeds(), loadFolders(), loadArticles()]);
       setMessage("订阅添加成功");
     } catch (e) {
       setMessage((e as Error).message, true);
@@ -91,73 +258,597 @@ export function App() {
     }
   };
 
+  const handleReadFilterChange = (value: ReadFilter) => {
+    setReadFilter(value);
+    setBufferedCount(PREFETCH_BATCH_SIZE);
+    setVisibleCount(VISIBLE_STEP_SIZE);
+  };
+
+  const handleSortModeChange = (value: SortMode) => {
+    setSortMode(value);
+    setBufferedCount(PREFETCH_BATCH_SIZE);
+    setVisibleCount(VISIBLE_STEP_SIZE);
+  };
+  const computedSidebarWidth = sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : sidebarWidth;
+  const layoutStyle = {
+    gridTemplateColumns: isNarrow
+      ? "1fr"
+      : `${computedSidebarWidth}px ${RESIZER_WIDTH}px ${listWidth}px ${RESIZER_WIDTH}px minmax(0, 1fr)`,
+  };
+
+  useEffect(() => {
+    const onResize = () => {
+      setIsNarrow(window.innerWidth <= 900);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const beginResize = (target: ResizeTarget) => (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const initialSidebarWidth = sidebarWidth;
+    const initialListWidth = listWidth;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+
+      if (target === "sidebar") {
+        if (sidebarCollapsed) {
+          return;
+        }
+        const next = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, initialSidebarWidth + delta));
+        setSidebarWidth(next);
+        return;
+      }
+
+      const next = Math.min(MAX_LIST_WIDTH, Math.max(MIN_LIST_WIDTH, initialListWidth + delta));
+      setListWidth(next);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
+  const toggleSettings = () => {
+    if (sidebarCollapsed) {
+      setSidebarCollapsed(false);
+      setSettingsOpen(true);
+      return;
+    }
+    setSettingsOpen((v) => !v);
+  };
+
+  const selectFeed = async (feedID: number | null) => {
+    await loadArticles();
+    setSelectedFeedID((current) => (current === feedID ? null : feedID));
+    setSelectedFolderID(null);
+    setBufferedCount(PREFETCH_BATCH_SIZE);
+    setVisibleCount(VISIBLE_STEP_SIZE);
+  };
+
+  const selectFolder = async (folderID: number | null) => {
+    await loadArticles();
+    setSelectedFolderID((current) => (current === folderID ? null : folderID));
+    setSelectedFeedID(null);
+    setBufferedCount(PREFETCH_BATCH_SIZE);
+    setVisibleCount(VISIBLE_STEP_SIZE);
+  };
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      await Promise.all([loadFeeds(), loadFolders(), loadArticles()]);
+    };
+    void bootstrap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (selectedFeedID != null && !feeds.some((feed) => feed.id === selectedFeedID)) {
+      setSelectedFeedID(null);
+    }
+    if (selectedFolderID != null && !folders.some((folder) => folder.id === selectedFolderID)) {
+      setSelectedFolderID(null);
+    }
+  }, [feeds, folders, selectedFeedID, selectedFolderID]);
+
+  useEffect(() => {
+    if (selectedArticle && !articles.some((article) => article.id === selectedArticle.id)) {
+      setSelectedArticle(null);
+    }
+  }, [articles, selectedArticle]);
+
+  useEffect(() => {
+    setBufferedCount((count) => Math.min(Math.max(PREFETCH_BATCH_SIZE, count), Math.max(PREFETCH_BATCH_SIZE, filteredAndSortedArticles.length)));
+    setVisibleCount((count) => Math.min(Math.max(VISIBLE_STEP_SIZE, count), filteredAndSortedArticles.length || VISIBLE_STEP_SIZE));
+  }, [selectedFeedID, selectedFolderID, readFilter, sortMode, filteredAndSortedArticles.length]);
+
+  useEffect(() => {
+    setCollapsedFolders((current) => {
+      const next: Record<number, boolean> = {};
+      folders.forEach((folder) => {
+        if (current[folder.id]) {
+          next[folder.id] = true;
+        }
+      });
+      return next;
+    });
+  }, [folders]);
+
+  useEffect(() => {
+    const closeMenu = () => setFolderContextMenu(null);
+    window.addEventListener("click", closeMenu);
+    return () => window.removeEventListener("click", closeMenu);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (bounceTimerRef.current != null) {
+        window.clearTimeout(bounceTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const openFolderContextMenu = (event: React.MouseEvent, folder: Folder) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const menuWidth = 188;
+    const menuHeight = 170;
+    const x = Math.max(10, Math.min(event.clientX, window.innerWidth - menuWidth - 10));
+    const y = Math.max(10, Math.min(event.clientY, window.innerHeight - menuHeight - 10));
+    setFolderContextMenu({
+      folder,
+      x,
+      y,
+    });
+  };
+
+  const createSubFolder = async () => {
+    if (!folderContextMenu) return;
+    const name = window.prompt("输入子分类名称");
+    if (!name) return;
+    try {
+      await client.createFolder(name, folderContextMenu.folder.id);
+      await loadFolders();
+      setMessage("子分类已创建");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    } finally {
+      setFolderContextMenu(null);
+    }
+  };
+
+  const renameFolder = async () => {
+    if (!folderContextMenu) return;
+    const current = folderContextMenu.folder;
+    const name = window.prompt("输入新的分类名称", current.name);
+    if (!name) return;
+    try {
+      await client.updateFolder(current.id, name, current.parent_id ?? null);
+      await loadFolders();
+      setMessage("分类已重命名");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    } finally {
+      setFolderContextMenu(null);
+    }
+  };
+
+  const deleteFolder = async () => {
+    if (!folderContextMenu) return;
+    if (!window.confirm(`确认删除分类「${folderContextMenu.folder.name}」？`)) return;
+    try {
+      await client.deleteFolder(folderContextMenu.folder.id);
+      if (selectedFolderID === folderContextMenu.folder.id) {
+        setSelectedFolderID(null);
+      }
+      await Promise.all([loadFolders(), loadFeeds(), loadArticles()]);
+      setMessage("分类已删除");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    } finally {
+      setFolderContextMenu(null);
+    }
+  };
+
+  const createRootFolder = async () => {
+    const name = window.prompt("输入分类名称");
+    if (!name) return;
+    try {
+      const folder = await client.createFolder(name, null);
+      await loadFolders();
+      setNewFeedFolderID(folder.id);
+      setMessage("分类已创建");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const deleteFeed = async (feed: Feed) => {
+    try {
+      await client.deleteFeed(feed.id);
+      if (selectedFeedID === feed.id) {
+        setSelectedFeedID(null);
+      }
+      await Promise.all([loadFeeds(), loadArticles()]);
+      setMessage("订阅源已删除");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    } finally {
+      setPendingDeleteFeed(null);
+    }
+  };
+
+  const toggleFolderCollapsed = (folderID: number) => {
+    setCollapsedFolders((current) => ({
+      ...current,
+      [folderID]: !current[folderID],
+    }));
+  };
+
+  const moveFeedToFolder = async (feedID: number, folderID: number | null) => {
+    try {
+      await client.updateFeedFolder(feedID, folderID);
+      await Promise.all([loadFeeds(), loadArticles()]);
+      setMessage(folderID == null ? "订阅已移动到未分类" : "订阅分类已更新");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    } finally {
+      setDragOverFolderID(null);
+      setDragOverUncategorized(false);
+      setDraggingFeedID(null);
+    }
+  };
+
+  const onFeedDragStart = (event: React.DragEvent<HTMLButtonElement>, feedID: number) => {
+    event.dataTransfer.setData("text/feed-id", String(feedID));
+    event.dataTransfer.effectAllowed = "move";
+    setDraggingFeedID(feedID);
+  };
+
+  const onFeedDragEnd = () => {
+    setDraggingFeedID(null);
+    setDragOverFolderID(null);
+    setDragOverUncategorized(false);
+    setDragOverDeleteZone(false);
+  };
+
+  const onFolderDragOver = (event: React.DragEvent, folderID: number) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverUncategorized(false);
+    setDragOverFolderID(folderID);
+  };
+
+  const onFolderDrop = async (event: React.DragEvent, folderID: number) => {
+    event.preventDefault();
+    const feedID = Number(event.dataTransfer.getData("text/feed-id"));
+    if (!Number.isFinite(feedID) || !Number.isInteger(feedID)) {
+      return;
+    }
+    await moveFeedToFolder(feedID, folderID);
+  };
+
+  const onUncategorizedDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverFolderID(null);
+    setDragOverUncategorized(true);
+    setDragOverDeleteZone(false);
+  };
+
+  const onUncategorizedDrop = async (event: React.DragEvent) => {
+    event.preventDefault();
+    const feedID = Number(event.dataTransfer.getData("text/feed-id"));
+    if (!Number.isFinite(feedID) || !Number.isInteger(feedID)) {
+      return;
+    }
+    await moveFeedToFolder(feedID, null);
+  };
+
+  const onDeleteZoneDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverFolderID(null);
+    setDragOverUncategorized(false);
+    setDragOverDeleteZone(true);
+  };
+
+  const onDeleteZoneDragLeave = () => {
+    setDragOverDeleteZone(false);
+  };
+
+  const onDeleteZoneDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    const feedID = Number(event.dataTransfer.getData("text/feed-id"));
+    setDragOverDeleteZone(false);
+    setDraggingFeedID(null);
+    if (!Number.isFinite(feedID) || !Number.isInteger(feedID)) {
+      return;
+    }
+    const feed = feeds.find((item) => item.id === feedID);
+    if (!feed) {
+      return;
+    }
+    setPendingDeleteFeed(feed);
+  };
+
+  const triggerListBounce = () => {
+    setListBounce(true);
+    if (bounceTimerRef.current != null) {
+      window.clearTimeout(bounceTimerRef.current);
+    }
+    bounceTimerRef.current = window.setTimeout(() => setListBounce(false), 260);
+  };
+
+  const onArticleListScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const el = event.currentTarget;
+    const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 180;
+    if (!nearBottom) {
+      return;
+    }
+    const noMoreVisible = pagedArticles.length >= filteredAndSortedArticles.length;
+    if (noMoreVisible) {
+      triggerListBounce();
+      return;
+    }
+    const now = Date.now();
+    if (now - lastLoadAtRef.current < LOAD_MORE_COOLDOWN_MS) {
+      return;
+    }
+    lastLoadAtRef.current = now;
+    if (visibleCount < effectiveBufferedCount) {
+      setVisibleCount((prevVisible) => Math.min(effectiveBufferedCount, prevVisible + VISIBLE_STEP_SIZE));
+      return;
+    }
+    setBufferedCount((prevBuffered) => {
+      const nextBuffered = Math.min(filteredAndSortedArticles.length, prevBuffered + PREFETCH_BATCH_SIZE);
+      setVisibleCount((prevVisible) => Math.min(nextBuffered, prevVisible + VISIBLE_STEP_SIZE));
+      return nextBuffered;
+    });
+  };
+
+  const renderFeedNode = (feed: Feed, paddingLeft: number) => (
+    <div key={`feed-${feed.id}`} className="tree-row feed-row">
+      <button
+        className={`item feed-item ${selectedFeedID === feed.id ? "active" : ""} ${draggingFeedID === feed.id ? "dragging" : ""}`}
+        style={{ paddingLeft }}
+        onClick={() => selectFeed(feed.id)}
+        draggable
+        onDragStart={(event) => onFeedDragStart(event, feed.id)}
+        onDragEnd={onFeedDragEnd}
+      >
+        <div>
+          <strong>{feed.title || "(未命名源)"}</strong>
+        </div>
+        <div className="meta">
+          {feed.url} · items={feed.item_count} · {feed.last_fetch_status}
+          {feed.last_fetch_status === "failed" && feed.last_fetch_error ? ` · 错误: ${feed.last_fetch_error}` : ""}
+        </div>
+      </button>
+    </div>
+  );
+
+  const renderFolderNode = (folder: Folder, depth = 0) => {
+    const children = childFoldersByParent.get(folder.id) || [];
+    const folderFeeds = feedsByFolder.get(folder.id) || [];
+    const hasChildren = children.length > 0 || folderFeeds.length > 0;
+    const expanded = !collapsedFolders[folder.id];
+    const paddingLeft = 8 + depth * 14;
+    return (
+      <div key={`folder-${folder.id}`}>
+        <div
+          className={`tree-row ${selectedFolderID === folder.id ? "active" : ""} ${dragOverFolderID === folder.id ? "drop-target" : ""}`}
+          onDragOver={(event) => onFolderDragOver(event, folder.id)}
+          onDragLeave={() => setDragOverFolderID((current) => (current === folder.id ? null : current))}
+          onDrop={(event) => onFolderDrop(event, folder.id)}
+        >
+          <button className={`item folder-item ${selectedFolderID === folder.id ? "active" : ""}`} onClick={() => selectFolder(folder.id)} style={{ paddingLeft }}>
+            <span
+              className={`folder-caret ${expanded ? "expanded" : ""} ${hasChildren ? "" : "disabled"}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (hasChildren) {
+                  toggleFolderCollapsed(folder.id);
+                }
+              }}
+            >
+              ▸
+            </span>
+            <span className="folder-name">{folder.name}</span>
+          </button>
+          <button className="folder-action-btn" onClick={(event) => openFolderContextMenu(event, folder)} title="管理分类" aria-label={`管理分类 ${folder.name}`}>
+            ⋯
+          </button>
+        </div>
+        {expanded && folderFeeds.map((feed) => renderFeedNode(feed, paddingLeft + 18))}
+        {expanded && children.map((child) => renderFolderNode(child, depth + 1))}
+      </div>
+    );
+  };
+
   return (
     <div className="shell">
       <header className="topbar">
-        <h1>Zflow Reader MVP</h1>
-        <p>先把阅读器本体做扎实，再接评分与推荐</p>
+        <div className="brand">
+          <span className="brand-mark">▸</span>
+          <h1>Zflow</h1>
+        </div>
+        <div className={`top-status ${error ? "error" : ""}`}>{error || status}</div>
+        <div className="top-actions">
+          <button className="icon-btn" onClick={loadArticles} title="刷新文章">
+            ⟳
+          </button>
+          <button className="icon-btn" onClick={refreshFeedsFromNetwork} title="刷新订阅">
+            ◎
+          </button>
+        </div>
       </header>
 
-      <main className="grid">
-        <section className="panel">
-          <h2>连接设置</h2>
-          <label htmlFor="apiBase">API Base URL</label>
-          <div className="row">
-            <input id="apiBase" value={apiBase} onChange={(e) => setApiBase(e.target.value)} />
-            <button className="secondary" onClick={handleSaveAPIBase}>
-              保存
+      <main className={`layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={layoutStyle}>
+        <section className={`panel sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+          <div className="sidebar-header">
+            <h2 className={`sidebar-title ${sidebarCollapsed ? "hidden" : ""}`}>订阅源</h2>
+            <button
+              className="sidebar-toggle"
+              onClick={() => setSidebarCollapsed((v) => !v)}
+              aria-label={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
+              title={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
+            >
+              <span className={`chevron ${sidebarCollapsed ? "right" : "left"}`}>⌃</span>
             </button>
           </div>
 
-          <h2>添加订阅</h2>
-          <label htmlFor="feedUrl">RSS/Atom URL</label>
-          <input
-            id="feedUrl"
-            value={feedURL}
-            placeholder="https://example.com/feed.xml"
-            onChange={(e) => setFeedURL(e.target.value)}
-          />
-
-          <div className="row">
-            <button onClick={addFeed}>添加并首抓</button>
-            <button className="secondary" onClick={loadFeeds}>
-              刷新订阅
-            </button>
-            <button className="secondary" onClick={loadArticles}>
-              刷新文章
-            </button>
-          </div>
-
-          <h2>订阅源</h2>
-          <div className="list">
-            {feeds.length === 0 && <div className="item">暂无订阅</div>}
-            {feeds.map((feed) => (
-              <div key={feed.id} className="item">
-                <div>
-                  <strong>{feed.title || "(未命名源)"}</strong>
-                </div>
-                <div className="meta">
-                  {feed.url} · items={feed.item_count} · {feed.last_fetch_status}
-                </div>
+          {!sidebarCollapsed && (
+            <div className="sidebar-content">
+              <div className="section-head">
+                <h3 className="section-title">订阅列表</h3>
+                <button className="mini-btn" onClick={createRootFolder}>
+                  新建分类
+                </button>
               </div>
-            ))}
+              <div className="list">
+                <button
+                  className={`item feed-item ${selectedFeedID == null && selectedFolderID == null ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedFolderID(null);
+                    selectFeed(null);
+                  }}
+                >
+                  <strong>全部订阅源</strong>
+                </button>
+                {rootFolders.map((folder) => renderFolderNode(folder))}
+                {uncategorizedFeeds.length > 0 && (
+                  <div
+                    className={`tree-divider ${dragOverUncategorized ? "drop-target" : ""}`}
+                    onDragOver={onUncategorizedDragOver}
+                    onDragLeave={() => setDragOverUncategorized(false)}
+                    onDrop={onUncategorizedDrop}
+                  >
+                    未分类（可拖拽到这里取消分类）
+                  </div>
+                )}
+                {uncategorizedFeeds.map((feed) => renderFeedNode(feed, 8))}
+                {feeds.length === 0 && <div className="item">暂无订阅</div>}
+              </div>
+            </div>
+          )}
+
+          {!sidebarCollapsed && settingsOpen && (
+            <div className="settings-card">
+              <div className="settings-card-header">
+                <h3>设置</h3>
+                <button className="sidebar-toggle" onClick={() => setSettingsOpen(false)} aria-label="关闭设置">
+                  ✕
+                </button>
+              </div>
+
+              <h4 className="section-title">连接设置</h4>
+              <label htmlFor="apiBase">API Base URL</label>
+              <div className="row">
+                <input id="apiBase" value={apiBase} onChange={(e) => setApiBase(e.target.value)} />
+                <button className="secondary" onClick={handleSaveAPIBase}>
+                  保存
+                </button>
+              </div>
+
+              <h4 className="section-title">添加订阅</h4>
+              <label htmlFor="feedUrl">RSS/Atom URL</label>
+              <input
+                id="feedUrl"
+                value={feedURL}
+                placeholder="https://example.com/feed.xml"
+                onChange={(e) => setFeedURL(e.target.value)}
+              />
+              <label htmlFor="folderSelect">归类到文件夹</label>
+              <div className="row">
+                <select id="folderSelect" value={newFeedFolderID ?? ""} onChange={(e) => setNewFeedFolderID(e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">未分类</option>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+                <button className="secondary" onClick={createRootFolder}>
+                  新建分类
+                </button>
+              </div>
+
+              <div className="row">
+                <button onClick={addFeed}>添加并首抓</button>
+                <button className="secondary" onClick={loadFeeds}>
+                  刷新订阅
+                </button>
+                <button className="secondary" onClick={refreshFeedsFromNetwork}>
+                  远端抓取
+                </button>
+                <button className="secondary" onClick={loadArticles}>
+                  刷新文章
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className={`sidebar-footer ${sidebarCollapsed ? "collapsed" : ""}`}>
+            <button className="settings-entry" onClick={toggleSettings} title="设置" aria-label="打开设置">
+              <span className="gear">⚙</span>
+              {!sidebarCollapsed && <span>设置</span>}
+            </button>
           </div>
 
-          <div className={`status ${error ? "error" : ""}`}>{error || status}</div>
         </section>
+        {!isNarrow && (
+          <div
+            className={`resizer ${sidebarCollapsed ? "disabled" : ""}`}
+            onMouseDown={beginResize("sidebar")}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整订阅栏宽度"
+          />
+        )}
 
-        <section className="panel">
-          <h2>文章流</h2>
-          <div className="list">
-            {articles.length === 0 && <div className="item">暂无文章</div>}
-            {articles.map((article) => (
+        <section className="panel list-panel">
+          <h2>
+            {selectedFeedID != null && `订阅文章（#${selectedFeedID}）`}
+            {selectedFeedID == null && selectedFolderID != null && `分类文章（${folderNameByID.get(selectedFolderID) || `#${selectedFolderID}`}）`}
+            {selectedFeedID == null && selectedFolderID == null && "全部文章"}
+          </h2>
+          <div className="filters">
+            <label>
+              已读筛选
+              <select value={readFilter} onChange={(e) => handleReadFilterChange(e.target.value as ReadFilter)}>
+                <option value="all">全部</option>
+                <option value="unread">仅未读</option>
+                <option value="read">仅已读</option>
+              </select>
+            </label>
+            <label>
+              排序方式
+              <select value={sortMode} onChange={(e) => handleSortModeChange(e.target.value as SortMode)}>
+                <option value="latest">最新优先</option>
+                <option value="oldest">最早优先</option>
+                <option value="unread-first">未读优先</option>
+              </select>
+            </label>
+          </div>
+          <div className={`list article-list ${listBounce ? "bounce" : ""}`} onScroll={onArticleListScroll}>
+            {pagedArticles.length === 0 && <div className="item">暂无文章</div>}
+            {pagedArticles.map((article) => (
               <button
                 key={article.id}
                 className={`item article ${selectedArticle?.id === article.id ? "active" : ""}`}
                 onClick={() => selectArticle(article.id)}
               >
                 <div>
-                  <strong>{article.title || "(无标题)"}</strong>
+                  <strong className="article-title">{article.title || "(无标题)"}</strong>
                   <span className={`pill ${article.is_read ? "read" : "unread"}`}>{article.is_read ? "已读" : "未读"}</span>
                 </div>
                 <div className="meta">
@@ -166,15 +857,29 @@ export function App() {
               </button>
             ))}
           </div>
+          <div className="pager">
+            <span className="meta">
+              已显示 {pagedArticles.length} / {filteredAndSortedArticles.length} 条 · 预取20条，每次追加10条
+            </span>
+          </div>
 
-          <h2>文章详情</h2>
+        </section>
+        {!isNarrow && (
+          <div className="resizer" onMouseDown={beginResize("list")} role="separator" aria-orientation="vertical" aria-label="调整文章列表宽度" />
+        )}
+
+        <section className="panel detail-panel">
+          <h2>文章内容</h2>
           <div className="detail">
-            {!selectedArticle && <p>请选择一篇文章查看详情</p>}
+            {!selectedArticle && <p className="detail-empty">请选择一篇文章查看详情</p>}
             {selectedArticle && (
               <>
-                <h3>{selectedArticle.title || "(无标题)"}</h3>
-                <p className="meta">发布时间：{selectedArticle.published_at || "-"}</p>
-                <p className="meta">
+                <h3 className="detail-title">{selectedArticle.title || "(无标题)"}</h3>
+                <p className="meta-row article-meta">
+                  <span>🗓 {selectedArticle.published_at || "-"}</span>
+                  <span>{selectedArticle.is_read ? "已读" : "未读"}</span>
+                </p>
+                <p className="meta detail-link">
                   链接：
                   {selectedArticle.link ? (
                     <a href={selectedArticle.link} target="_blank" rel="noreferrer">
@@ -184,10 +889,13 @@ export function App() {
                     "-"
                   )}
                 </p>
-                <p className="meta">状态：{selectedArticle.is_read ? "已读" : "未读"}</p>
-                <h4>摘要</h4>
-                <p>{selectedArticle.summary || "(无摘要)"}</p>
-                <div className="row">
+                <h4 className="detail-section-title">摘要</h4>
+                {sanitizedSummaryHTML ? (
+                  <div className="detail-summary" dangerouslySetInnerHTML={{ __html: sanitizedSummaryHTML }} />
+                ) : (
+                  <p className="detail-summary">(无摘要)</p>
+                )}
+                <div className="row detail-actions">
                   <button onClick={() => markRead(true)}>标记已读</button>
                   <button className="secondary" onClick={() => markRead(false)}>
                     标记未读
@@ -198,7 +906,49 @@ export function App() {
           </div>
         </section>
       </main>
+
+      {draggingFeedID != null && (
+        <div
+          className={`delete-dropzone ${dragOverDeleteZone ? "active" : ""}`}
+          onDragOver={onDeleteZoneDragOver}
+          onDragLeave={onDeleteZoneDragLeave}
+          onDrop={onDeleteZoneDrop}
+        >
+          <div className="delete-dropzone-icon">🗑</div>
+          <div className="delete-dropzone-text">拖到这里删除订阅源</div>
+        </div>
+      )}
+
+      {pendingDeleteFeed && (
+        <div className="modal-backdrop" onClick={() => setPendingDeleteFeed(null)}>
+          <div className="confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>确认删除订阅源</h3>
+            <p>{pendingDeleteFeed.title || pendingDeleteFeed.url}</p>
+            <div className="row">
+              <button className="secondary" onClick={() => setPendingDeleteFeed(null)}>
+                取消
+              </button>
+              <button className="danger-btn" onClick={() => void deleteFeed(pendingDeleteFeed)}>
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {folderContextMenu && (
+        <div className="context-menu" style={{ left: folderContextMenu.x, top: folderContextMenu.y }} onClick={(e) => e.stopPropagation()}>
+          <button className="context-item" onClick={createSubFolder}>
+            新建子分类
+          </button>
+          <button className="context-item" onClick={renameFolder}>
+            重命名分类
+          </button>
+          <button className="context-item danger" onClick={deleteFolder}>
+            删除分类
+          </button>
+        </div>
+      )}
     </div>
   );
 }
-

@@ -1,45 +1,24 @@
 package store
 
 import (
+	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
+
+	_ "modernc.org/sqlite"
 
 	"github.com/Sentixxx/Zflow/backend/internal/domain"
 )
 
 var ErrFeedExists = errors.New("feed already exists")
-
-type fileData struct {
-	NextFeedID    int64            `json:"next_feed_id"`
-	NextArticleID int64            `json:"next_article_id"`
-	NextID        int64            `json:"next_id,omitempty"`
-	Feeds         []domain.Feed    `json:"feeds"`
-	Articles      []domain.Article `json:"articles"`
-}
-
-type FeedStore struct {
-	mu            sync.Mutex
-	path          string
-	nextFeedID    int64
-	nextArticleID int64
-	feeds         []domain.Feed
-	articles      []domain.Article
-}
-
-func NewFeedStore(path string) (*FeedStore, error) {
-	s := &FeedStore{path: path, nextFeedID: 1, nextArticleID: 1}
-	if err := s.load(); err != nil {
-		return nil, err
-	}
-	return s, nil
-}
+var ErrFolderNameEmpty = errors.New("folder name is required")
 
 type ArticleSeed struct {
 	Title       string
@@ -48,23 +27,206 @@ type ArticleSeed struct {
 	PublishedAt string
 }
 
-func (s *FeedStore) List() []domain.Feed {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+type FeedStore struct {
+	db *sql.DB
+}
 
-	out := make([]domain.Feed, len(s.feeds))
-	copy(out, s.feeds)
-	return out
+func NewFeedStore(path string) (*FeedStore, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+
+	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(30000)&_pragma=synchronous(NORMAL)", path)
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	store := &FeedStore{db: db}
+	if err := store.migrate(context.Background()); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return store, nil
+}
+
+func (s *FeedStore) Close() error {
+	if s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
+
+func (s *FeedStore) migrate(ctx context.Context) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS folders (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			parent_id INTEGER,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY(parent_id) REFERENCES folders(id) ON DELETE SET NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS feeds (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			url TEXT NOT NULL UNIQUE,
+			title TEXT NOT NULL,
+			folder_id INTEGER,
+			item_count INTEGER NOT NULL DEFAULT 0,
+			last_fetched_at TEXT NOT NULL,
+			last_fetch_status TEXT NOT NULL,
+			last_fetch_error TEXT NOT NULL DEFAULT '',
+			etag TEXT NOT NULL DEFAULT '',
+			last_modified TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY(folder_id) REFERENCES folders(id) ON DELETE SET NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS entries (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			feed_id INTEGER NOT NULL,
+			title TEXT NOT NULL,
+			link TEXT NOT NULL DEFAULT '',
+			summary TEXT NOT NULL DEFAULT '',
+			published_at TEXT NOT NULL DEFAULT '',
+			is_read INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_feeds_folder_id ON feeds(folder_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_entries_feed_id ON entries(feed_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_entries_created_at ON entries(created_at);`,
+	}
+
+	for _, stmt := range stmts {
+		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *FeedStore) List() []domain.Feed {
+	rows, err := s.db.Query(`SELECT id, url, title, folder_id, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds ORDER BY id DESC`)
+	if err != nil {
+		return []domain.Feed{}
+	}
+	defer rows.Close()
+
+	feeds := make([]domain.Feed, 0)
+	for rows.Next() {
+		var feed domain.Feed
+		var folderID sql.NullInt64
+		if err := rows.Scan(
+			&feed.ID,
+			&feed.URL,
+			&feed.Title,
+			&folderID,
+			&feed.ItemCount,
+			&feed.LastFetchedAt,
+			&feed.LastFetchStatus,
+			&feed.LastFetchError,
+			&feed.ETag,
+			&feed.LastModified,
+			&feed.CreatedAt,
+		); err != nil {
+			continue
+		}
+		if folderID.Valid {
+			id := folderID.Int64
+			feed.FolderID = &id
+		}
+		feeds = append(feeds, feed)
+	}
+	return feeds
+}
+
+func (s *FeedStore) ListFolders() []domain.Folder {
+	rows, err := s.db.Query(`SELECT id, name, parent_id, created_at, updated_at FROM folders ORDER BY id ASC`)
+	if err != nil {
+		return []domain.Folder{}
+	}
+	defer rows.Close()
+
+	folders := make([]domain.Folder, 0)
+	for rows.Next() {
+		var folder domain.Folder
+		var parentID sql.NullInt64
+		if err := rows.Scan(&folder.ID, &folder.Name, &parentID, &folder.CreatedAt, &folder.UpdatedAt); err != nil {
+			continue
+		}
+		if parentID.Valid {
+			id := parentID.Int64
+			folder.ParentID = &id
+		}
+		folders = append(folders, folder)
+	}
+	return folders
+}
+
+func (s *FeedStore) CreateFolder(name string, parentID *int64) (domain.Folder, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return domain.Folder{}, ErrFolderNameEmpty
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(`INSERT INTO folders(name, parent_id, created_at, updated_at) VALUES(?, ?, ?, ?)`, name, nullableInt(parentID), now, now)
+	if err != nil {
+		return domain.Folder{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return domain.Folder{}, err
+	}
+	return domain.Folder{ID: id, Name: name, ParentID: parentID, CreatedAt: now, UpdatedAt: now}, nil
+}
+
+func (s *FeedStore) UpdateFolder(id int64, name string, parentID *int64) (domain.Folder, bool, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return domain.Folder{}, false, ErrFolderNameEmpty
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(`UPDATE folders SET name = ?, parent_id = ?, updated_at = ? WHERE id = ?`, name, nullableInt(parentID), now, id)
+	if err != nil {
+		return domain.Folder{}, false, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return domain.Folder{}, false, nil
+	}
+	return domain.Folder{ID: id, Name: name, ParentID: parentID, UpdatedAt: now}, true, nil
+}
+
+func (s *FeedStore) DeleteFolder(id int64) (bool, error) {
+	res, err := s.db.Exec(`DELETE FROM folders WHERE id = ?`, id)
+	if err != nil {
+		return false, err
+	}
+	affected, _ := res.RowsAffected()
+	return affected > 0, nil
 }
 
 func (s *FeedStore) Add(url, title string, items []ArticleSeed, fetchErr string) (domain.Feed, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	return s.AddInFolder(url, title, items, fetchErr, nil, "", "")
+}
 
-	for _, f := range s.feeds {
-		if f.URL == url {
-			return domain.Feed{}, ErrFeedExists
-		}
+func (s *FeedStore) AddInFolder(url, title string, items []ArticleSeed, fetchErr string, folderID *int64, etag string, lastModified string) (domain.Feed, error) {
+	url = strings.TrimSpace(url)
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = url
+	}
+
+	exists, err := s.feedExists(url)
+	if err != nil {
+		return domain.Feed{}, err
+	}
+	if exists {
+		return domain.Feed{}, ErrFeedExists
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -73,153 +235,266 @@ func (s *FeedStore) Add(url, title string, items []ArticleSeed, fetchErr string)
 		status = "error"
 	}
 
-	feed := domain.Feed{
-		ID:              s.nextFeedID,
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return domain.Feed{}, err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(
+		`INSERT INTO feeds(url, title, folder_id, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at, updated_at)
+		 VALUES(?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+		url, title, nullableInt(folderID), now, status, fetchErr, etag, lastModified, now, now,
+	)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return domain.Feed{}, ErrFeedExists
+		}
+		return domain.Feed{}, err
+	}
+	feedID, err := res.LastInsertId()
+	if err != nil {
+		return domain.Feed{}, err
+	}
+
+	insertedCount, err := s.insertEntriesTx(tx, feedID, items, now)
+	if err != nil {
+		return domain.Feed{}, err
+	}
+	if _, err := tx.Exec(`UPDATE feeds SET item_count = ? WHERE id = ?`, insertedCount, feedID); err != nil {
+		return domain.Feed{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return domain.Feed{}, err
+	}
+
+	return domain.Feed{
+		ID:              feedID,
 		URL:             url,
 		Title:           title,
-		ItemCount:       0,
+		FolderID:        folderID,
+		ItemCount:       insertedCount,
 		LastFetchedAt:   now,
 		LastFetchStatus: status,
 		LastFetchError:  fetchErr,
+		ETag:            etag,
+		LastModified:    lastModified,
 		CreatedAt:       now,
+	}, nil
+}
+
+func (s *FeedStore) UpdateFeedFolder(id int64, folderID *int64) (domain.Feed, bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(`UPDATE feeds SET folder_id = ?, updated_at = ? WHERE id = ?`, nullableInt(folderID), now, id)
+	if err != nil {
+		return domain.Feed{}, false, err
 	}
-	s.nextFeedID++
-	s.feeds = append(s.feeds, feed)
-	existingKeys := s.buildExistingDedupKeySet()
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return domain.Feed{}, false, nil
+	}
+	feed, ok, err := s.GetFeed(id)
+	if err != nil {
+		return domain.Feed{}, false, err
+	}
+	return feed, ok, nil
+}
+
+func (s *FeedStore) DeleteFeed(id int64) (bool, error) {
+	res, err := s.db.Exec(`DELETE FROM feeds WHERE id = ?`, id)
+	if err != nil {
+		return false, err
+	}
+	affected, _ := res.RowsAffected()
+	return affected > 0, nil
+}
+
+func (s *FeedStore) GetFeed(id int64) (domain.Feed, bool, error) {
+	row := s.db.QueryRow(`SELECT id, url, title, folder_id, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE id = ?`, id)
+	var feed domain.Feed
+	var folderID sql.NullInt64
+	if err := row.Scan(
+		&feed.ID,
+		&feed.URL,
+		&feed.Title,
+		&folderID,
+		&feed.ItemCount,
+		&feed.LastFetchedAt,
+		&feed.LastFetchStatus,
+		&feed.LastFetchError,
+		&feed.ETag,
+		&feed.LastModified,
+		&feed.CreatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Feed{}, false, nil
+		}
+		return domain.Feed{}, false, err
+	}
+	if folderID.Valid {
+		id := folderID.Int64
+		feed.FolderID = &id
+	}
+	return feed, true, nil
+}
+
+func (s *FeedStore) UpdateFeedAfterRefresh(feedID int64, title string, items []ArticleSeed, fetchErr, etag, lastModified string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	status := "ok"
+	if fetchErr != "" {
+		status = "error"
+	}
+
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	inserted := 0
+	if fetchErr == "" {
+		inserted, err = s.insertEntriesTx(tx, feedID, items, now)
+		if err != nil {
+			return err
+		}
+	}
+
+	if title == "" {
+		if err := tx.QueryRow(`SELECT title FROM feeds WHERE id = ?`, feedID).Scan(&title); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(
+		`UPDATE feeds SET title = ?, item_count = item_count + ?, last_fetched_at = ?, last_fetch_status = ?, last_fetch_error = ?, etag = ?, last_modified = ?, updated_at = ? WHERE id = ?`,
+		title, inserted, now, status, fetchErr, etag, lastModified, now, feedID,
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *FeedStore) ListArticles() []domain.Article {
+	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, published_at, is_read, created_at FROM entries ORDER BY id DESC`)
+	if err != nil {
+		return []domain.Article{}
+	}
+	defer rows.Close()
+
+	articles := make([]domain.Article, 0)
+	for rows.Next() {
+		var article domain.Article
+		var readFlag int
+		if err := rows.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
+			continue
+		}
+		article.IsRead = readFlag == 1
+		articles = append(articles, article)
+	}
+	return articles
+}
+
+func (s *FeedStore) DeleteArticle(id int64) (bool, error) {
+	res, err := s.db.Exec(`DELETE FROM entries WHERE id = ?`, id)
+	if err != nil {
+		return false, err
+	}
+	affected, _ := res.RowsAffected()
+	return affected > 0, nil
+}
+
+func (s *FeedStore) GetArticle(id int64) (domain.Article, bool) {
+	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, published_at, is_read, created_at FROM entries WHERE id = ?`, id)
+	var article domain.Article
+	var readFlag int
+	if err := row.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
+		return domain.Article{}, false
+	}
+	article.IsRead = readFlag == 1
+	return article, true
+}
+
+func (s *FeedStore) MarkArticleRead(id int64, read bool) (domain.Article, bool, error) {
+	flag := 0
+	if read {
+		flag = 1
+	}
+
+	res, err := s.db.Exec(`UPDATE entries SET is_read = ?, updated_at = ? WHERE id = ?`, flag, time.Now().UTC().Format(time.RFC3339), id)
+	if err != nil {
+		return domain.Article{}, false, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return domain.Article{}, false, nil
+	}
+
+	article, ok := s.GetArticle(id)
+	return article, ok, nil
+}
+
+func (s *FeedStore) feedExists(url string) (bool, error) {
+	row := s.db.QueryRow(`SELECT 1 FROM feeds WHERE url = ? LIMIT 1`, url)
+	var one int
+	err := row.Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *FeedStore) insertEntriesTx(tx *sql.Tx, feedID int64, items []ArticleSeed, now string) (int, error) {
+	existingKeys, err := s.loadDedupKeysTx(tx)
+	if err != nil {
+		return 0, err
+	}
 	insertedCount := 0
+
 	for _, item := range items {
 		cleaned := cleanSeed(item)
 		if cleaned.Title == "" && cleaned.Link == "" {
 			continue
 		}
+
 		key := dedupKey(cleaned)
 		if _, exists := existingKeys[key]; exists {
 			continue
 		}
 		existingKeys[key] = struct{}{}
 
-		article := domain.Article{
-			ID:          s.nextArticleID,
-			FeedID:      feed.ID,
-			Title:       cleaned.Title,
-			Link:        cleaned.Link,
-			Summary:     cleaned.Summary,
-			PublishedAt: cleaned.PublishedAt,
-			IsRead:      false,
-			CreatedAt:   now,
+		if _, err := tx.Exec(
+			`INSERT INTO entries(feed_id, title, link, summary, published_at, is_read, created_at, updated_at)
+			 VALUES(?, ?, ?, ?, ?, 0, ?, ?)`,
+			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, cleaned.PublishedAt, now, now,
+		); err != nil {
+			return insertedCount, err
 		}
-		s.nextArticleID++
-		s.articles = append(s.articles, article)
 		insertedCount++
 	}
 
-	for i := range s.feeds {
-		if s.feeds[i].ID == feed.ID {
-			s.feeds[i].ItemCount = insertedCount
-			feed.ItemCount = insertedCount
-			break
-		}
-	}
-
-	if err := s.save(); err != nil {
-		return domain.Feed{}, err
-	}
-	return feed, nil
+	return insertedCount, nil
 }
 
-func (s *FeedStore) ListArticles() []domain.Article {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	out := make([]domain.Article, len(s.articles))
-	copy(out, s.articles)
-	return out
-}
-
-func (s *FeedStore) GetArticle(id int64) (domain.Article, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, article := range s.articles {
-		if article.ID == id {
-			return article, true
-		}
+func (s *FeedStore) loadDedupKeysTx(tx *sql.Tx) (map[string]struct{}, error) {
+	rows, err := tx.Query(`SELECT title, link, summary FROM entries`)
+	if err != nil {
+		return nil, err
 	}
-	return domain.Article{}, false
-}
+	defer rows.Close()
 
-func (s *FeedStore) MarkArticleRead(id int64, read bool) (domain.Article, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for i := range s.articles {
-		if s.articles[i].ID != id {
+	keys := make(map[string]struct{})
+	for rows.Next() {
+		var title, link, summary string
+		if err := rows.Scan(&title, &link, &summary); err != nil {
 			continue
 		}
-		s.articles[i].IsRead = read
-		if err := s.save(); err != nil {
-			return domain.Article{}, true, err
-		}
-		return s.articles[i], true, nil
+		keys[dedupKey(ArticleSeed{Title: title, Link: link, Summary: summary})] = struct{}{}
 	}
-	return domain.Article{}, false, nil
-}
-
-func (s *FeedStore) load() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
-		return err
-	}
-
-	raw, err := os.ReadFile(s.path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	var data fileData
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return err
-	}
-	if data.NextFeedID > 0 {
-		s.nextFeedID = data.NextFeedID
-	} else if data.NextID > 0 {
-		s.nextFeedID = data.NextID
-	}
-	if data.NextArticleID > 0 {
-		s.nextArticleID = data.NextArticleID
-	}
-	s.feeds = data.Feeds
-	s.articles = data.Articles
-	return nil
-}
-
-func (s *FeedStore) save() error {
-	data := fileData{
-		NextFeedID:    s.nextFeedID,
-		NextArticleID: s.nextArticleID,
-		Feeds:         s.feeds,
-		Articles:      s.articles,
-	}
-	raw, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(s.path, raw, 0o644)
-}
-
-func (s *FeedStore) buildExistingDedupKeySet() map[string]struct{} {
-	keys := make(map[string]struct{}, len(s.articles))
-	for _, article := range s.articles {
-		key := dedupKey(ArticleSeed{
-			Title:   article.Title,
-			Link:    article.Link,
-			Summary: article.Summary,
-		})
-		keys[key] = struct{}{}
-	}
-	return keys
+	return keys, nil
 }
 
 func cleanSeed(seed ArticleSeed) ArticleSeed {
@@ -252,4 +527,16 @@ func normalizeForKey(v string) string {
 func hashText(v string) string {
 	sum := sha256.Sum256([]byte(v))
 	return hex.EncodeToString(sum[:])
+}
+
+func nullableInt(v *int64) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
+func isUniqueViolation(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique") || strings.Contains(msg, "constraint")
 }
