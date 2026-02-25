@@ -17,6 +17,22 @@ type ReadFilter = "all" | "unread" | "read";
 type SortMode = "latest" | "oldest" | "unread-first";
 type ResizeTarget = "sidebar" | "list";
 type FolderContextMenu = { folder: Folder; x: number; y: number } | null;
+type ScriptLang = "shell" | "python" | "javascript";
+
+function normalizeScriptLang(raw: string | undefined): ScriptLang {
+  if (raw === "python" || raw === "javascript") {
+    return raw;
+  }
+  return "shell";
+}
+
+function scriptLangByFileName(name: string): ScriptLang | null {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".py")) return "python";
+  if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) return "javascript";
+  if (lower.endsWith(".sh") || lower.endsWith(".bash") || lower.endsWith(".zsh")) return "shell";
+  return null;
+}
 
 export function App() {
   const [apiBase, setApiBase] = useState<string>(localStorage.getItem("zflow_api_base") || DEFAULT_API_BASE);
@@ -28,6 +44,10 @@ export function App() {
   const [selectedFeedID, setSelectedFeedID] = useState<number | null>(null);
   const [selectedFolderID, setSelectedFolderID] = useState<number | null>(null);
   const [newFeedFolderID, setNewFeedFolderID] = useState<number | null>(null);
+  const [scriptFeedID, setScriptFeedID] = useState<number | null>(null);
+  const [scriptContent, setScriptContent] = useState<string>("");
+  const [scriptLang, setScriptLang] = useState<ScriptLang>("shell");
+  const [scriptDirty, setScriptDirty] = useState<boolean>(false);
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("latest");
   const [bufferedCount, setBufferedCount] = useState<number>(PREFETCH_BATCH_SIZE);
@@ -58,6 +78,13 @@ export function App() {
     }
     return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
   }, [selectedArticle?.summary]);
+  const sanitizedFullContentHTML = useMemo(() => {
+    const raw = selectedArticle?.full_content ?? "";
+    if (!raw.trim()) {
+      return "";
+    }
+    return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
+  }, [selectedArticle?.full_content]);
 
   const folderNameByID = useMemo(() => {
     const map = new Map<number, string>();
@@ -234,6 +261,49 @@ export function App() {
     }
   };
 
+  const selectScriptFeed = (feedID: number | null) => {
+    setScriptFeedID(feedID);
+    setScriptDirty(false);
+    if (feedID == null) {
+      setScriptContent("");
+      setScriptLang("shell");
+      return;
+    }
+    const feed = feeds.find((item) => item.id === feedID);
+    setScriptContent(feed?.custom_script || "");
+    setScriptLang(normalizeScriptLang(feed?.custom_script_lang));
+  };
+
+  const saveFeedScript = async () => {
+    if (scriptFeedID == null) {
+      setMessage("请先选择订阅源", true);
+      return;
+    }
+    try {
+      await client.updateFeedScript(scriptFeedID, scriptContent, scriptLang);
+      setScriptDirty(false);
+      await loadFeeds();
+      setMessage("脚本已保存");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const uploadScriptFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    const text = await file.text();
+    const detectedLang = scriptLangByFileName(file.name);
+    setScriptContent(text);
+    if (detectedLang) {
+      setScriptLang(detectedLang);
+    }
+    setScriptDirty(true);
+    event.target.value = "";
+  };
+
   const selectArticle = async (id: number) => {
     try {
       const article = await client.getArticle(id);
@@ -330,6 +400,9 @@ export function App() {
     setSelectedFolderID(null);
     setBufferedCount(PREFETCH_BATCH_SIZE);
     setVisibleCount(VISIBLE_STEP_SIZE);
+    if (feedID != null) {
+      selectScriptFeed(feedID);
+    }
   };
 
   const selectFolder = async (folderID: number | null) => {
@@ -362,6 +435,31 @@ export function App() {
       setSelectedArticle(null);
     }
   }, [articles, selectedArticle]);
+
+  useEffect(() => {
+    if (feeds.length === 0) {
+      setScriptFeedID(null);
+      setScriptContent("");
+      return;
+    }
+    if (scriptFeedID == null || !feeds.some((feed) => feed.id === scriptFeedID)) {
+      const nextID = selectedFeedID ?? feeds[0].id;
+      setScriptFeedID(nextID);
+      const nextFeed = feeds.find((feed) => feed.id === nextID);
+      setScriptContent(nextFeed?.custom_script || "");
+      setScriptLang(normalizeScriptLang(nextFeed?.custom_script_lang));
+      setScriptDirty(false);
+      return;
+    }
+    if (scriptDirty) {
+      return;
+    }
+    const current = feeds.find((feed) => feed.id === scriptFeedID);
+    if (current) {
+      setScriptContent(current.custom_script || "");
+      setScriptLang(normalizeScriptLang(current.custom_script_lang));
+    }
+  }, [feeds, selectedFeedID, scriptFeedID, scriptDirty]);
 
   useEffect(() => {
     setBufferedCount((count) => Math.min(Math.max(PREFETCH_BATCH_SIZE, count), Math.max(PREFETCH_BATCH_SIZE, filteredAndSortedArticles.length)));
@@ -794,6 +892,49 @@ export function App() {
                   刷新文章
                 </button>
               </div>
+
+              <h4 className="section-title">脚本设置（当前订阅源）</h4>
+              <label htmlFor="scriptFeed">订阅源</label>
+              <select id="scriptFeed" value={scriptFeedID ?? ""} onChange={(e) => selectScriptFeed(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">请选择</option>
+                {feeds.map((feed) => (
+                  <option key={feed.id} value={feed.id}>
+                    {feed.title || feed.url}
+                  </option>
+                ))}
+              </select>
+              <label htmlFor="scriptUpload">上传脚本文件</label>
+              <input id="scriptUpload" type="file" accept=".sh,.txt,.js,.py,.rb,.pl,.bash" onChange={uploadScriptFile} />
+              <label htmlFor="scriptLang">脚本语言</label>
+              <select
+                id="scriptLang"
+                value={scriptLang}
+                onChange={(e) => {
+                  setScriptLang(e.target.value as ScriptLang);
+                  setScriptDirty(true);
+                }}
+              >
+                <option value="shell">shell</option>
+                <option value="python">python</option>
+                <option value="javascript">javascript</option>
+              </select>
+              <label htmlFor="scriptContent">脚本内容（stdin 为 JSON v1，stdout 必须返回 JSON，content_html 为最终全文）</label>
+              <textarea
+                id="scriptContent"
+                className="script-editor"
+                rows={8}
+                value={scriptContent}
+                onChange={(e) => {
+                  setScriptContent(e.target.value);
+                  setScriptDirty(true);
+                }}
+                placeholder={`#!/bin/sh\n# stdin 为 JSON v1，stdout 返回 JSON（示例）\necho '{"ok":true,"content_html":"<article>...</article>"}'`}
+              />
+              <div className="row">
+                <button className="secondary" onClick={saveFeedScript}>
+                  保存脚本
+                </button>
+              </div>
             </div>
           )}
 
@@ -889,8 +1030,10 @@ export function App() {
                     "-"
                   )}
                 </p>
-                <h4 className="detail-section-title">摘要</h4>
-                {sanitizedSummaryHTML ? (
+                <h4 className="detail-section-title">{sanitizedFullContentHTML ? "正文" : "摘要"}</h4>
+                {sanitizedFullContentHTML ? (
+                  <div className="detail-summary" dangerouslySetInnerHTML={{ __html: sanitizedFullContentHTML }} />
+                ) : sanitizedSummaryHTML ? (
                   <div className="detail-summary" dangerouslySetInnerHTML={{ __html: sanitizedSummaryHTML }} />
                 ) : (
                   <p className="detail-summary">(无摘要)</p>

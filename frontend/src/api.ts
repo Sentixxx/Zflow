@@ -78,6 +78,13 @@ export class ApiClient {
     });
   }
 
+  async updateFeedScript(id: number, script: string, scriptLang: "shell" | "python" | "javascript"): Promise<Feed> {
+    return this.request<Feed>(`/api/v1/feeds/${id}/script`, {
+      method: "PATCH",
+      body: JSON.stringify({ script, script_lang: scriptLang }),
+    });
+  }
+
   async getArticle(id: number): Promise<Article> {
     return this.request<Article>(`/api/v1/articles/${id}`);
   }

@@ -1,6 +1,12 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change105 日期:2026-02-25 | 文件:backend/internal/api/server.go | 操作:Modify | 影响:订阅脚本执行链路 | 说明:将脚本阶段切换为stdin/stdout JSON契约并按ok/title/summary_html/content_html合并字段且失败按条目回退 | 关联:task034
+- change106 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:设置与阅读详情 | 说明:新增脚本语言选择与文件扩展名识别并优先渲染full_content安全HTML | 关联:task034
+- change107 日期:2026-02-25 | 文件:frontend/src/api.ts,frontend/src/types.ts | 操作:Modify | 影响:前端脚本接口类型 | 说明:补齐script_lang请求参数与Feed/Article脚本字段类型定义 | 关联:task034
+- change108 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task034 | 说明:新增并完成脚本契约落地与多语言前端联调任务 | 关联:task034
+- change103 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/tech-refer_feed_script_contract_20260225.md | 操作:Add | 影响:脚本扩展规范 | 说明:新增订阅源脚本JSON契约v1文档并定义语言支持与回退语义 | 关联:task033
+- change104 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task033 | 说明:新增并完成脚本契约文档任务 | 关联:task033
 - change099 日期:2026-02-25 | 文件:frontend/package.json | 操作:Modify | 影响:前端依赖 | 说明:新增dompurify依赖用于文章摘要安全HTML渲染 | 关联:task032
 - change100 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:文章详情渲染 | 说明:将摘要改为DOMPurify清洗后HTML渲染以支持p/a等结构 | 关联:task032
 - change101 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Modify | 影响:摘要可读性 | 说明:新增摘要段落与链接样式使HTML摘要阅读更自然 | 关联:task032

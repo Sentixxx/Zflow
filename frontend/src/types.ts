@@ -3,6 +3,8 @@ export type Feed = {
   url: string;
   title: string;
   folder_id?: number | null;
+  custom_script?: string;
+  custom_script_lang?: "shell" | "python" | "javascript";
   item_count: number;
   last_fetched_at: string;
   last_fetch_status: string;
@@ -24,6 +26,7 @@ export type Article = {
   title: string;
   link: string;
   summary?: string;
+  full_content?: string;
   published_at?: string;
   is_read: boolean;
   created_at: string;

@@ -24,6 +24,7 @@ type ArticleSeed struct {
 	Title       string
 	Link        string
 	Summary     string
+	FullContent string
 	PublishedAt string
 }
 
@@ -72,6 +73,8 @@ func (s *FeedStore) migrate(ctx context.Context) error {
 			url TEXT NOT NULL UNIQUE,
 			title TEXT NOT NULL,
 			folder_id INTEGER,
+			custom_script TEXT NOT NULL DEFAULT '',
+			custom_script_lang TEXT NOT NULL DEFAULT 'shell',
 			item_count INTEGER NOT NULL DEFAULT 0,
 			last_fetched_at TEXT NOT NULL,
 			last_fetch_status TEXT NOT NULL,
@@ -88,6 +91,7 @@ func (s *FeedStore) migrate(ctx context.Context) error {
 			title TEXT NOT NULL,
 			link TEXT NOT NULL DEFAULT '',
 			summary TEXT NOT NULL DEFAULT '',
+			full_content TEXT NOT NULL DEFAULT '',
 			published_at TEXT NOT NULL DEFAULT '',
 			is_read INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL,
@@ -104,12 +108,45 @@ func (s *FeedStore) migrate(ctx context.Context) error {
 			return err
 		}
 	}
+	if err := s.ensureColumn(ctx, "entries", "full_content", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "feeds", "custom_script", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "feeds", "custom_script_lang", "TEXT NOT NULL DEFAULT 'shell'"); err != nil {
+		return err
+	}
 
 	return nil
 }
 
+func (s *FeedStore) ensureColumn(ctx context.Context, table, column, ddl string) error {
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`PRAGMA table_info(%s)`, table))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			continue
+		}
+		if strings.EqualFold(name, column) {
+			return nil
+		}
+	}
+	_, err = s.db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s`, table, column, ddl))
+	return err
+}
+
 func (s *FeedStore) List() []domain.Feed {
-	rows, err := s.db.Query(`SELECT id, url, title, folder_id, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds ORDER BY id DESC`)
+	rows, err := s.db.Query(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds ORDER BY id DESC`)
 	if err != nil {
 		return []domain.Feed{}
 	}
@@ -124,6 +161,8 @@ func (s *FeedStore) List() []domain.Feed {
 			&feed.URL,
 			&feed.Title,
 			&folderID,
+			&feed.CustomScript,
+			&feed.CustomScriptLang,
 			&feed.ItemCount,
 			&feed.LastFetchedAt,
 			&feed.LastFetchStatus,
@@ -274,6 +313,8 @@ func (s *FeedStore) AddInFolder(url, title string, items []ArticleSeed, fetchErr
 		URL:             url,
 		Title:           title,
 		FolderID:        folderID,
+		CustomScript:    "",
+		CustomScriptLang: "shell",
 		ItemCount:       insertedCount,
 		LastFetchedAt:   now,
 		LastFetchStatus: status,
@@ -311,7 +352,7 @@ func (s *FeedStore) DeleteFeed(id int64) (bool, error) {
 }
 
 func (s *FeedStore) GetFeed(id int64) (domain.Feed, bool, error) {
-	row := s.db.QueryRow(`SELECT id, url, title, folder_id, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE id = ?`, id)
+	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE id = ?`, id)
 	var feed domain.Feed
 	var folderID sql.NullInt64
 	if err := row.Scan(
@@ -319,6 +360,8 @@ func (s *FeedStore) GetFeed(id int64) (domain.Feed, bool, error) {
 		&feed.URL,
 		&feed.Title,
 		&folderID,
+		&feed.CustomScript,
+		&feed.CustomScriptLang,
 		&feed.ItemCount,
 		&feed.LastFetchedAt,
 		&feed.LastFetchStatus,
@@ -376,7 +419,7 @@ func (s *FeedStore) UpdateFeedAfterRefresh(feedID int64, title string, items []A
 }
 
 func (s *FeedStore) ListArticles() []domain.Article {
-	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, published_at, is_read, created_at FROM entries ORDER BY id DESC`)
+	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, full_content, published_at, is_read, created_at FROM entries ORDER BY id DESC`)
 	if err != nil {
 		return []domain.Article{}
 	}
@@ -386,7 +429,7 @@ func (s *FeedStore) ListArticles() []domain.Article {
 	for rows.Next() {
 		var article domain.Article
 		var readFlag int
-		if err := rows.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
+		if err := rows.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
 			continue
 		}
 		article.IsRead = readFlag == 1
@@ -405,14 +448,19 @@ func (s *FeedStore) DeleteArticle(id int64) (bool, error) {
 }
 
 func (s *FeedStore) GetArticle(id int64) (domain.Article, bool) {
-	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, published_at, is_read, created_at FROM entries WHERE id = ?`, id)
+	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, full_content, published_at, is_read, created_at FROM entries WHERE id = ?`, id)
 	var article domain.Article
 	var readFlag int
-	if err := row.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
+	if err := row.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
 		return domain.Article{}, false
 	}
 	article.IsRead = readFlag == 1
 	return article, true
+}
+
+func (s *FeedStore) UpdateArticleFullContent(id int64, content string) error {
+	_, err := s.db.Exec(`UPDATE entries SET full_content = ?, updated_at = ? WHERE id = ?`, strings.TrimSpace(content), time.Now().UTC().Format(time.RFC3339), id)
+	return err
 }
 
 func (s *FeedStore) MarkArticleRead(id int64, read bool) (domain.Article, bool, error) {
@@ -467,9 +515,9 @@ func (s *FeedStore) insertEntriesTx(tx *sql.Tx, feedID int64, items []ArticleSee
 		existingKeys[key] = struct{}{}
 
 		if _, err := tx.Exec(
-			`INSERT INTO entries(feed_id, title, link, summary, published_at, is_read, created_at, updated_at)
-			 VALUES(?, ?, ?, ?, ?, 0, ?, ?)`,
-			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, cleaned.PublishedAt, now, now,
+			`INSERT INTO entries(feed_id, title, link, summary, full_content, published_at, is_read, created_at, updated_at)
+			 VALUES(?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, cleaned.FullContent, cleaned.PublishedAt, now, now,
 		); err != nil {
 			return insertedCount, err
 		}
@@ -501,8 +549,26 @@ func cleanSeed(seed ArticleSeed) ArticleSeed {
 	seed.Title = strings.TrimSpace(seed.Title)
 	seed.Link = strings.TrimSpace(seed.Link)
 	seed.Summary = strings.TrimSpace(seed.Summary)
+	seed.FullContent = strings.TrimSpace(seed.FullContent)
 	seed.PublishedAt = strings.TrimSpace(seed.PublishedAt)
 	return seed
+}
+
+func (s *FeedStore) UpdateFeedScript(id int64, script string, lang string) (domain.Feed, bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(`UPDATE feeds SET custom_script = ?, custom_script_lang = ?, updated_at = ? WHERE id = ?`, strings.TrimSpace(script), strings.TrimSpace(lang), now, id)
+	if err != nil {
+		return domain.Feed{}, false, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return domain.Feed{}, false, nil
+	}
+	feed, ok, err := s.GetFeed(id)
+	if err != nil {
+		return domain.Feed{}, false, err
+	}
+	return feed, ok, nil
 }
 
 func dedupKey(seed ArticleSeed) string {

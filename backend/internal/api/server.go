@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -23,8 +25,10 @@ type Server struct {
 }
 
 type createFeedRequest struct {
-	URL      string `json:"url"`
-	FolderID *int64 `json:"folder_id"`
+	URL        string `json:"url"`
+	FolderID   *int64 `json:"folder_id"`
+	Script     string `json:"script"`
+	ScriptLang string `json:"script_lang"`
 }
 
 type createFolderRequest struct {
@@ -39,6 +43,11 @@ type updateFolderRequest struct {
 
 type updateFeedRequest struct {
 	FolderID *int64 `json:"folder_id"`
+}
+
+type updateFeedScriptRequest struct {
+	Script     string `json:"script"`
+	ScriptLang string `json:"script_lang"`
 }
 
 func NewServer(feedStore *store.FeedStore) *Server {
@@ -133,6 +142,14 @@ func (s *Server) handleFeedByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"refreshed": true})
+		return
+	}
+	if len(parts) == 2 && parts[1] == "script" {
+		if r.Method != http.MethodPatch {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		s.updateFeedScript(w, r, id)
 		return
 	}
 
@@ -244,6 +261,14 @@ func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if script := strings.TrimSpace(req.Script); script != "" {
+		lang := normalizeScriptLang(req.ScriptLang)
+		updated, ok, err := s.store.UpdateFeedScript(feed.ID, script, lang)
+		if err == nil && ok {
+			feed = updated
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, feed)
 }
 
@@ -267,6 +292,36 @@ func (s *Server) updateFeed(w http.ResponseWriter, r *http.Request, id int64) {
 	feed, ok, err := s.store.UpdateFeedFolder(id, req.FolderID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update feed"})
+		return
+	}
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "feed not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, feed)
+}
+
+func (s *Server) updateFeedScript(w http.ResponseWriter, r *http.Request, id int64) {
+	defer r.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	var req updateFeedScriptRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+
+	lang := normalizeScriptLang(req.ScriptLang)
+	if !isSupportedScriptLang(lang) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported script language"})
+		return
+	}
+	feed, ok, err := s.store.UpdateFeedScript(id, req.Script, lang)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update feed script"})
 		return
 	}
 	if !ok {
@@ -443,7 +498,145 @@ func (s *Server) refreshFeedByID(feedID int64) error {
 	if result.Error != "" {
 		return s.store.UpdateFeedAfterRefresh(feedID, feed.Title, nil, result.Error, feed.ETag, feed.LastModified)
 	}
+	if script := strings.TrimSpace(feed.CustomScript); script != "" {
+		items, err := s.applyScriptToItems(feed.ID, feed.URL, script, normalizeScriptLang(feed.CustomScriptLang), result.Items)
+		if err != nil {
+			log.Printf("feed %d custom script failed, fallback to raw summary: %v", feed.ID, err)
+		} else {
+			result.Items = items
+		}
+	}
 	return s.store.UpdateFeedAfterRefresh(feedID, result.Title, result.Items, "", result.ETag, result.LastModified)
+}
+
+type scriptItemPayload struct {
+	Title       string `json:"title"`
+	Link        string `json:"link"`
+	Summary     string `json:"summary"`
+	PublishedAt string `json:"published_at"`
+}
+
+type scriptFeedPayload struct {
+	ID  int64  `json:"id"`
+	URL string `json:"url"`
+}
+
+type scriptRequestPayload struct {
+	Version string            `json:"version"`
+	Feed    scriptFeedPayload `json:"feed"`
+	Item    scriptItemPayload `json:"item"`
+}
+
+type scriptResultPayload struct {
+	OK          bool   `json:"ok"`
+	Title       string `json:"title"`
+	SummaryHTML string `json:"summary_html"`
+	ContentHTML string `json:"content_html"`
+	ExcerptText string `json:"excerpt_text"`
+	Debug       string `json:"debug"`
+}
+
+func (s *Server) applyScriptToItems(feedID int64, feedURL, script, lang string, items []store.ArticleSeed) ([]store.ArticleSeed, error) {
+	out := make([]store.ArticleSeed, 0, len(items))
+	for _, item := range items {
+		payload := scriptRequestPayload{
+			Version: "v1",
+			Feed: scriptFeedPayload{
+				ID:  feedID,
+				URL: feedURL,
+			},
+			Item: scriptItemPayload{
+				Title:       item.Title,
+				Link:        item.Link,
+				Summary:     item.Summary,
+				PublishedAt: item.PublishedAt,
+			},
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		stdout, err := runScript(lang, script, raw)
+		if err != nil {
+			log.Printf("feed %d script failed for item %q: %v", feedID, item.Link, err)
+			out = append(out, item)
+			continue
+		}
+
+		var result scriptResultPayload
+		if err := json.Unmarshal(stdout, &result); err != nil {
+			log.Printf("feed %d script output is not valid JSON for item %q: %v", feedID, item.Link, err)
+			out = append(out, item)
+			continue
+		}
+		if !result.OK {
+			if msg := strings.TrimSpace(result.Debug); msg != "" {
+				log.Printf("feed %d script returned ok=false for item %q: %s", feedID, item.Link, msg)
+			}
+			out = append(out, item)
+			continue
+		}
+
+		if v := strings.TrimSpace(result.Title); v != "" {
+			item.Title = v
+		}
+		if v := strings.TrimSpace(result.SummaryHTML); v != "" {
+			item.Summary = v
+		}
+		if v := strings.TrimSpace(result.ContentHTML); v != "" {
+			item.FullContent = v
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+func runScript(lang, script string, stdin []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+
+	var cmd *exec.Cmd
+	switch normalizeScriptLang(lang) {
+	case "python":
+		cmd = exec.CommandContext(ctx, "python3", "-c", script)
+	case "javascript":
+		cmd = exec.CommandContext(ctx, "node", "-e", script)
+	default:
+		cmd = exec.CommandContext(ctx, "/bin/sh", "-lc", script)
+	}
+	cmd.Stdin = bytes.NewReader(stdin)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		errText := strings.TrimSpace(stderr.String())
+		if errText == "" {
+			errText = err.Error()
+		}
+		return nil, fmt.Errorf("script run failed: %s", errText)
+	}
+	if stdout.Len() > 1<<20 {
+		return nil, errors.New("script output too large")
+	}
+	return stdout.Bytes(), nil
+}
+
+func normalizeScriptLang(raw string) string {
+	lang := strings.ToLower(strings.TrimSpace(raw))
+	if lang == "" {
+		return "shell"
+	}
+	return lang
+}
+
+func isSupportedScriptLang(lang string) bool {
+	switch normalizeScriptLang(lang) {
+	case "shell", "python", "javascript":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) StartRefreshLoop(ctx context.Context, interval time.Duration) {
