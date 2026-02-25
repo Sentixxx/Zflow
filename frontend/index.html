@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zflow API Demo</title>
+  <style>
+    :root {
+      --bg: #f3f4f6;
+      --panel: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --primary: #0f766e;
+      --primary-weak: #ccfbf1;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "SF Mono", "Menlo", monospace;
+      background: linear-gradient(145deg, #f8fafc, #eef2ff);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 0 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 8px 30px rgba(15, 23, 42, 0.05);
+    }
+    h1 { font-size: 18px; margin: 0 0 8px 0; }
+    h2 { font-size: 14px; margin: 0 0 8px 0; }
+    p { margin: 4px 0; color: var(--muted); font-size: 12px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      font: inherit;
+      margin-bottom: 8px;
+      background: #fff;
+    }
+    button {
+      border: 1px solid transparent;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      cursor: pointer;
+      background: var(--primary);
+      color: white;
+    }
+    button.secondary {
+      background: white;
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .list {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      max-height: 340px;
+      overflow: auto;
+      background: #fff;
+    }
+    .item {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      cursor: pointer;
+    }
+    .item:last-child { border-bottom: none; }
+    .item:hover { background: #f9fafb; }
+    .item.active { background: var(--primary-weak); }
+    .meta { font-size: 11px; color: var(--muted); }
+    .status { margin-top: 8px; min-height: 18px; font-size: 12px; color: var(--muted); }
+    .pill {
+      display: inline-block;
+      font-size: 11px;
+      border-radius: 999px;
+      padding: 2px 8px;
+      border: 1px solid var(--line);
+      margin-left: 8px;
+    }
+    .pill.read { background: #dcfce7; border-color: #86efac; }
+    .pill.unread { background: #fef9c3; border-color: #fde047; }
+    @media (max-width: 900px) {
+      .wrap { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <h1>Zflow 后端联调页</h1>
+      <p>用于联调 Go API：添加订阅、查看文章流、查看详情、切换已读状态。</p>
+
+      <label for="apiBase">API Base URL</label>
+      <input id="apiBase" value="http://localhost:8080" />
+
+      <label for="feedUrl">RSS/Atom URL</label>
+      <input id="feedUrl" placeholder="https://example.com/feed.xml" />
+
+      <div class="row">
+        <button id="addFeedBtn">添加订阅并首抓</button>
+        <button class="secondary" id="refreshFeedsBtn">刷新订阅列表</button>
+        <button class="secondary" id="refreshArticlesBtn">刷新文章列表</button>
+      </div>
+
+      <h2 style="margin-top:14px">订阅源</h2>
+      <div id="feedList" class="list"></div>
+      <div id="status" class="status"></div>
+    </section>
+
+    <section class="card">
+      <h2>文章流</h2>
+      <div id="articleList" class="list"></div>
+
+      <h2 style="margin-top:14px">文章详情</h2>
+      <div id="articleDetail" class="list" style="max-height:none; min-height:220px; padding:12px;"></div>
+    </section>
+  </div>
+
+  <script>
+    const apiBaseEl = document.getElementById('apiBase');
+    const feedUrlEl = document.getElementById('feedUrl');
+    const feedListEl = document.getElementById('feedList');
+    const articleListEl = document.getElementById('articleList');
+    const articleDetailEl = document.getElementById('articleDetail');
+    const statusEl = document.getElementById('status');
+
+    let selectedArticleId = null;
+
+    function api(path) {
+      return `${apiBaseEl.value.replace(/\/$/, '')}${path}`;
+    }
+
+    function setStatus(text, isError = false) {
+      statusEl.textContent = text;
+      statusEl.style.color = isError ? '#b91c1c' : '#6b7280';
+    }
+
+    async function request(path, options = {}) {
+      const res = await fetch(api(path), {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    function renderFeeds(feeds) {
+      if (!feeds.length) {
+        feedListEl.innerHTML = '<div class="item">暂无订阅</div>';
+        return;
+      }
+      feedListEl.innerHTML = feeds.map((f) => `
+        <div class="item">
+          <div><strong>${escapeHtml(f.title || '(未命名源)')}</strong></div>
+          <div class="meta">${escapeHtml(f.url)} · items=${f.item_count} · ${f.last_fetch_status}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderArticles(articles) {
+      if (!articles.length) {
+        articleListEl.innerHTML = '<div class="item">暂无文章</div>';
+        return;
+      }
+
+      articleListEl.innerHTML = articles.map((a) => {
+        const active = selectedArticleId === a.id ? 'active' : '';
+        const readClass = a.is_read ? 'read' : 'unread';
+        const readText = a.is_read ? '已读' : '未读';
+        return `
+          <div class="item ${active}" data-id="${a.id}">
+            <div><strong>${escapeHtml(a.title || '(无标题)')}</strong><span class="pill ${readClass}">${readText}</span></div>
+            <div class="meta">feed=${a.feed_id} · ${escapeHtml(a.published_at || a.created_at || '')}</div>
+          </div>
+        `;
+      }).join('');
+
+      articleListEl.querySelectorAll('.item[data-id]').forEach((el) => {
+        el.addEventListener('click', async () => {
+          const id = Number(el.dataset.id);
+          selectedArticleId = id;
+          await loadArticleDetail(id);
+          await loadArticles();
+        });
+      });
+    }
+
+    async function loadFeeds() {
+      const data = await request('/api/v1/feeds');
+      renderFeeds(data.feeds || []);
+      return data.feeds || [];
+    }
+
+    async function loadArticles() {
+      const data = await request('/api/v1/articles');
+      renderArticles(data.articles || []);
+      return data.articles || [];
+    }
+
+    async function loadArticleDetail(id) {
+      const article = await request(`/api/v1/articles/${id}`);
+      articleDetailEl.innerHTML = `
+        <div><strong>${escapeHtml(article.title || '(无标题)')}</strong></div>
+        <p>链接：${article.link ? `<a href="${escapeHtml(article.link)}" target="_blank" rel="noreferrer">${escapeHtml(article.link)}</a>` : '-'}</p>
+        <p>发布时间：${escapeHtml(article.published_at || '-')}</p>
+        <p>状态：${article.is_read ? '已读' : '未读'}</p>
+        <p>摘要：</p>
+        <div class="meta">${escapeHtml(article.summary || '(无摘要)')}</div>
+        <div class="row" style="margin-top:10px">
+          <button id="markReadBtn">标记已读</button>
+          <button class="secondary" id="markUnreadBtn">标记未读</button>
+        </div>
+      `;
+
+      document.getElementById('markReadBtn').addEventListener('click', () => markRead(id, true));
+      document.getElementById('markUnreadBtn').addEventListener('click', () => markRead(id, false));
+    }
+
+    async function markRead(id, read) {
+      await request(`/api/v1/articles/${id}/read`, {
+        method: 'PATCH',
+        body: JSON.stringify({ read })
+      });
+      await loadArticleDetail(id);
+      await loadArticles();
+      setStatus(`文章 ${id} 已更新为${read ? '已读' : '未读'}`);
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    document.getElementById('addFeedBtn').addEventListener('click', async () => {
+      const url = feedUrlEl.value.trim();
+      if (!url) {
+        setStatus('请输入 RSS/Atom URL', true);
+        return;
+      }
+      try {
+        setStatus('正在创建订阅并首抓...');
+        await request('/api/v1/feeds', {
+          method: 'POST',
+          body: JSON.stringify({ url })
+        });
+        await loadFeeds();
+        await loadArticles();
+        setStatus('订阅创建成功');
+        feedUrlEl.value = '';
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    });
+
+    document.getElementById('refreshFeedsBtn').addEventListener('click', async () => {
+      try {
+        await loadFeeds();
+        setStatus('订阅列表已刷新');
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    });
+
+    document.getElementById('refreshArticlesBtn').addEventListener('click', async () => {
+      try {
+        await loadArticles();
+        setStatus('文章列表已刷新');
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    });
+
+    (async function bootstrap() {
+      try {
+        await loadFeeds();
+        await loadArticles();
+        articleDetailEl.innerHTML = '<div class="item">选择左侧文章查看详情</div>';
+        setStatus('已连接 API');
+      } catch (err) {
+        articleDetailEl.innerHTML = '<div class="item">连接失败，请检查 API Base URL 与后端服务状态</div>';
+        setStatus(err.message, true);
+      }
+    })();
+  </script>
+</body>
+</html>
