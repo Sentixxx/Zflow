@@ -1,5 +1,12 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change178 日期:2026-02-25 | 文件:frontend/src/App.tsx,frontend/src/lib/article-list.ts | 操作:Modify | 影响:未读筛选稳定性 | 说明:移除滚动隐藏补偿机制并改为未读快照策略，仅在切换订阅源/分类或切换已读筛选时统一刷新显示状态 | 关联:task061
+change179 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:交互提示 | 说明:为文章项状态与标记未读等按钮补充title提示，统一悬浮可见说明 | 关联:task061
+change180 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task061 | 说明:新增并完成未读筛选统一刷新策略任务记录 | 关联:task061
+
+change176 日期:2026-02-25 | 文件:backend/cmd/server/main.go | 操作:Modify | 影响:服务生命周期 | 说明:引入http.Server与根上下文Shutdown流程以修复Ctrl+C后进程不退出问题并支持优雅停机 | 关联:task060
+change177 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task060 | 说明:新增并完成Ctrl+C优雅停机修复任务 | 关联:task060
+
 change170 日期:2026-02-25 | 文件:backend/internal/repository/sqlite_feed_repository_impl.go,backend/internal/repository/feed_repository.go | 操作:Modify | 影响:repository主实现 | 说明:将SQLite存储实现从store迁移到repository并重写仓储接口以直接暴露主实现能力 | 关联:task058
 change171 日期:2026-02-25 | 文件:backend/internal/store/store.go,backend/internal/store/store_test.go | 操作:Modify | 影响:store兼容层 | 说明:store改为兼容别名入口并复用repository实现以保持历史测试与调用兼容 | 关联:task058
 change172 日期:2026-02-25 | 文件:backend/internal/handler/server.go,backend/internal/handler/server_test.go,backend/cmd/server/main.go | 操作:Modify | 影响:主链路依赖方向 | 说明:主流程改为直接依赖repository类型与ArticleSeed/错误常量减少对store实现包耦合 | 关联:task058

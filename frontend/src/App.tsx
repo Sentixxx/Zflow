@@ -54,6 +54,7 @@ export function App() {
   const [sortMode, setSortMode] = useState<SortMode>("latest");
   const [bufferedCount, setBufferedCount] = useState<number>(PREFETCH_BATCH_SIZE);
   const [visibleCount, setVisibleCount] = useState<number>(VISIBLE_STEP_SIZE);
+  const [stickyUnreadIDs, setStickyUnreadIDs] = useState<number[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(360);
@@ -78,7 +79,6 @@ export function App() {
   const [error, setError] = useState("");
   const lastLoadAtRef = useRef<number>(0);
   const bounceTimerRef = useRef<number | null>(null);
-
   const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
   const sanitizedSummaryHTML = useMemo(() => {
     const raw = selectedArticle?.summary ?? "";
@@ -147,17 +147,31 @@ export function App() {
     return visited;
   };
 
-  const filteredAndSortedArticles = useMemo(() => {
-    let filteredBySource = articles;
-    if (selectedFeedID != null) {
-      filteredBySource = articles.filter((article) => article.feed_id === selectedFeedID);
-    } else if (selectedFolderID != null) {
-      const folderIDs = collectDescendantFolderIDs(selectedFolderID);
-      const feedIDs = new Set(feeds.filter((feed) => feed.folder_id != null && folderIDs.has(feed.folder_id)).map((feed) => feed.id));
-      filteredBySource = articles.filter((article) => feedIDs.has(article.feed_id));
+  const filterArticlesByScope = (items: Article[], feedID: number | null, folderID: number | null): Article[] => {
+    if (feedID != null) {
+      return items.filter((article) => article.feed_id === feedID);
     }
-    return filterAndSortArticles(filteredBySource, readFilter, sortMode, selectedArticle?.id ?? null);
-  }, [articles, readFilter, sortMode, selectedFeedID, selectedFolderID, feeds, childFoldersByParent, selectedArticle?.id]);
+    if (folderID != null) {
+      const folderIDs = collectDescendantFolderIDs(folderID);
+      const feedIDs = new Set(feeds.filter((feed) => feed.folder_id != null && folderIDs.has(feed.folder_id)).map((feed) => feed.id));
+      return items.filter((article) => feedIDs.has(article.feed_id));
+    }
+    return items;
+  };
+  const rebuildStickyUnreadIDs = (items: Article[], feedID: number | null, folderID: number | null, nextReadFilter: ReadFilter) => {
+    if (nextReadFilter !== "unread") {
+      setStickyUnreadIDs([]);
+      return;
+    }
+    const ids = filterArticlesByScope(items, feedID, folderID)
+      .filter((article) => !article.is_read)
+      .map((article) => article.id);
+    setStickyUnreadIDs(ids);
+  };
+  const filteredAndSortedArticles = useMemo(() => {
+    const filteredBySource = filterArticlesByScope(articles, selectedFeedID, selectedFolderID);
+    return filterAndSortArticles(filteredBySource, readFilter, sortMode, new Set(stickyUnreadIDs));
+  }, [articles, readFilter, sortMode, selectedFeedID, selectedFolderID, feeds, childFoldersByParent, stickyUnreadIDs]);
   const effectiveBufferedCount = Math.min(bufferedCount, filteredAndSortedArticles.length);
   const pagedArticles = useMemo(
     () => filteredAndSortedArticles.slice(0, Math.min(visibleCount, effectiveBufferedCount)),
@@ -207,15 +221,17 @@ export function App() {
     }
   };
 
-  const loadArticles = async () => {
+  const loadArticles = async (): Promise<Article[] | null> => {
     try {
       const data = await client.listArticles();
       setArticles(data);
       setBufferedCount(PREFETCH_BATCH_SIZE);
       setVisibleCount(VISIBLE_STEP_SIZE);
       setMessage("文章列表已刷新");
+      return data;
     } catch (e) {
       setMessage((e as Error).message, true);
+      return null;
     }
   };
 
@@ -331,6 +347,7 @@ export function App() {
     setReadFilter(value);
     setBufferedCount(PREFETCH_BATCH_SIZE);
     setVisibleCount(VISIBLE_STEP_SIZE);
+    rebuildStickyUnreadIDs(articles, selectedFeedID, selectedFolderID, value);
   };
 
   const handleSortModeChange = (value: SortMode) => {
@@ -395,27 +412,34 @@ export function App() {
   };
 
   const selectFeed = async (feedID: number | null) => {
-    await loadArticles();
-    setSelectedFeedID((current) => (current === feedID ? null : feedID));
+    const data = await loadArticles();
+    const source = data ?? articles;
+    const nextFeedID = feedID;
+    setSelectedFeedID(nextFeedID);
     setSelectedFolderID(null);
     setBufferedCount(PREFETCH_BATCH_SIZE);
     setVisibleCount(VISIBLE_STEP_SIZE);
+    rebuildStickyUnreadIDs(source, nextFeedID, null, readFilter);
     if (feedID != null) {
       selectScriptFeed(feedID);
     }
   };
 
   const selectFolder = async (folderID: number | null) => {
-    await loadArticles();
-    setSelectedFolderID((current) => (current === folderID ? null : folderID));
+    const data = await loadArticles();
+    const source = data ?? articles;
+    const nextFolderID = folderID;
+    setSelectedFolderID(nextFolderID);
     setSelectedFeedID(null);
     setBufferedCount(PREFETCH_BATCH_SIZE);
     setVisibleCount(VISIBLE_STEP_SIZE);
+    rebuildStickyUnreadIDs(source, null, nextFolderID, readFilter);
   };
 
   useEffect(() => {
     const bootstrap = async () => {
-      await Promise.all([loadFeeds(), loadFolders(), loadArticles()]);
+      const [, , loadedArticles] = await Promise.all([loadFeeds(), loadFolders(), loadArticles()]);
+      rebuildStickyUnreadIDs(loadedArticles ?? [], selectedFeedID, selectedFolderID, readFilter);
     };
     void bootstrap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1089,13 +1113,16 @@ export function App() {
                 key={article.id}
                 className={`item article ${selectedArticle?.id === article.id ? "active" : ""}`}
                 onClick={() => selectArticle(article.id)}
+                title={article.is_read ? "已读文章，点击查看详情" : "未读文章，点击查看并自动标记已读"}
               >
                 {selectedFeedID == null && (
                   <div className="article-source">{feedNameByID.get(article.feed_id) || `订阅源 #${article.feed_id}`}</div>
                 )}
                 <div>
                   <strong className="article-title">{article.title || "(无标题)"}</strong>
-                  <span className={`pill ${article.is_read ? "read" : "unread"}`}>{article.is_read ? "已读" : "未读"}</span>
+                  <span className={`pill ${article.is_read ? "read" : "unread"}`} title={article.is_read ? "已读状态" : "未读状态"}>
+                    {article.is_read ? "已读" : "未读"}
+                  </span>
                 </div>
                 <div className="meta">
                   {formatArticleTime(article.published_at || article.created_at)}
@@ -1144,7 +1171,7 @@ export function App() {
                   <p className="detail-summary">(无摘要)</p>
                 )}
                 <div className="row detail-actions">
-                  <button className="secondary" onClick={markUnread}>
+                  <button className="secondary" onClick={markUnread} title="将当前文章改为未读">
                     标记未读
                   </button>
                 </div>

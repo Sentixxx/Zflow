@@ -50,7 +50,7 @@ export function filterAndSortArticles(
   articles: Article[],
   readFilter: ReadFilter,
   sortMode: SortMode,
-  selectedArticleID: number | null,
+  stickyUnreadIDs: Set<number>,
 ): Article[] {
   const readFiltered = articles.filter((article) => {
     if (readFilter !== "unread") {
@@ -59,7 +59,7 @@ export function filterAndSortArticles(
     if (!article.is_read) {
       return true;
     }
-    return selectedArticleID === article.id;
+    return stickyUnreadIDs.has(article.id);
   });
 
   const withTimestamp = readFiltered.map((article) => ({
