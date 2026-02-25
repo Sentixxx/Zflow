@@ -1,6 +1,12 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change030 日期:2026-02-25 | 文件:frontend/package.json | 操作:Add | 影响:前端工程化 | 说明:引入React+Vite+TypeScript脚手架与构建脚本 | 关联:task015
+- change031 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Add | 影响:阅读器主界面 | 说明:实现订阅添加、文章列表/详情与已读切换页面 | 关联:task015
+- change032 日期:2026-02-25 | 文件:frontend/src/api.ts | 操作:Add | 影响:前端API层 | 说明:封装feeds/articles接口请求客户端 | 关联:task015
+- change033 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Add | 影响:前端样式 | 说明:新增响应式页面样式与状态展示样式 | 关联:task015
+- change034 日期:2026-02-25 | 文件:frontend/README.md | 操作:Add | 影响:前端开发文档 | 说明:补充npm开发与构建说明 | 关联:task015
+- change035 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task015 | 说明:新增并完成前端工程化任务 | 关联:task015
 - change027 日期:2026-02-25 | 文件:backend/internal/store/store.go | 操作:Modify | 影响:入库去重与清洗 | 说明:新增文章基础清洗与跨源去重逻辑并同步更新feed条目计数 | 关联:task003
 - change028 日期:2026-02-25 | 文件:backend/internal/store/store_test.go | 操作:Add | 影响:存储层测试 | 说明:新增清洗与去重单元测试覆盖跨源重复和无效条目 | 关联:task003
 - change029 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task003 | 说明:task003标记完成 | 关联:task003

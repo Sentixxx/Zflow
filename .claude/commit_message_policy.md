@@ -7,6 +7,8 @@
   - 问题背景/动机（为什么改）。
   - 关键改动点（改了什么）。
   - 行为变化与影响面（结果是什么）。
+- 每次提交默认在正文末尾追加 `Co-Authored-By`，并按当前助手身份动态填写。
+- 推荐模板：`Co-Authored-By: <CURRENT_ASSISTANT_NAME> <noreply@assistant.local>`。
 
 ## Example
 ```
