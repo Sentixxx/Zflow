@@ -1,10 +1,13 @@
 package store
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,7 +77,7 @@ func (s *FeedStore) Add(url, title string, items []ArticleSeed, fetchErr string)
 		ID:              s.nextFeedID,
 		URL:             url,
 		Title:           title,
-		ItemCount:       len(items),
+		ItemCount:       0,
 		LastFetchedAt:   now,
 		LastFetchStatus: status,
 		LastFetchError:  fetchErr,
@@ -82,19 +85,40 @@ func (s *FeedStore) Add(url, title string, items []ArticleSeed, fetchErr string)
 	}
 	s.nextFeedID++
 	s.feeds = append(s.feeds, feed)
+	existingKeys := s.buildExistingDedupKeySet()
+	insertedCount := 0
 	for _, item := range items {
+		cleaned := cleanSeed(item)
+		if cleaned.Title == "" && cleaned.Link == "" {
+			continue
+		}
+		key := dedupKey(cleaned)
+		if _, exists := existingKeys[key]; exists {
+			continue
+		}
+		existingKeys[key] = struct{}{}
+
 		article := domain.Article{
 			ID:          s.nextArticleID,
 			FeedID:      feed.ID,
-			Title:       item.Title,
-			Link:        item.Link,
-			Summary:     item.Summary,
-			PublishedAt: item.PublishedAt,
+			Title:       cleaned.Title,
+			Link:        cleaned.Link,
+			Summary:     cleaned.Summary,
+			PublishedAt: cleaned.PublishedAt,
 			IsRead:      false,
 			CreatedAt:   now,
 		}
 		s.nextArticleID++
 		s.articles = append(s.articles, article)
+		insertedCount++
+	}
+
+	for i := range s.feeds {
+		if s.feeds[i].ID == feed.ID {
+			s.feeds[i].ItemCount = insertedCount
+			feed.ItemCount = insertedCount
+			break
+		}
 	}
 
 	if err := s.save(); err != nil {
@@ -183,4 +207,49 @@ func (s *FeedStore) save() error {
 		return err
 	}
 	return os.WriteFile(s.path, raw, 0o644)
+}
+
+func (s *FeedStore) buildExistingDedupKeySet() map[string]struct{} {
+	keys := make(map[string]struct{}, len(s.articles))
+	for _, article := range s.articles {
+		key := dedupKey(ArticleSeed{
+			Title:   article.Title,
+			Link:    article.Link,
+			Summary: article.Summary,
+		})
+		keys[key] = struct{}{}
+	}
+	return keys
+}
+
+func cleanSeed(seed ArticleSeed) ArticleSeed {
+	seed.Title = strings.TrimSpace(seed.Title)
+	seed.Link = strings.TrimSpace(seed.Link)
+	seed.Summary = strings.TrimSpace(seed.Summary)
+	seed.PublishedAt = strings.TrimSpace(seed.PublishedAt)
+	return seed
+}
+
+func dedupKey(seed ArticleSeed) string {
+	normalizedLink := normalizeForKey(seed.Link)
+	if normalizedLink != "" {
+		return hashText("link:" + normalizedLink)
+	}
+
+	normalizedTitle := normalizeForKey(seed.Title)
+	normalizedSummary := normalizeForKey(seed.Summary)
+	return hashText("text:" + normalizedTitle + "|" + normalizedSummary)
+}
+
+func normalizeForKey(v string) string {
+	v = strings.ToLower(strings.TrimSpace(v))
+	if v == "" {
+		return ""
+	}
+	return strings.Join(strings.Fields(v), " ")
+}
+
+func hashText(v string) string {
+	sum := sha256.Sum256([]byte(v))
+	return hex.EncodeToString(sum[:])
 }

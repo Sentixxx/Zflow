@@ -1,5 +1,8 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change027 日期:2026-02-25 | 文件:backend/internal/store/store.go | 操作:Modify | 影响:入库去重与清洗 | 说明:新增文章基础清洗与跨源去重逻辑并同步更新feed条目计数 | 关联:task003
+change028 日期:2026-02-25 | 文件:backend/internal/store/store_test.go | 操作:Add | 影响:存储层测试 | 说明:新增清洗与去重单元测试覆盖跨源重复和无效条目 | 关联:task003
+change029 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task003 | 说明:task003标记完成 | 关联:task003
 change025 日期:2026-02-25 | 文件:.rules | 操作:Add | 影响:项目核心规范 | 说明:新增统一规范入口并覆盖架构/API/提交/分层记忆约束 | 关联:task014
 change026 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task014 | 说明:新增并完成项目规范落地任务 | 关联:task014
 change022 日期:2026-02-25 | 文件:backend/internal/api/server.go | 操作:Modify | 影响:HTTP中间件 | 说明:新增全局CORS中间件并处理OPTIONS预检请求 | 关联:task013
