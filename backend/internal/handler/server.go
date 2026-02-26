@@ -26,12 +26,12 @@ import (
 )
 
 type Server struct {
-	store         service.FeedService
-	client        *http.Client
-	clientMu      sync.RWMutex
-	iconDir       string
-	legacyIconDir string
-	logger        *logger.ModuleLogger
+	store     repository.FeedRepository
+	client    *http.Client
+	clientMu  sync.RWMutex
+	iconDir   string
+	articleUC *service.ArticleService
+	logger    *logger.ModuleLogger
 }
 
 const (
@@ -110,16 +110,13 @@ type translateStreamEvent struct {
 	Error      string   `json:"error,omitempty"`
 }
 
-func NewServer(feedStore service.FeedService, dataDir string) *Server {
+func NewServer(feedStore repository.FeedRepository, dataDir string) *Server {
 	iconDir := filepath.Join(dataDir, "feed-icons")
-	legacyIconDir := filepath.Join(dataDir, "icons")
 	_ = os.MkdirAll(iconDir, 0o755)
-	_ = os.MkdirAll(legacyIconDir, 0o755)
 	server := &Server{
-		store:         feedStore,
-		iconDir:       iconDir,
-		legacyIconDir: legacyIconDir,
-		logger:        logger.NewModuleFromEnv("handler"),
+		store:   feedStore,
+		iconDir: iconDir,
+		logger:  logger.NewModuleFromEnv("handler"),
 	}
 	proxyURL, ok, err := feedStore.GetSetting(settingKeyNetworkProxy)
 	if err != nil {
@@ -132,11 +129,11 @@ func NewServer(feedStore service.FeedService, dataDir string) *Server {
 		server.logger.Warn("settings", "network", "failed", "apply initial network proxy failed", "proxy_url", proxyURL, "error", err.Error())
 		_ = server.applyNetworkProxy("")
 	}
+	server.articleUC = service.NewArticleService(feedStore, server.httpClient)
 	return server
 }
 
-func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
+func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/feeds", s.handleFeeds)
 	mux.HandleFunc("/api/v1/feeds/", s.handleFeedByID)
 	mux.HandleFunc("/api/v1/folders", s.handleFolders)
@@ -151,7 +148,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/settings/network", s.handleNetworkSettings)
 	mux.HandleFunc("/api/v1/settings/ai", s.handleAISettings)
 	mux.HandleFunc("/healthz", s.handleHealth)
-	return corsMiddleware(s.requestLogMiddleware(mux))
+}
+
+func (s *Server) WrapHTTPHandler(next http.Handler) http.Handler {
+	return corsMiddleware(s.requestLogMiddleware(next))
+}
+
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	s.RegisterRoutes(mux)
+	return s.WrapHTTPHandler(mux)
 }
 
 type fetchResult struct {
@@ -461,8 +467,7 @@ func (s *Server) iconAssetExists(iconPath string) bool {
 		return false
 	}
 	current := filepath.Join(s.iconDir, iconName)
-	legacy := filepath.Join(s.legacyIconDir, iconName)
-	return fileExists(current) || fileExists(legacy)
+	return fileExists(current)
 }
 
 func needsIconRefresh(last string) bool {

@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
-	"github.com/Sentixxx/Zflow/backend/internal/service"
 )
 
 func TestCreateFeedAndList(t *testing.T) {
@@ -36,7 +35,7 @@ func TestCreateFeedAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	feedService := service.NewFeedService(repo)
+	feedService := repo
 	server := NewServer(feedService, t.TempDir())
 
 	body, _ := json.Marshal(map[string]string{"url": upstream.URL})
@@ -79,7 +78,7 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	feedService := service.NewFeedService(repo)
+	feedService := repo
 	server := NewServer(feedService, t.TempDir())
 
 	createBody, _ := json.Marshal(map[string]string{"url": upstream.URL})
@@ -148,7 +147,7 @@ func TestCORSPreflightAndHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	feedService := service.NewFeedService(repo)
+	feedService := repo
 	server := NewServer(feedService, t.TempDir())
 
 	preflight := httptest.NewRequest(http.MethodOptions, "/api/v1/articles", nil)
@@ -182,7 +181,7 @@ func TestAISettingsGetAndPatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	feedService := service.NewFeedService(repo)
+	feedService := repo
 	server := NewServer(feedService, t.TempDir())
 
 	reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/settings/ai", nil)
@@ -258,7 +257,7 @@ func TestArticleReadabilityExtraction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	feedService := service.NewFeedService(repo)
+	feedService := repo
 	server := NewServer(feedService, t.TempDir())
 
 	createBody, _ := json.Marshal(map[string]string{"url": feedXML.URL})
@@ -337,7 +336,7 @@ func TestArticleReadabilityRejectPDF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	feedService := service.NewFeedService(repo)
+	feedService := repo
 	server := NewServer(feedService, t.TempDir())
 
 	createBody, _ := json.Marshal(map[string]string{"url": feedXML.URL})
@@ -406,7 +405,7 @@ func TestArticleRefreshCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	feedService := service.NewFeedService(repo)
+	feedService := repo
 	server := NewServer(feedService, t.TempDir())
 
 	createBody, _ := json.Marshal(map[string]string{"url": feedXML.URL})
@@ -493,7 +492,7 @@ func TestArticleTranslateByAI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	feedService := service.NewFeedService(repo)
+	feedService := repo
 	server := NewServer(feedService, t.TempDir())
 
 	reqSaveAI := httptest.NewRequest(http.MethodPatch, "/api/v1/settings/ai", bytes.NewReader([]byte(`{
@@ -587,7 +586,7 @@ func TestArticleTranslateStreamByParagraph(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
-	feedService := service.NewFeedService(repo)
+	feedService := repo
 	server := NewServer(feedService, t.TempDir())
 
 	reqSaveAI := httptest.NewRequest(http.MethodPatch, "/api/v1/settings/ai", bytes.NewReader([]byte(`{

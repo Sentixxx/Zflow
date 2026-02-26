@@ -1,6 +1,27 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change331 日期:2026-02-26 | 文件:backend/internal/config/config_test.go,backend/internal/db/sqlite_test.go,backend/internal/scheduler/feed_refresh_test.go | 操作:Add | 影响:基础模块测试覆盖 | 说明:为config/db/scheduler补齐模块级单测，覆盖默认值与环境变量解析、SQLite初始化可用性、调度器启动即执行与周期触发行为 | 关联:task110
+- change332 日期:2026-02-26 | 文件:backend/internal/README.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:架构状态文档 | 说明:将internal状态从“渐进迁移”更新为db/config/scheduler已落地，并补充完成task110记录 | 关联:task110
+- change328 日期:2026-02-26 | 文件:backend/internal/domain/article.go,backend/internal/domain/feed.go,backend/internal/domain/folder.go,backend/internal/store/store.go,backend/internal/store/store_test.go | 操作:Delete | 影响:Deprecated兼容层 | 说明:删除已无调用的domain/store兼容别名与旧测试，去除Deprecated遗留代码路径 | 关联:task109
+- change329 日期:2026-02-26 | 文件:backend/internal/handler/server.go,backend/internal/handler/feed_folder_handlers.go | 操作:Modify | 影响:图标读取路径 | 说明:移除legacy icons目录回退逻辑，图标读取与存在性判断统一为data/feed-icons主路径 | 关联:task109
+- change330 日期:2026-02-26 | 文件:backend/internal/README.md,backend/internal/model/README.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:架构文档与任务追踪 | 说明:更新internal/model目录说明以反映兼容层移除并补充完成task109记录 | 关联:task109
+- change325 日期:2026-02-26 | 文件:backend/internal/usecase/article_usecase.go,backend/internal/usecase/article_usecase_test.go,backend/internal/usecase/README.md | 操作:Delete | 影响:中间层命名 | 说明:移除usecase命名目录与文件，改为service命名以统一团队认知 | 关联:task108
+- change326 日期:2026-02-26 | 文件:backend/internal/service/article_service.go,backend/internal/service/article_service_test.go,backend/internal/service/README.md | 操作:Add | 影响:业务编排层命名 | 说明:新增ArticleService实现与测试并承接原ArticleUsecase能力，职责与行为保持一致 | 关联:task108
+- change327 日期:2026-02-26 | 文件:backend/internal/handler/server.go,backend/internal/handler/article_handlers.go,backend/internal/README.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:依赖引用与架构文档 | 说明:handler改为引用service命名空间并更新internal分层文档，补充完成task108记录 | 关联:task108
+- change322 日期:2026-02-26 | 文件:backend/internal/service/feed_service.go | 操作:Delete | 影响:后端分层抽象 | 说明:移除仅做repository透明转发且无独立职责的service空壳实现，消除重复抽象层 | 关联:task107
+- change323 日期:2026-02-26 | 文件:backend/cmd/server/main.go,backend/internal/handler/server.go,backend/internal/usecase/article_usecase.go,backend/internal/handler/server_test.go,backend/internal/usecase/article_usecase_test.go | 操作:Modify | 影响:依赖注入与类型边界 | 说明:handler/usecase/启动入口与测试统一改为直接依赖repository.FeedRepository接口，保持行为不变并减少层间跳转 | 关联:task107
+- change324 日期:2026-02-26 | 文件:backend/internal/README.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:架构文档与任务追踪 | 说明:更新internal分层说明移除service层并新增完成task107记录 | 关联:task107
+- change319 日期:2026-02-26 | 文件:backend/internal/router/http_router_test.go | 操作:Add | 影响:路由层测试覆盖 | 说明:新增router装配测试，验证RegisterRoutes与WrapHTTPHandler均被调用且包装后的响应头与路由响应生效 | 关联:task106
+- change320 日期:2026-02-26 | 文件:backend/internal/usecase/article_usecase_test.go | 操作:Add | 影响:用例层测试覆盖 | 说明:新增ArticleUsecase测试，覆盖分页窗口语义、Readability正文抽取成功分支与PDF拒绝分支 | 关联:task106
+- change321 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task106 | 说明:新增并完成新分层回归测试补齐任务记录 | 关联:task106
+- change316 日期:2026-02-26 | 文件:backend/internal/router/http_router.go,backend/internal/router/README.md | 操作:Add | 影响:后端路由装配层 | 说明:新增router层，通过RouteRegistrar接口统一构建ServeMux并集中中间件拼装，解耦路由装配与handler实现 | 关联:task105
+- change317 日期:2026-02-26 | 文件:backend/internal/handler/server.go,backend/cmd/server/main.go | 操作:Modify | 影响:服务启动与handler边界 | 说明:Server新增RegisterRoutes/WrapHTTPHandler并由main改为接入router.NewHTTPHandler，保留原有API路由行为 | 关联:task105
+- change318 日期:2026-02-26 | 文件:backend/internal/README.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:架构文档与任务追踪 | 说明:更新internal目录说明新增router层并补充完成task105任务记录 | 关联:task105
+- change312 日期:2026-02-26 | 文件:backend/internal/usecase/article_usecase.go | 操作:Add | 影响:后端中间层 | 说明:新增ArticleUsecase中间层，封装文章列表分页、已读更新、Readability抽取与缓存刷新用例，集中业务编排逻辑 | 关联:task104
+- change313 日期:2026-02-26 | 文件:backend/internal/handler/article_handlers.go,backend/internal/handler/ai_handlers.go,backend/internal/handler/server.go | 操作:Modify | 影响:handler耦合度 | 说明:文章与翻译handler改为复用ArticleUsecase，Server注入中间层依赖，handler聚焦HTTP解析与错误码映射 | 关联:task104
+- change314 日期:2026-02-26 | 文件:backend/internal/handler/readability_helpers.go,backend/internal/README.md,backend/internal/usecase/README.md | 操作:Modify | 影响:后端架构文档与实现边界 | 说明:删除handler层重复Readability实现并补充internal/usecase目录与职责说明，明确中间层边界 | 关联:task104
+- change315 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task104 | 说明:新增并完成后端中间层解耦文章业务编排任务记录 | 关联:task104
 - change309 日期:2026-02-26 | 文件:backend/internal/handler/system_handlers.go,backend/internal/handler/readability_helpers.go | 操作:Add | 影响:系统与正文提取handler分层 | 说明:新增system_handlers与readability_helpers文件，将health/network设置处理与Readability提取能力按职责拆分出server.go | 关联:task103
 - change310 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:后端入口职责边界 | 说明:移除已下沉的系统与Readability实现并清理依赖导入，保持路由与公共能力不变使server.go更聚焦装配层 | 关联:task103
 - change311 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task103 | 说明:新增并完成系统handler与Readability能力继续拆分任务记录 | 关联:task103

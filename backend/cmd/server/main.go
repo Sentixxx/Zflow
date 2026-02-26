@@ -12,8 +12,8 @@ import (
 	"github.com/Sentixxx/Zflow/backend/internal/config"
 	"github.com/Sentixxx/Zflow/backend/internal/handler"
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
+	"github.com/Sentixxx/Zflow/backend/internal/router"
 	"github.com/Sentixxx/Zflow/backend/internal/scheduler"
-	"github.com/Sentixxx/Zflow/backend/internal/service"
 	"github.com/Sentixxx/Zflow/backend/pkg/logger"
 )
 
@@ -30,14 +30,13 @@ func main() {
 	}
 	defer feedStore.Close()
 
-	feedService := service.NewFeedService(feedStore)
-	srv := handler.NewServer(feedService, cfg.DataDir)
+	srv := handler.NewServer(feedStore, cfg.DataDir)
 	refreshScheduler := scheduler.NewFeedRefreshScheduler(srv, cfg.RefreshInterval)
 	go refreshScheduler.Start(rootCtx)
 
 	httpServer := &http.Server{
 		Addr:    cfg.Addr,
-		Handler: srv.Handler(),
+		Handler: router.NewHTTPHandler(srv),
 	}
 
 	go func() {

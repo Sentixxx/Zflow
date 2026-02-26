@@ -30,11 +30,6 @@ func (s *Server) handleFeedIcon(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, iconFile)
 		return
 	}
-	legacyIconFile := filepath.Join(s.legacyIconDir, filepath.Base(feed.IconPath))
-	if fileExists(legacyIconFile) {
-		http.ServeFile(w, r, legacyIconFile)
-		return
-	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "icon file not found"})
 }
 

@@ -2,10 +2,13 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/Sentixxx/Zflow/backend/internal/service"
 )
 
 type markReadRequest struct {
@@ -17,8 +20,6 @@ func (s *Server) handleArticles(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	all := s.store.ListArticles()
-
 	limit := 0
 	page := 1
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
@@ -41,26 +42,8 @@ func (s *Server) handleArticles(w http.ResponseWriter, r *http.Request) {
 		page = parsed
 	}
 
-	if limit <= 0 {
-		writeJSON(w, http.StatusOK, map[string]any{"articles": all, "has_more": false})
-		return
-	}
-
-	start := (page - 1) * limit
-	if start >= len(all) {
-		writeJSON(w, http.StatusOK, map[string]any{"articles": []any{}, "has_more": false})
-		return
-	}
-	endExclusive := start + limit + 1
-	if endExclusive > len(all) {
-		endExclusive = len(all)
-	}
-	window := all[start:endExclusive]
-	hasMore := len(window) > limit
-	if hasMore {
-		window = window[:limit]
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"articles": window, "has_more": hasMore})
+	articles, hasMore := s.articleUC.List(page, limit)
+	writeJSON(w, http.StatusOK, map[string]any{"articles": articles, "has_more": hasMore})
 }
 
 func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +61,7 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 
 	if len(parts) == 1 {
 		if r.Method == http.MethodGet {
-			article, ok := s.store.GetArticle(id)
+			article, ok := s.articleUC.Get(id)
 			if !ok {
 				writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
 				return
@@ -87,7 +70,7 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodDelete {
-			deleted, err := s.store.DeleteArticle(id)
+			deleted, err := s.articleUC.Delete(id)
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete article"})
 				return
@@ -121,7 +104,7 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		article, ok, err := s.store.MarkArticleRead(id, req.Read)
+		article, ok, err := s.articleUC.MarkRead(id, req.Read)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update article"})
 			return
@@ -139,27 +122,20 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
-		article, ok := s.store.GetArticle(id)
-		if !ok {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
-			return
-		}
-		if strings.TrimSpace(article.Link) == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "article link is empty"})
-			return
-		}
-		content, err := s.fetchReadableContent(r.Context(), article.Link)
+		updated, err := s.articleUC.ExtractReadable(r.Context(), id)
 		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "readability fetch failed: " + err.Error()})
-			return
-		}
-		if err := s.store.UpdateArticleFullContent(id, content); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save extracted content"})
-			return
-		}
-		updated, ok := s.store.GetArticle(id)
-		if !ok {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
+			switch {
+			case errors.Is(err, service.ErrArticleNotFound):
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
+			case errors.Is(err, service.ErrArticleLinkEmpty):
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "article link is empty"})
+			case errors.Is(err, service.ErrReadabilityFetchFail):
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			case errors.Is(err, service.ErrSaveArticleContent):
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save extracted content"})
+			default:
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to extract readable content"})
+			}
 			return
 		}
 		writeJSON(w, http.StatusOK, updated)
@@ -171,25 +147,18 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
-		article, ok := s.store.GetArticle(id)
-		if !ok {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
-			return
-		}
-		if strings.TrimSpace(article.Link) != "" {
-			content, err := s.fetchReadableContent(r.Context(), article.Link)
-			if err != nil {
-				writeJSON(w, http.StatusBadGateway, map[string]string{"error": "cache refresh failed: readability " + err.Error()})
-				return
-			}
-			if err := s.store.UpdateArticleFullContent(id, content); err != nil {
+		updated, err := s.articleUC.RefreshCache(r.Context(), id)
+		if err != nil {
+			switch {
+			case errors.Is(err, service.ErrArticleNotFound):
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
+			case errors.Is(err, service.ErrReadabilityFetchFail):
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": "cache refresh failed: " + err.Error()})
+			case errors.Is(err, service.ErrSaveArticleContent):
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save refreshed readability content"})
-				return
+			default:
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to refresh cache"})
 			}
-		}
-		updated, ok := s.store.GetArticle(id)
-		if !ok {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
 			return
 		}
 		writeJSON(w, http.StatusOK, updated)
@@ -202,7 +171,7 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		article, ok := s.store.GetArticle(id)
+		article, ok := s.articleUC.Get(id)
 		if !ok {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
 			return

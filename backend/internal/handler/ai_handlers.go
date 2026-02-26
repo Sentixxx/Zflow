@@ -143,7 +143,7 @@ func splitTranslationParagraphs(raw string) []string {
 }
 
 func (s *Server) streamArticleTranslation(w http.ResponseWriter, r *http.Request, articleID int64) {
-	article, ok := s.store.GetArticle(articleID)
+	article, ok := s.articleUC.Get(articleID)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
 		return
