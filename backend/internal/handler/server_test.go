@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -686,5 +687,162 @@ func TestArticleTranslateStreamByParagraph(t *testing.T) {
 	}
 	if done.Type != "done" {
 		t.Fatalf("done event mismatch: %+v", done)
+	}
+}
+
+func TestArticleFavoriteToggle(t *testing.T) {
+	feedXML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Favorite Feed</title>
+    <item>
+      <title>Favorite Item</title>
+      <link>https://example.com/favorite-item</link>
+      <description>desc</description>
+      <pubDate>Wed, 25 Feb 2026 11:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>`))
+	}))
+	defer feedXML.Close()
+
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	createBody, _ := json.Marshal(map[string]string{"url": feedXML.URL})
+	reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/feeds", bytes.NewReader(createBody))
+	rrCreate := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrCreate, reqCreate)
+	if rrCreate.Code != http.StatusCreated {
+		t.Fatalf("POST /api/v1/feeds status = %d, want %d", rrCreate.Code, http.StatusCreated)
+	}
+
+	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/articles", nil)
+	rrList := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrList, reqList)
+	var listResp struct {
+		Articles []struct {
+			ID         int64 `json:"id"`
+			IsFavorite bool  `json:"is_favorite"`
+		} `json:"articles"`
+	}
+	if err := json.Unmarshal(rrList.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("unmarshal list response error = %v", err)
+	}
+	if len(listResp.Articles) != 1 {
+		t.Fatalf("articles len = %d, want 1", len(listResp.Articles))
+	}
+
+	articleID := listResp.Articles[0].ID
+	reqFav := httptest.NewRequest(http.MethodPatch, "/api/v1/articles/"+strconv.FormatInt(articleID, 10)+"/favorite", bytes.NewReader([]byte(`{"favorite":true}`)))
+	rrFav := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrFav, reqFav)
+	if rrFav.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/v1/articles/:id/favorite status = %d, want %d", rrFav.Code, http.StatusOK)
+	}
+	var favResp struct {
+		IsFavorite bool `json:"is_favorite"`
+	}
+	if err := json.Unmarshal(rrFav.Body.Bytes(), &favResp); err != nil {
+		t.Fatalf("unmarshal favorite response error = %v", err)
+	}
+	if !favResp.IsFavorite {
+		t.Fatalf("is_favorite = false, want true")
+	}
+}
+
+func TestDataSettingsAndRetentionCleanupKeepFavorites(t *testing.T) {
+	feedXML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Retention Feed</title>
+    <item>
+      <title>Old Item A</title>
+      <link>https://example.com/old-a</link>
+      <description>desc</description>
+      <pubDate>Wed, 25 Feb 2001 11:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Old Item B</title>
+      <link>https://example.com/old-b</link>
+      <description>desc</description>
+      <pubDate>Wed, 25 Feb 2001 11:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>`))
+	}))
+	defer feedXML.Close()
+
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	reqSave := httptest.NewRequest(http.MethodPatch, "/api/v1/settings/data", bytes.NewReader([]byte(`{"retention_days":1}`)))
+	rrSave := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrSave, reqSave)
+	if rrSave.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/v1/settings/data status = %d, want %d", rrSave.Code, http.StatusOK)
+	}
+
+	createBody, _ := json.Marshal(map[string]string{"url": feedXML.URL})
+	reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/feeds", bytes.NewReader(createBody))
+	rrCreate := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrCreate, reqCreate)
+	if rrCreate.Code != http.StatusCreated {
+		t.Fatalf("POST /api/v1/feeds status = %d, want %d", rrCreate.Code, http.StatusCreated)
+	}
+
+	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/articles", nil)
+	rrList := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrList, reqList)
+	var listResp struct {
+		Articles []struct {
+			ID int64 `json:"id"`
+		} `json:"articles"`
+	}
+	if err := json.Unmarshal(rrList.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("unmarshal list response error = %v", err)
+	}
+	if len(listResp.Articles) != 2 {
+		t.Fatalf("articles len = %d, want 2", len(listResp.Articles))
+	}
+
+	keepID := listResp.Articles[0].ID
+	reqFav := httptest.NewRequest(http.MethodPatch, "/api/v1/articles/"+strconv.FormatInt(keepID, 10)+"/favorite", bytes.NewReader([]byte(`{"favorite":true}`)))
+	rrFav := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrFav, reqFav)
+	if rrFav.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/v1/articles/:id/favorite status = %d, want %d", rrFav.Code, http.StatusOK)
+	}
+
+	if err := server.RefreshAllFeeds(context.Background()); err != nil {
+		t.Fatalf("RefreshAllFeeds() error = %v", err)
+	}
+
+	rrList2 := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrList2, reqList)
+	var listResp2 struct {
+		Articles []struct {
+			ID         int64 `json:"id"`
+			IsFavorite bool  `json:"is_favorite"`
+		} `json:"articles"`
+	}
+	if err := json.Unmarshal(rrList2.Body.Bytes(), &listResp2); err != nil {
+		t.Fatalf("unmarshal list response2 error = %v", err)
+	}
+	if len(listResp2.Articles) != 1 {
+		t.Fatalf("articles len after cleanup = %d, want 1", len(listResp2.Articles))
+	}
+	if !listResp2.Articles[0].IsFavorite {
+		t.Fatalf("remaining article is_favorite = false, want true")
 	}
 }

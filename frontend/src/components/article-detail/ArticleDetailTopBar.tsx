@@ -3,6 +3,8 @@ import { ArticleDetailToolbar } from "./ArticleDetailToolbar";
 type ArticleDetailTopBarProps = {
   title: string;
   canMarkUnread: boolean;
+  canToggleFavorite: boolean;
+  isFavorite: boolean;
   canOpenSourceSite: boolean;
   canExtractReadable: boolean;
   isExtractingReadable: boolean;
@@ -12,6 +14,7 @@ type ArticleDetailTopBarProps = {
   readableModeEnabled: boolean;
   sourceSiteURL: string;
   onMarkUnread: () => void;
+  onToggleFavorite: () => void;
   onOpenSourceSite: () => void;
   onExtractReadable: () => void;
   onRefreshArticleCache: () => void;
@@ -21,6 +24,8 @@ type ArticleDetailTopBarProps = {
 export function ArticleDetailTopBar({
   title,
   canMarkUnread,
+  canToggleFavorite,
+  isFavorite,
   canOpenSourceSite,
   canExtractReadable,
   isExtractingReadable,
@@ -30,6 +35,7 @@ export function ArticleDetailTopBar({
   readableModeEnabled,
   sourceSiteURL,
   onMarkUnread,
+  onToggleFavorite,
   onOpenSourceSite,
   onExtractReadable,
   onRefreshArticleCache,
@@ -40,6 +46,8 @@ export function ArticleDetailTopBar({
       <h2 className="detail-panel-title">{title}</h2>
       <ArticleDetailToolbar
         canMarkUnread={canMarkUnread}
+        canToggleFavorite={canToggleFavorite}
+        isFavorite={isFavorite}
         canOpenSourceSite={canOpenSourceSite}
         canExtractReadable={canExtractReadable}
         isExtractingReadable={isExtractingReadable}
@@ -49,6 +57,7 @@ export function ArticleDetailTopBar({
         readableModeEnabled={readableModeEnabled}
         sourceSiteURL={sourceSiteURL}
         onMarkUnread={onMarkUnread}
+        onToggleFavorite={onToggleFavorite}
         onOpenSourceSite={onOpenSourceSite}
         onExtractReadable={onExtractReadable}
         onRefreshArticleCache={onRefreshArticleCache}

@@ -10,5 +10,7 @@ type Article struct {
 	CoverURL    string `json:"cover_url,omitempty"`
 	PublishedAt string `json:"published_at,omitempty"`
 	IsRead      bool   `json:"is_read"`
+	IsFavorite  bool   `json:"is_favorite"`
+	FavoritedAt string `json:"favorited_at,omitempty"`
 	CreatedAt   string `json:"created_at"`
 }

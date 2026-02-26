@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,14 +36,16 @@ type Server struct {
 }
 
 const (
-	settingKeyNetworkProxy = "network_proxy_url"
-	settingKeyAIApiKey     = "ai_api_key"
-	settingKeyAIBaseURL    = "ai_base_url"
-	settingKeyAIModel      = "ai_model"
-	settingKeyAITargetLang = "ai_target_lang"
-	defaultAIBaseURL       = "https://api.openai.com/v1"
-	defaultAIModel         = "gpt-4o-mini"
-	defaultAITargetLang    = "zh-CN"
+	settingKeyNetworkProxy  = "network_proxy_url"
+	settingKeyAIApiKey      = "ai_api_key"
+	settingKeyAIBaseURL     = "ai_base_url"
+	settingKeyAIModel       = "ai_model"
+	settingKeyAITargetLang  = "ai_target_lang"
+	settingKeyRetentionDays = "article_retention_days"
+	defaultAIBaseURL        = "https://api.openai.com/v1"
+	defaultAIModel          = "gpt-4o-mini"
+	defaultAITargetLang     = "zh-CN"
+	defaultRetentionDays    = 90
 )
 
 type createFeedRequest struct {
@@ -147,6 +150,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/data/import/opml", s.handleImportOPML)
 	mux.HandleFunc("/api/v1/settings/network", s.handleNetworkSettings)
 	mux.HandleFunc("/api/v1/settings/ai", s.handleAISettings)
+	mux.HandleFunc("/api/v1/settings/data", s.handleDataSettings)
 	mux.HandleFunc("/healthz", s.handleHealth)
 }
 
@@ -850,7 +854,35 @@ func (s *Server) RefreshAllFeeds(ctx context.Context) error {
 			s.logger.Warn("refresh", "feed", "failed", "scheduled refresh failed", "feed_id", feed.ID, "error", err.Error())
 		}
 	}
+	retentionDays, err := s.loadRetentionDays()
+	if err != nil {
+		s.logger.Warn("cleanup", "article", "failed", "load retention days failed", "error", err.Error())
+		return nil
+	}
+	deleted, err := s.store.PurgeExpiredArticles(retentionDays)
+	if err != nil {
+		s.logger.Warn("cleanup", "article", "failed", "purge expired articles failed", "retention_days", retentionDays, "error", err.Error())
+		return nil
+	}
+	if deleted > 0 {
+		s.logger.Info("cleanup", "article", "ok", "expired articles purged", "deleted_count", deleted, "retention_days", retentionDays)
+	}
 	return nil
+}
+
+func (s *Server) loadRetentionDays() (int, error) {
+	value, ok, err := s.store.GetSetting(settingKeyRetentionDays)
+	if err != nil {
+		return 0, err
+	}
+	if !ok || strings.TrimSpace(value) == "" {
+		return defaultRetentionDays, nil
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || parsed <= 0 {
+		return defaultRetentionDays, nil
+	}
+	return parsed, nil
 }
 
 func pickHeaderOrDefault(v, fallback string) string {

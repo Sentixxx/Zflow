@@ -90,6 +90,8 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 			cover_url TEXT NOT NULL DEFAULT '',
 			published_at TEXT NOT NULL DEFAULT '',
 			is_read INTEGER NOT NULL DEFAULT 0,
+			is_favorite INTEGER NOT NULL DEFAULT 0,
+			favorited_at TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
 			FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
@@ -113,6 +115,12 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "entries", "cover_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "is_favorite", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "favorited_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "feeds", "custom_script", "TEXT NOT NULL DEFAULT ''"); err != nil {
@@ -529,7 +537,7 @@ func (s *SQLiteFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string
 }
 
 func (s *SQLiteFeedRepository) ListArticles() []model.Article {
-	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, full_content, cover_url, published_at, is_read, created_at FROM entries ORDER BY id DESC`)
+	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries ORDER BY id DESC`)
 	if err != nil {
 		return []model.Article{}
 	}
@@ -539,10 +547,12 @@ func (s *SQLiteFeedRepository) ListArticles() []model.Article {
 	for rows.Next() {
 		var article model.Article
 		var readFlag int
-		if err := rows.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.CoverURL, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
+		var favoriteFlag int
+		if err := rows.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.CoverURL, &article.PublishedAt, &readFlag, &favoriteFlag, &article.FavoritedAt, &article.CreatedAt); err != nil {
 			continue
 		}
 		article.IsRead = readFlag == 1
+		article.IsFavorite = favoriteFlag == 1
 		articles = append(articles, article)
 	}
 	return articles
@@ -558,13 +568,15 @@ func (s *SQLiteFeedRepository) DeleteArticle(id int64) (bool, error) {
 }
 
 func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
-	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, full_content, cover_url, published_at, is_read, created_at FROM entries WHERE id = ?`, id)
+	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries WHERE id = ?`, id)
 	var article model.Article
 	var readFlag int
-	if err := row.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.CoverURL, &article.PublishedAt, &readFlag, &article.CreatedAt); err != nil {
+	var favoriteFlag int
+	if err := row.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.CoverURL, &article.PublishedAt, &readFlag, &favoriteFlag, &article.FavoritedAt, &article.CreatedAt); err != nil {
 		return model.Article{}, false
 	}
 	article.IsRead = readFlag == 1
+	article.IsFavorite = favoriteFlag == 1
 	return article, true
 }
 
@@ -590,6 +602,114 @@ func (s *SQLiteFeedRepository) MarkArticleRead(id int64, read bool) (model.Artic
 
 	article, ok := s.GetArticle(id)
 	return article, ok, nil
+}
+
+func (s *SQLiteFeedRepository) MarkArticleFavorite(id int64, favorite bool) (model.Article, bool, error) {
+	flag := 0
+	favoritedAt := ""
+	if favorite {
+		flag = 1
+		favoritedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	res, err := s.db.Exec(`UPDATE entries SET is_favorite = ?, favorited_at = ?, updated_at = ? WHERE id = ?`, flag, favoritedAt, time.Now().UTC().Format(time.RFC3339), id)
+	if err != nil {
+		return model.Article{}, false, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return model.Article{}, false, nil
+	}
+
+	article, ok := s.GetArticle(id)
+	return article, ok, nil
+}
+
+func parseArticleTimestamp(publishedAt string, createdAt string) (time.Time, bool) {
+	publishedAt = strings.TrimSpace(publishedAt)
+	if publishedAt != "" {
+		formats := []string{
+			time.RFC3339,
+			time.RFC3339Nano,
+			time.RFC1123Z,
+			time.RFC1123,
+			time.RFC822Z,
+			time.RFC822,
+			time.RFC850,
+		}
+		for _, layout := range formats {
+			if ts, err := time.Parse(layout, publishedAt); err == nil {
+				return ts.UTC(), true
+			}
+		}
+	}
+	createdAt = strings.TrimSpace(createdAt)
+	if createdAt != "" {
+		if ts, err := time.Parse(time.RFC3339, createdAt); err == nil {
+			return ts.UTC(), true
+		}
+	}
+	return time.Time{}, false
+}
+
+func (s *SQLiteFeedRepository) PurgeExpiredArticles(retentionDays int) (int, error) {
+	if retentionDays <= 0 {
+		return 0, nil
+	}
+	cutoff := time.Now().UTC().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+	rows, err := s.db.Query(`SELECT id, published_at, created_at FROM entries WHERE is_favorite = 0`)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var expiredIDs []int64
+	for rows.Next() {
+		var id int64
+		var publishedAt string
+		var createdAt string
+		if err := rows.Scan(&id, &publishedAt, &createdAt); err != nil {
+			continue
+		}
+		ts, ok := parseArticleTimestamp(publishedAt, createdAt)
+		if !ok {
+			continue
+		}
+		if ts.Before(cutoff) {
+			expiredIDs = append(expiredIDs, id)
+		}
+	}
+	if len(expiredIDs) == 0 {
+		return 0, nil
+	}
+
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`DELETE FROM entries WHERE id = ?`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	deleted := 0
+	for _, id := range expiredIDs {
+		res, err := stmt.Exec(id)
+		if err != nil {
+			return deleted, err
+		}
+		affected, _ := res.RowsAffected()
+		if affected > 0 {
+			deleted += int(affected)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return deleted, err
+	}
+	return deleted, nil
 }
 
 func (s *SQLiteFeedRepository) feedExists(url string) (bool, error) {
@@ -625,8 +745,8 @@ func (s *SQLiteFeedRepository) insertEntriesTx(tx *sql.Tx, feedID int64, items [
 		existingKeys[key] = struct{}{}
 
 		if _, err := tx.Exec(
-			`INSERT INTO entries(feed_id, title, link, summary, full_content, cover_url, published_at, is_read, created_at, updated_at)
-			 VALUES(?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+			`INSERT INTO entries(feed_id, title, link, summary, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at, updated_at)
+			 VALUES(?, ?, ?, ?, ?, ?, ?, 0, 0, '', ?, ?)`,
 			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, cleaned.FullContent, cleaned.CoverURL, cleaned.PublishedAt, now, now,
 		); err != nil {
 			return insertedCount, err

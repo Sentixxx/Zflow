@@ -26,4 +26,6 @@ type FeedRepository interface {
 	GetArticle(id int64) (model.Article, bool)
 	UpdateArticleFullContent(id int64, content string) error
 	MarkArticleRead(id int64, read bool) (model.Article, bool, error)
+	MarkArticleFavorite(id int64, favorite bool) (model.Article, bool, error)
+	PurgeExpiredArticles(retentionDays int) (int, error)
 }

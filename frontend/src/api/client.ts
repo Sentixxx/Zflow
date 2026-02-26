@@ -151,6 +151,13 @@ export class ApiClient {
     });
   }
 
+  async setArticleFavorite(id: number, favorite: boolean): Promise<Article> {
+    return this.request<Article>(`/api/v1/articles/${id}/favorite`, {
+      method: "PATCH",
+      body: JSON.stringify({ favorite }),
+    });
+  }
+
   async extractArticleReadable(id: number): Promise<Article> {
     return this.request<Article>(`/api/v1/articles/${id}/readability`, {
       method: "POST",
@@ -266,6 +273,17 @@ export class ApiClient {
 
   async getAISettings(): Promise<{ api_key?: string; base_url?: string; model?: string; target_lang?: string }> {
     return this.request<{ api_key?: string; base_url?: string; model?: string; target_lang?: string }>("/api/v1/settings/ai");
+  }
+
+  async getDataSettings(): Promise<{ retention_days?: number }> {
+    return this.request<{ retention_days?: number }>("/api/v1/settings/data");
+  }
+
+  async updateDataSettings(retentionDays: number): Promise<{ retention_days?: number }> {
+    return this.request<{ retention_days?: number }>("/api/v1/settings/data", {
+      method: "PATCH",
+      body: JSON.stringify({ retention_days: retentionDays }),
+    });
   }
 
   async updateAISettings(payload: { api_key: string; base_url: string; model: string; target_lang: string }): Promise<{

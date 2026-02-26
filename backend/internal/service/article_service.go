@@ -71,6 +71,10 @@ func (u *ArticleService) MarkRead(id int64, read bool) (model.Article, bool, err
 	return u.store.MarkArticleRead(id, read)
 }
 
+func (u *ArticleService) MarkFavorite(id int64, favorite bool) (model.Article, bool, error) {
+	return u.store.MarkArticleFavorite(id, favorite)
+}
+
 func (u *ArticleService) ExtractReadable(ctx context.Context, articleID int64) (model.Article, error) {
 	article, ok := u.store.GetArticle(articleID)
 	if !ok {

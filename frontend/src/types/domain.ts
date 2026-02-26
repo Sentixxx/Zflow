@@ -31,5 +31,7 @@ export interface Article {
   cover_url?: string;
   published_at?: string;
   is_read: boolean;
+  is_favorite: boolean;
+  favorited_at?: string;
   created_at: string;
 }

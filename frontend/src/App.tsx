@@ -36,6 +36,7 @@ type FolderContextMenu = { folder: Folder; x: number; y: number } | null;
 type FeedContextMenu = { feed: Feed; x: number; y: number } | null;
 type ScriptLang = "shell" | "python" | "javascript";
 type SettingsTab = "connection" | "subscription" | "script" | "ai" | "data";
+type SidebarMode = "subscriptions" | "favorites";
 type TranslationParagraph = {
   index: number;
   source: string;
@@ -74,6 +75,7 @@ export function App() {
   const [aiBaseURL, setAIBaseURL] = useState<string>("");
   const [aiModel, setAIModel] = useState<string>("");
   const [aiTargetLang, setAITargetLang] = useState<string>("zh-CN");
+  const [articleRetentionDays, setArticleRetentionDays] = useState<string>("90");
   const [feedURL, setFeedURL] = useState("");
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const selectedFeedID = useReaderStore((state) => state.selectedFeedID);
@@ -105,6 +107,7 @@ export function App() {
   const [manageCategoryFeed, setManageCategoryFeed] = useState<Feed | null>(null);
   const [manageCategoryFolderID, setManageCategoryFolderID] = useState<number | null>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("subscription");
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("subscriptions");
   const [collapsedFolders, setCollapsedFolders] = useState<Record<number, boolean>>({});
   const [draggingFeedID, setDraggingFeedID] = useState<number | null>(null);
   const [dragOverFolderID, setDragOverFolderID] = useState<number | null>(null);
@@ -200,6 +203,9 @@ export function App() {
   };
 
   const filterArticlesByScope = (items: Article[], feedID: number | null, folderID: number | null): Article[] => {
+    if (sidebarMode === "favorites") {
+      return items.filter((article) => article.is_favorite);
+    }
     if (feedID != null) {
       return items.filter((article) => article.feed_id === feedID);
     }
@@ -210,6 +216,10 @@ export function App() {
     }
     return items;
   };
+  const favoriteArticles = useMemo(
+    () => [...articles.filter((article) => article.is_favorite)].sort((a, b) => (Date.parse(b.published_at || b.created_at) || 0) - (Date.parse(a.published_at || a.created_at) || 0)),
+    [articles],
+  );
   const rebuildStickyUnreadIDs = (items: Article[], feedID: number | null, folderID: number | null, nextReadFilter: ReadFilter) => {
     if (nextReadFilter !== "unread") {
       setStickyUnreadIDs([]);
@@ -223,13 +233,16 @@ export function App() {
   const filteredAndSortedArticles = useMemo(() => {
     const filteredBySource = filterArticlesByScope(articles, selectedFeedID, selectedFolderID);
     return filterAndSortArticles(filteredBySource, readFilter, sortMode, new Set(stickyUnreadIDs));
-  }, [articles, readFilter, sortMode, selectedFeedID, selectedFolderID, feeds, childFoldersByParent, stickyUnreadIDs]);
+  }, [articles, readFilter, sortMode, selectedFeedID, selectedFolderID, feeds, childFoldersByParent, stickyUnreadIDs, sidebarMode]);
   const effectiveBufferedCount = Math.min(bufferedCount, filteredAndSortedArticles.length);
   const pagedArticles = useMemo(
     () => filteredAndSortedArticles.slice(0, Math.min(visibleCount, effectiveBufferedCount)),
     [filteredAndSortedArticles, visibleCount, effectiveBufferedCount],
   );
   const articleListTitle = useMemo(() => {
+    if (sidebarMode === "favorites") {
+      return "收藏文章";
+    }
     if (selectedFeedID != null) {
       return `订阅文章（${feedNameByID.get(selectedFeedID) || `#${selectedFeedID}`}）`;
     }
@@ -237,7 +250,7 @@ export function App() {
       return `分类文章（${folderNameByID.get(selectedFolderID) || `#${selectedFolderID}`}）`;
     }
     return "全部文章";
-  }, [selectedFeedID, selectedFolderID, feedNameByID, folderNameByID]);
+  }, [sidebarMode, selectedFeedID, selectedFolderID, feedNameByID, folderNameByID]);
   const selectedArticleOpenURL = useMemo(() => {
     if (!selectedArticle) {
       return "";
@@ -309,6 +322,32 @@ export function App() {
       setAIModel((data.model || "").trim());
       setAITargetLang((data.target_lang || "zh-CN").trim() || "zh-CN");
       setMessage("AI 设置已保存");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const loadDataSettings = async () => {
+    try {
+      const data = await client.getDataSettings();
+      const days = Number(data.retention_days ?? 90);
+      setArticleRetentionDays(String(Number.isFinite(days) && days > 0 ? Math.floor(days) : 90));
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const saveDataSettings = async () => {
+    const days = Number(articleRetentionDays);
+    if (!Number.isInteger(days) || days <= 0 || days > 3650) {
+      setMessage("文章保留天数需为 1-3650 的整数", true);
+      return;
+    }
+    try {
+      const data = await client.updateDataSettings(days);
+      const value = Number(data.retention_days ?? days);
+      setArticleRetentionDays(String(value));
+      setMessage("数据保留策略已保存");
     } catch (e) {
       setMessage((e as Error).message, true);
     }
@@ -452,6 +491,20 @@ export function App() {
       setSelectedArticle(updated);
       setArticles((current) => current.map((entry) => (entry.id === updated.id ? { ...entry, is_read: updated.is_read } : entry)));
       setMessage("文章已标记为未读");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const toggleFavorite = async () => {
+    if (!selectedArticle) {
+      return;
+    }
+    try {
+      const updated = await client.setArticleFavorite(selectedArticle.id, !selectedArticle.is_favorite);
+      setSelectedArticle(updated);
+      setArticles((current) => current.map((entry) => (entry.id === updated.id ? { ...entry, is_favorite: updated.is_favorite, favorited_at: updated.favorited_at } : entry)));
+      setMessage(updated.is_favorite ? "已加入收藏" : "已取消收藏");
     } catch (e) {
       setMessage((e as Error).message, true);
     }
@@ -629,10 +682,22 @@ export function App() {
     setSettingsOpen((v) => !v);
   };
 
+  const switchSidebarMode = (mode: SidebarMode) => {
+    setSidebarMode(mode);
+    if (mode === "favorites") {
+      setSelectedFeedID(null);
+      setSelectedFolderID(null);
+      setBufferedCount(PREFETCH_BATCH_SIZE);
+      setVisibleCount(VISIBLE_STEP_SIZE);
+      rebuildStickyUnreadIDs(articles, null, null, readFilter);
+    }
+  };
+
   const selectFeed = async (feedID: number | null) => {
     const data = await loadArticles();
     const source = data ?? articles;
     const nextFeedID = feedID;
+    setSidebarMode("subscriptions");
     setSelectedFeedID(nextFeedID);
     setSelectedFolderID(null);
     setBufferedCount(PREFETCH_BATCH_SIZE);
@@ -647,6 +712,7 @@ export function App() {
     const data = await loadArticles();
     const source = data ?? articles;
     const nextFolderID = folderID;
+    setSidebarMode("subscriptions");
     setSelectedFolderID(nextFolderID);
     setSelectedFeedID(null);
     setBufferedCount(PREFETCH_BATCH_SIZE);
@@ -658,7 +724,7 @@ export function App() {
     const bootstrap = async () => {
       const [, , loadedArticles] = await Promise.all([loadFeeds(), loadFolders(), loadArticles()]);
       rebuildStickyUnreadIDs(loadedArticles ?? [], selectedFeedID, selectedFolderID, readFilter);
-      await Promise.all([loadNetworkSettings(), loadAISettings()]);
+      await Promise.all([loadNetworkSettings(), loadAISettings(), loadDataSettings()]);
     };
     void bootstrap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1243,7 +1309,7 @@ export function App() {
       <main className={`layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={layoutStyle}>
         <section className={`panel sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
           <div className="sidebar-header">
-            <h2 className={`sidebar-title ${sidebarCollapsed ? "hidden" : ""}`}>订阅源</h2>
+            <h2 className={`sidebar-title ${sidebarCollapsed ? "hidden" : ""}`}>内容导航</h2>
             <button
               className="sidebar-toggle"
               onClick={() => setSidebarCollapsed((v) => !v)}
@@ -1256,36 +1322,72 @@ export function App() {
 
           {!sidebarCollapsed && (
             <div className="sidebar-content">
-              <div className="section-head">
-                <h3 className="section-title">订阅列表</h3>
-                <button className="mini-btn" onClick={createRootFolder}>
-                  新建分类
+              <div className="sidebar-mode-tabs">
+                <button className={`sidebar-mode-tab ${sidebarMode === "subscriptions" ? "active" : ""}`} onClick={() => switchSidebarMode("subscriptions")}>
+                  订阅源
+                </button>
+                <button className={`sidebar-mode-tab ${sidebarMode === "favorites" ? "active" : ""}`} onClick={() => switchSidebarMode("favorites")}>
+                  收藏
                 </button>
               </div>
-              <div className="list">
-                <button
-                  className={`item feed-item ${selectedFeedID == null && selectedFolderID == null ? "active" : ""}`}
-                  onClick={() => {
-                    setSelectedFolderID(null);
-                    selectFeed(null);
-                  }}
-                >
-                  <strong>全部订阅源</strong>
-                </button>
-                {rootFolders.map((folder) => renderFolderNode(folder))}
-                {uncategorizedFeeds.length > 0 && (
-                  <div
-                    className={`tree-divider ${dragOverUncategorized ? "drop-target" : ""}`}
-                    onDragOver={onUncategorizedDragOver}
-                    onDragLeave={() => setDragOverUncategorized(false)}
-                    onDrop={onUncategorizedDrop}
-                  >
-                    未分类（可拖拽到这里取消分类）
+              {sidebarMode === "subscriptions" ? (
+                <>
+                  <div className="section-head">
+                    <h3 className="section-title">订阅列表</h3>
+                    <button className="mini-btn" onClick={createRootFolder}>
+                      新建分类
+                    </button>
                   </div>
-                )}
-                {uncategorizedFeeds.map((feed) => renderFeedNode(feed, 8))}
-                {feeds.length === 0 && <div className="item">暂无订阅</div>}
-              </div>
+                  <div className="list">
+                    <button
+                      className={`item feed-item ${selectedFeedID == null && selectedFolderID == null ? "active" : ""}`}
+                      onClick={() => {
+                        setSelectedFolderID(null);
+                        void selectFeed(null);
+                      }}
+                    >
+                      <strong>全部订阅源</strong>
+                    </button>
+                    {rootFolders.map((folder) => renderFolderNode(folder))}
+                    {uncategorizedFeeds.length > 0 && (
+                      <div
+                        className={`tree-divider ${dragOverUncategorized ? "drop-target" : ""}`}
+                        onDragOver={onUncategorizedDragOver}
+                        onDragLeave={() => setDragOverUncategorized(false)}
+                        onDrop={onUncategorizedDrop}
+                      >
+                        未分类（可拖拽到这里取消分类）
+                      </div>
+                    )}
+                    {uncategorizedFeeds.map((feed) => renderFeedNode(feed, 8))}
+                    {feeds.length === 0 && <div className="item">暂无订阅</div>}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="section-head">
+                    <h3 className="section-title">收藏文章</h3>
+                  </div>
+                  <div className="list">
+                    {favoriteArticles.map((article) => (
+                      <button
+                        key={`favorite-${article.id}`}
+                        className={`item favorite-entry ${selectedArticle?.id === article.id ? "active" : ""}`}
+                        onClick={() => {
+                          void selectArticle(article.id);
+                        }}
+                        title={article.title || "(无标题)"}
+                      >
+                        <span className="favorite-entry-star" aria-hidden="true">
+                          ☆
+                        </span>
+                        <span className="favorite-entry-title">{article.title || "(无标题)"}</span>
+                      </button>
+                    ))}
+                    {favoriteArticles.length === 0 && <div className="item">暂无收藏</div>}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -1342,6 +1444,8 @@ export function App() {
             sanitizedSummaryHTML={sanitizedSummaryHTML}
             sanitizedFullContentHTML={sanitizedFullContentHTML}
             canMarkUnread={Boolean(selectedArticle?.is_read)}
+            canToggleFavorite={Boolean(selectedArticle)}
+            isFavorite={Boolean(selectedArticle?.is_favorite)}
             canOpenSourceSite={Boolean(selectedArticleOpenURL)}
             canExtractReadable={Boolean(selectedArticle?.link)}
             isExtractingReadable={isExtractingReadable}
@@ -1351,6 +1455,7 @@ export function App() {
             sourceSiteURL={selectedArticleOpenURL}
             translationParagraphs={currentTranslationParagraphs}
             onMarkUnread={markUnread}
+            onToggleFavorite={toggleFavorite}
             onOpenSourceSite={openSourceWebsite}
             onExtractReadable={extractReadableContent}
             onRefreshArticleCache={refreshCurrentArticleCache}
@@ -1558,6 +1663,22 @@ export function App() {
                 )}
                 {settingsTab === "data" && (
                   <div className="settings-page-inner settings-section-card">
+                    <h4 className="section-title">清理策略</h4>
+                    <label htmlFor="retentionDays">文章保留天数（收藏不会被清理）</label>
+                    <div className="row">
+                      <input
+                        id="retentionDays"
+                        type="number"
+                        min={1}
+                        max={3650}
+                        value={articleRetentionDays}
+                        onChange={(e) => setArticleRetentionDays(e.target.value)}
+                      />
+                      <button className="secondary" onClick={saveDataSettings}>
+                        保存策略
+                      </button>
+                    </div>
+
                     <h4 className="section-title">数据导出</h4>
                     <div className="row settings-actions">
                       <button onClick={exportProfileJSON}>导出个人配置（JSON）</button>

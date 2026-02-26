@@ -6,6 +6,8 @@ import { ToolbarIconButton } from "@/components/ui/ToolbarIconButton";
 
 type ArticleDetailToolbarProps = {
   canMarkUnread: boolean;
+  canToggleFavorite: boolean;
+  isFavorite: boolean;
   canOpenSourceSite: boolean;
   canExtractReadable: boolean;
   isExtractingReadable: boolean;
@@ -15,6 +17,7 @@ type ArticleDetailToolbarProps = {
   readableModeEnabled: boolean;
   sourceSiteURL: string;
   onMarkUnread: () => void;
+  onToggleFavorite: () => void;
   onOpenSourceSite: () => void;
   onExtractReadable: () => void;
   onRefreshArticleCache: () => void;
@@ -23,6 +26,8 @@ type ArticleDetailToolbarProps = {
 
 export function ArticleDetailToolbar({
   canMarkUnread,
+  canToggleFavorite,
+  isFavorite,
   canOpenSourceSite,
   canExtractReadable,
   isExtractingReadable,
@@ -32,6 +37,7 @@ export function ArticleDetailToolbar({
   readableModeEnabled,
   sourceSiteURL,
   onMarkUnread,
+  onToggleFavorite,
   onOpenSourceSite,
   onExtractReadable,
   onRefreshArticleCache,
@@ -66,6 +72,16 @@ export function ArticleDetailToolbar({
       >
         <span className="detail-icon-slot" aria-hidden="true">
           <img className="detail-icon-image icon-mark-unread" src={markUnreadIcon} alt="" />
+        </span>
+      </ToolbarIconButton>
+      <ToolbarIconButton
+        onClick={onToggleFavorite}
+        disabled={!canToggleFavorite}
+        title={isFavorite ? "取消收藏" : "收藏文章"}
+        ariaLabel={isFavorite ? "取消收藏" : "收藏文章"}
+      >
+        <span className="detail-icon-slot detail-star-slot" aria-hidden="true">
+          {isFavorite ? "★" : "☆"}
         </span>
       </ToolbarIconButton>
       <ToolbarIconButton

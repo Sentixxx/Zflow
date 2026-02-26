@@ -8,6 +8,8 @@ type ArticleDetailContentProps = {
   sanitizedSummaryHTML: string;
   sanitizedFullContentHTML: string;
   canMarkUnread: boolean;
+  canToggleFavorite: boolean;
+  isFavorite: boolean;
   canOpenSourceSite: boolean;
   canExtractReadable: boolean;
   isExtractingReadable: boolean;
@@ -22,6 +24,7 @@ type ArticleDetailContentProps = {
     status: "pending" | "done";
   }>;
   onMarkUnread: () => void;
+  onToggleFavorite: () => void;
   onOpenSourceSite: () => void;
   onExtractReadable: () => void;
   onRefreshArticleCache: () => void;
@@ -33,6 +36,8 @@ export function ArticleDetailContent({
   sanitizedSummaryHTML,
   sanitizedFullContentHTML,
   canMarkUnread,
+  canToggleFavorite,
+  isFavorite,
   canOpenSourceSite,
   canExtractReadable,
   isExtractingReadable,
@@ -42,6 +47,7 @@ export function ArticleDetailContent({
   sourceSiteURL,
   translationParagraphs,
   onMarkUnread,
+  onToggleFavorite,
   onOpenSourceSite,
   onExtractReadable,
   onRefreshArticleCache,
@@ -70,6 +76,8 @@ export function ArticleDetailContent({
       <ArticleDetailTopBar
         title={panelTitle}
         canMarkUnread={canMarkUnread}
+        canToggleFavorite={canToggleFavorite}
+        isFavorite={isFavorite}
         canOpenSourceSite={canOpenSourceSite}
         canExtractReadable={canExtractReadable}
         isExtractingReadable={isExtractingReadable}
@@ -79,6 +87,7 @@ export function ArticleDetailContent({
         readableModeEnabled={readableModeEnabled}
         sourceSiteURL={sourceSiteURL}
         onMarkUnread={onMarkUnread}
+        onToggleFavorite={onToggleFavorite}
         onOpenSourceSite={onOpenSourceSite}
         onExtractReadable={onExtractReadable}
         onRefreshArticleCache={onRefreshArticleCache}

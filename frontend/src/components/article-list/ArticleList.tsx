@@ -56,7 +56,10 @@ export function ArticleList({ articles, selectedArticleID, feedByID, feedNameByI
               <span>{feedNameByID.get(article.feed_id) || `订阅源 #${article.feed_id}`}</span>
             </div>
             <div>
-              <strong className="article-title">{article.title || "(无标题)"}</strong>
+              <strong className="article-title">
+                {article.is_favorite && <span className="article-favorite-star" aria-hidden="true">☆</span>}
+                {article.title || "(无标题)"}
+              </strong>
               <span className={`pill ${article.is_read ? "read" : "unread"}`} title={article.is_read ? "已读状态" : "未读状态"}>
                 {article.is_read ? "已读" : "未读"}
               </span>

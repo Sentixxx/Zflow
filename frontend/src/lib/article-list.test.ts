@@ -12,6 +12,8 @@ function article(input: Partial<Article> & Pick<Article, "id">): Article {
     full_content: input.full_content ?? "",
     published_at: input.published_at ?? "",
     is_read: input.is_read ?? false,
+    is_favorite: input.is_favorite ?? false,
+    favorited_at: input.favorited_at ?? "",
     created_at: input.created_at ?? "2026-02-25T00:00:00Z",
     cover_url: input.cover_url ?? "",
   };

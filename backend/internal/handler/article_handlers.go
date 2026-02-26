@@ -15,6 +15,10 @@ type markReadRequest struct {
 	Read bool `json:"read"`
 }
 
+type markFavoriteRequest struct {
+	Favorite bool `json:"favorite"`
+}
+
 func (s *Server) handleArticles(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
@@ -107,6 +111,37 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 		article, ok, err := s.articleUC.MarkRead(id, req.Read)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update article"})
+			return
+		}
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
+			return
+		}
+		writeJSON(w, http.StatusOK, article)
+		return
+	}
+
+	if len(parts) == 2 && parts[1] == "favorite" {
+		if r.Method != http.MethodPatch {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+
+		defer r.Body.Close()
+		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		var req markFavoriteRequest
+		if err := json.Unmarshal(body, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+			return
+		}
+
+		article, ok, err := s.articleUC.MarkFavorite(id, req.Favorite)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update favorite"})
 			return
 		}
 		if !ok {
