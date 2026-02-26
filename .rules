@@ -177,3 +177,30 @@ backend/
 - 前端改动至少执行：`npm run build`。
 - 后端改动至少执行：`go test ./...`。
 - 交互改动需提供最小手动验证路径。
+
+## 5. 前端开发规范 (TypeScript/React)
+
+### 5.1 架构与组件
+- **目录结构**：
+  - `src/api/`: API 调用封装（请求函数、类型定义、流式响应处理）。
+  - `src/components/ui/`: 通用 UI 组件 (shadcn/ui)。
+  - `src/components/{feature}/`: 业务组件 (如 `sidebar/`, `entry-list/`, `settings/`)。
+  - `src/hooks/`: 自定义 React Hooks。
+  - `src/lib/`: 工具函数（HTML 解析、日期处理、路由等）。
+  - `src/services/`: 服务层（复杂异步逻辑，如批量翻译请求去重/取消）。
+  - `src/stores/`: Zustand 状态管理。
+  - `src/types/`: TypeScript 类型定义。
+  - `src/i18n/`: 国际化配置。
+- **逻辑分离**：UI 负责渲染，逻辑抽离至自定义 Hooks (`useFeeds`, `useEntries` 等)。
+- **类型规范**：所有 Props 和 API 响应必须定义 Interface，**严禁**使用 `any`。
+- **路径别名**：使用 `@` 别名指向 `src` 目录，import 使用 `@/components/...` 格式。
+- **路由库**：使用 `wouter` 轻量路由，路由解析/构建逻辑集中在 `lib/router.ts`。
+
+### 5.2 性能工程
+- **状态管理**：使用 `TanStack Query` 处理 Feed 数据缓存与预加载：
+  - 设置 `staleTime` 避免频繁重新请求 (如 30s)
+  - 设置 `refetchInterval` 保持数据新鲜 (如 60s)
+  - 使用 `invalidateQueries` 进行缓存失效
+  - 分页使用 `useInfiniteQuery` + `getNextPageParam`
+- **渲染优化**：列表页禁止同步执行复杂的 Readability 转换，使用虚拟滚动。
+- **分页边界**：`hasMore` 判断应请求 `limit+1` 条数据，通过实际返回数量判断是否有下一页。

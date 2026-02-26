@@ -1,7 +1,7 @@
-import sourceSiteIcon from "../assets/source-site.svg";
-import readabilityIcon from "../assets/readability.svg";
-import markUnreadIcon from "../assets/mark-unread.svg";
-import { ToolbarIconButton } from "./ToolbarIconButton";
+import sourceSiteIcon from "../../assets/source-site.svg";
+import readabilityIcon from "../../assets/readability.svg";
+import markUnreadIcon from "../../assets/mark-unread.svg";
+import { ToolbarIconButton } from "@/components/ui/ToolbarIconButton";
 
 type ArticleDetailToolbarProps = {
   canMarkUnread: boolean;

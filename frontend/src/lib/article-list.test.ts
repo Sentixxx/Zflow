@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { filterAndSortArticles, formatArticleTime } from "./article-list";
-import type { Article } from "../types";
+import type { Article } from "@/types";
 
 function article(input: Partial<Article> & Pick<Article, "id">): Article {
   return {

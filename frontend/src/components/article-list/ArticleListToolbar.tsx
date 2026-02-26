@@ -1,4 +1,4 @@
-import type { ReadFilter, SortMode } from "../lib/article-list";
+import type { ReadFilter, SortMode } from "@/lib/article-list";
 
 type ArticleListToolbarProps = {
   readFilter: ReadFilter;

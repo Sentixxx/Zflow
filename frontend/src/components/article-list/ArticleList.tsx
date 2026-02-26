@@ -1,6 +1,6 @@
-import type { Article, Feed } from "../types";
-import { formatArticleTime } from "../lib/article-list";
-import { RssFallbackIcon } from "./RssFallbackIcon";
+import type { Article, Feed } from "@/types";
+import { formatArticleTime } from "@/lib/article-list";
+import { RssFallbackIcon } from "@/components/ui/RssFallbackIcon";
 
 type ArticleListProps = {
   articles: Article[];

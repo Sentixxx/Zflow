@@ -821,7 +821,53 @@ func (s *Server) handleArticles(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"articles": s.store.ListArticles()})
+	all := s.store.ListArticles()
+
+	limit := 0
+	page := 1
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid limit"})
+			return
+		}
+		if parsed > 200 {
+			parsed = 200
+		}
+		limit = parsed
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("page")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid page"})
+			return
+		}
+		page = parsed
+	}
+
+	if limit <= 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"articles": all, "has_more": false})
+		return
+	}
+
+	start := (page - 1) * limit
+	if start >= len(all) {
+		writeJSON(w, http.StatusOK, map[string]any{"articles": []any{}, "has_more": false})
+		return
+	}
+	endExclusive := start + limit + 1
+	if endExclusive > len(all) {
+		endExclusive = len(all)
+	}
+	window := all[start:endExclusive]
+	hasMore := len(window) > limit
+	if hasMore {
+		window = window[:limit]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"articles": window,
+		"has_more": hasMore,
+	})
 }
 
 func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {

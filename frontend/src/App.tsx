@@ -1,17 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ApiClient } from "./api";
-import type { Article, Feed, Folder } from "./types";
-import { filterAndSortArticles } from "./lib/article-list";
-import type { ReadFilter, SortMode } from "./lib/article-list";
-import { sanitizeRichHTML } from "./lib/sanitize";
-import { buildFeedIconURLByHost, feedHost } from "./lib/feed-utils";
-import { RssFallbackIcon } from "./components/RssFallbackIcon";
-import { TopBar } from "./components/TopBar";
-import { RefreshFailureBanner } from "./components/RefreshFailureBanner";
-import type { RefreshFailure } from "./components/RefreshFailureBanner";
-import { ArticleListToolbar } from "./components/ArticleListToolbar";
-import { ArticleList } from "./components/ArticleList";
-import { ArticleDetailContent } from "./components/ArticleDetailContent";
+import { ApiClient } from "@/api";
+import type { Article, Feed, Folder } from "@/types";
+import { filterAndSortArticles } from "@/lib/article-list";
+import type { ReadFilter, SortMode } from "@/lib/article-list";
+import { sanitizeRichHTML } from "@/lib/sanitize";
+import { buildFeedIconURLByHost, feedHost } from "@/lib/feed-utils";
+import {
+  RssFallbackIcon,
+  TopBar,
+  RefreshFailureBanner,
+  ArticleListToolbar,
+  ArticleList,
+  ArticleDetailContent,
+} from "@/components";
+import type { RefreshFailure } from "@/components";
+import { useReaderStore } from "@/stores/useReaderStore";
+import { useArticleRoute } from "@/hooks/useArticleRoute";
+import { useReaderQueries } from "@/hooks/useReaderQueries";
+import { refreshFeedsBatch } from "@/services/feed-refresh-service";
+import { useFeeds } from "@/hooks/useFeeds";
+import { useEntries } from "@/hooks/useEntries";
 
 const DEFAULT_API_BASE = "http://localhost:8080";
 const PREFETCH_BATCH_SIZE = 20;
@@ -57,19 +65,20 @@ export function App() {
   const [apiBase, setApiBase] = useState<string>(localStorage.getItem("zflow_api_base") || DEFAULT_API_BASE);
   const [networkProxyURL, setNetworkProxyURL] = useState<string>("");
   const [feedURL, setFeedURL] = useState("");
-  const [feeds, setFeeds] = useState<Feed[]>([]);
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [articles, setArticles] = useState<Article[]>([]);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const [selectedFeedID, setSelectedFeedID] = useState<number | null>(null);
-  const [selectedFolderID, setSelectedFolderID] = useState<number | null>(null);
+  const selectedFeedID = useReaderStore((state) => state.selectedFeedID);
+  const setSelectedFeedID = useReaderStore((state) => state.setSelectedFeedID);
+  const selectedFolderID = useReaderStore((state) => state.selectedFolderID);
+  const setSelectedFolderID = useReaderStore((state) => state.setSelectedFolderID);
   const [newFeedFolderID, setNewFeedFolderID] = useState<number | null>(null);
   const [scriptFeedID, setScriptFeedID] = useState<number | null>(null);
   const [scriptContent, setScriptContent] = useState<string>("");
   const [scriptLang, setScriptLang] = useState<ScriptLang>("shell");
   const [scriptDirty, setScriptDirty] = useState<boolean>(false);
-  const [readFilter, setReadFilter] = useState<ReadFilter>("all");
-  const [sortMode, setSortMode] = useState<SortMode>("latest");
+  const readFilter = useReaderStore((state) => state.readFilter);
+  const setReadFilter = useReaderStore((state) => state.setReadFilter);
+  const sortMode = useReaderStore((state) => state.sortMode);
+  const setSortMode = useReaderStore((state) => state.setSortMode);
   const [bufferedCount, setBufferedCount] = useState<number>(PREFETCH_BATCH_SIZE);
   const [visibleCount, setVisibleCount] = useState<number>(VISIBLE_STEP_SIZE);
   const [stickyUnreadIDs, setStickyUnreadIDs] = useState<number[]>([]);
@@ -102,8 +111,22 @@ export function App() {
   const lastLoadAtRef = useRef<number>(0);
   const bounceTimerRef = useRef<number | null>(null);
   const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
+  const { feedsQuery, foldersQuery, articlesInfiniteQuery } = useReaderQueries(apiBase);
   const sanitizedSummaryHTML = useMemo(() => sanitizeRichHTML(selectedArticle?.summary), [selectedArticle?.summary]);
   const sanitizedFullContentHTML = useMemo(() => sanitizeRichHTML(selectedArticle?.full_content), [selectedArticle?.full_content]);
+
+  const setMessage = (message: string, isError = false) => {
+    if (isError) {
+      setError(message);
+      setStatus("");
+      return;
+    }
+    setError("");
+    setStatus(message);
+  };
+
+  const { feeds, folders, loadFeeds, loadFolders } = useFeeds(client, feedsQuery, foldersQuery, setMessage);
+  const { articles, setArticles, loadArticles, fetchNextArticlePage, hasNextArticlePage } = useEntries(client, articlesInfiniteQuery, setMessage);
 
   const folderNameByID = useMemo(() => {
     const map = new Map<number, string>();
@@ -214,16 +237,6 @@ export function App() {
     return toWebsiteOrigin(sourceFeed?.url);
   }, [selectedArticle, feedByID]);
 
-  const setMessage = (message: string, isError = false) => {
-    if (isError) {
-      setError(message);
-      setStatus("");
-      return;
-    }
-    setError("");
-    setStatus(message);
-  };
-
   const handleSaveAPIBase = () => {
     localStorage.setItem("zflow_api_base", apiBase);
     setMessage("API Base 已保存");
@@ -248,45 +261,6 @@ export function App() {
     }
   };
 
-  const loadFeeds = async (options?: { silentStatus?: boolean }) => {
-    try {
-      const data = await client.listFeeds();
-      setFeeds(data);
-      if (!options?.silentStatus) {
-        setMessage("订阅列表已刷新");
-      }
-      return data;
-    } catch (e) {
-      setMessage((e as Error).message, true);
-      return null;
-    }
-  };
-
-  const loadFolders = async () => {
-    try {
-      const data = await client.listFolders();
-      setFolders(data);
-    } catch (e) {
-      setMessage((e as Error).message, true);
-    }
-  };
-
-  const loadArticles = async (options?: { silentStatus?: boolean }): Promise<Article[] | null> => {
-    try {
-      const data = await client.listArticles();
-      setArticles(data);
-      setBufferedCount(PREFETCH_BATCH_SIZE);
-      setVisibleCount(VISIBLE_STEP_SIZE);
-      if (!options?.silentStatus) {
-        setMessage("文章列表已刷新");
-      }
-      return data;
-    } catch (e) {
-      setMessage((e as Error).message, true);
-      return null;
-    }
-  };
-
   const refreshFeedsFromNetwork = async () => {
     if (isRefreshingFeeds) {
       return;
@@ -300,23 +274,7 @@ export function App() {
         setMessage("暂无订阅源可刷新");
         return;
       }
-      const settled = await Promise.allSettled(currentFeeds.map((feed) => client.refreshFeed(feed.id)));
-      const successCount = settled.filter((item) => item.status === "fulfilled").length;
-      const failedCount = settled.length - successCount;
-      const failures: RefreshFailure[] = settled.flatMap((item, index) => {
-        if (item.status === "fulfilled") {
-          return [];
-        }
-        const feed = currentFeeds[index];
-        const reason = item.reason instanceof Error ? item.reason.message : String(item.reason || "未知错误");
-        return [
-          {
-            feedID: feed.id,
-            feedTitle: feed.title || feed.url || `#${feed.id}`,
-            reason,
-          },
-        ];
-      });
+      const { successCount, failedCount, failures } = await refreshFeedsBatch(currentFeeds, (feedID) => client.refreshFeed(feedID));
       setRefreshFailures(failures);
       await Promise.all([loadFeeds({ silentStatus: true }), loadArticles({ silentStatus: true })]);
       if (failedCount > 0) {
@@ -417,12 +375,14 @@ export function App() {
       const article = await client.getArticle(id);
       if (article.is_read) {
         setSelectedArticle(article);
+        pushArticleRoute(article.id);
         setMessage(`已打开文章 #${id}`);
         return;
       }
 
       const updated = await client.setArticleRead(id, true);
       setSelectedArticle(updated);
+      pushArticleRoute(updated.id);
       setArticles((current) => current.map((entry) => (entry.id === id ? { ...entry, is_read: true } : entry)));
       setMessage(`已打开文章 #${id}（已自动标记已读）`);
     } catch (e) {
@@ -469,6 +429,10 @@ export function App() {
     }
   };
 
+  const { pushArticleRoute, clearArticleRoute } = useArticleRoute(selectedArticle?.id ?? null, (id) => {
+    void selectArticle(id);
+  });
+
   const handleReadFilterChange = (value: ReadFilter) => {
     setReadFilter(value);
     setBufferedCount(PREFETCH_BATCH_SIZE);
@@ -487,6 +451,7 @@ export function App() {
   const toggleSortMode = () => {
     handleSortModeChange(sortMode === "latest" ? "oldest" : "latest");
   };
+
   const computedSidebarWidth = sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : sidebarWidth;
   const layoutStyle = {
     gridTemplateColumns: isNarrow
@@ -584,8 +549,9 @@ export function App() {
   useEffect(() => {
     if (selectedArticle && !articles.some((article) => article.id === selectedArticle.id)) {
       setSelectedArticle(null);
+      clearArticleRoute();
     }
-  }, [articles, selectedArticle]);
+  }, [articles, selectedArticle, clearArticleRoute]);
 
   useEffect(() => {
     if (feeds.length === 0) {
@@ -987,6 +953,10 @@ export function App() {
     }
     const noMoreVisible = pagedArticles.length >= filteredAndSortedArticles.length;
     if (noMoreVisible) {
+      if (hasNextArticlePage) {
+        void fetchNextArticlePage();
+        return;
+      }
       triggerListBounce();
       return;
     }

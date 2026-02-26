@@ -1,4 +1,4 @@
-export type Feed = {
+export interface Feed {
   id: number;
   url: string;
   title: string;
@@ -11,17 +11,17 @@ export type Feed = {
   last_fetch_status: string;
   last_fetch_error?: string;
   created_at: string;
-};
+}
 
-export type Folder = {
+export interface Folder {
   id: number;
   name: string;
   parent_id?: number | null;
   created_at: string;
   updated_at: string;
-};
+}
 
-export type Article = {
+export interface Article {
   id: number;
   feed_id: number;
   title: string;
@@ -32,4 +32,4 @@ export type Article = {
   published_at?: string;
   is_read: boolean;
   created_at: string;
-};
+}

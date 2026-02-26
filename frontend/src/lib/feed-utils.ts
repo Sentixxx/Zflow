@@ -1,4 +1,4 @@
-import type { Feed } from "../types";
+import type { Feed } from "@/types";
 
 export function feedHost(rawURL: string | undefined): string {
   const text = (rawURL || "").trim();

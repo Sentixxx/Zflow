@@ -1,6 +1,20 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change271 日期:2026-02-27 | 文件:frontend/src/hooks/useEntries.ts | 操作:Modify | 影响:文章数据一致性 | 说明:修复InfiniteQuery分页首屏覆盖全量文章快照导致的来源缺文回归，改为全量加载优先且仅在空态时用分页首屏填充 | 关联:task092
+- change272 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task092 | 说明:新增并完成来源缺文回归修复任务记录 | 关联:task092
+- change268 日期:2026-02-27 | 文件:frontend/src/hooks/useFeeds.ts,frontend/src/hooks/useEntries.ts,frontend/src/App.tsx | 操作:Add | 影响:前端数据副作用分层 | 说明:新增useFeeds/useEntries并将App中feeds/folders/articles加载同步逻辑下沉到hooks，减少页面层数据副作用散落 | 关联:task091
+- change269 日期:2026-02-27 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:文章滚动分页 | 说明:滚动触底在本地窗口耗尽后优先调用InfiniteQuery fetchNextPage加载下一页，保持列表连续浏览体验 | 关联:task091
+- change270 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task091 | 说明:新增并完成hooks下沉与InfiniteQuery滚动分页任务记录 | 关联:task091
+- change263 日期:2026-02-27 | 文件:frontend/src/types/*,frontend/src/api/*,frontend/src/stores/useReaderStore.ts,frontend/src/hooks/useArticleRoute.ts,frontend/src/hooks/useReaderQueries.ts,frontend/src/lib/router.ts,frontend/src/services/feed-refresh-service.ts,frontend/src/i18n/index.ts | 操作:Add | 影响:前端规范化分层基建 | 说明:新增types/api/stores/hooks/router/services/i18n目录与基础实现并落地wouter+zustand+TanStack Query接入能力 | 关联:task090
+- change264 日期:2026-02-27 | 文件:frontend/src/App.tsx,frontend/src/main.tsx,frontend/tsconfig.json,frontend/vite.config.ts,frontend/package.json,frontend/package-lock.json | 操作:Modify | 影响:前端主流程架构 | 说明:App切换到@别名导入并接入store/query/路由同步逻辑，main接入QueryClientProvider，构建配置增加@路径别名并安装wouter/zustand/react-query依赖 | 关联:task090
+- change265 日期:2026-02-27 | 文件:backend/internal/handler/server.go,frontend/src/api/client.ts | 操作:Modify | 影响:文章分页接口边界 | 说明:新增GET /api/v1/articles 的page/limit参数与limit+1 has_more分页语义，前端API层补齐分页参数透传接口 | 关联:task090
+- change266 日期:2026-02-27 | 文件:.rules | 操作:Modify | 影响:项目规范 | 说明:补充并固化“前端开发规范(TypeScript/React)”条款，明确目录、Hooks、Zustand、wouter与TanStack Query等强约束 | 关联:task090
+- change267 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task090 | 说明:新增并完成前端规范基建落地任务记录 | 关联:task090
+- change259 日期:2026-02-27 | 文件:frontend/src/components/article-list/*,frontend/src/components/article-detail/*,frontend/src/components/layout/*,frontend/src/components/ui/* | 操作:Modify | 影响:前端组件目录结构 | 说明:将原平铺组件按领域迁移到article-list/article-detail/layout/ui子目录并修正组件间相对引用，保持行为不变 | 关联:task089
+- change260 日期:2026-02-27 | 文件:frontend/src/components/index.ts,frontend/src/components/*/index.ts | 操作:Add | 影响:组件导出边界 | 说明:新增分层barrel导出文件并形成components统一入口，减少上层模块对具体文件路径的耦合 | 关联:task089
+- change261 日期:2026-02-27 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:主组件依赖管理 | 说明:App改为从components单入口导入布局/列表/详情组件和类型，收敛导入噪音并提升可维护性 | 关联:task089
+- change262 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task089 | 说明:新增并完成前端组件子目录分层重构任务记录 | 关联:task089
 - change256 日期:2026-02-27 | 文件:frontend/src/components/ArticleDetailTopBar.tsx,frontend/src/components/ArticleDetailContent.tsx | 操作:Modify | 影响:详情顶栏标题语义 | 说明:将顶栏固定“文章内容”改为动态文章标题并在未选中时显示引导文案，同时移除正文区重复标题 | 关联:task088
 - change257 日期:2026-02-27 | 文件:frontend/src/styles.css | 操作:Modify | 影响:详情标题样式 | 说明:新增detail-panel-title样式承接原大标题视觉并补充单行省略规则，保持顶栏布局稳定 | 关联:task088
 - change258 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task088 | 说明:新增并完成详情顶栏标题替换任务记录 | 关联:task088

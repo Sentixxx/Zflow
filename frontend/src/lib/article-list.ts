@@ -1,4 +1,4 @@
-import type { Article } from "../types";
+import type { Article } from "@/types";
 
 export type ReadFilter = "all" | "unread";
 export type SortMode = "latest" | "oldest";
