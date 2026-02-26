@@ -1,6 +1,7 @@
 import { ArticleDetailToolbar } from "./ArticleDetailToolbar";
 
 type ArticleDetailTopBarProps = {
+  title: string;
   canMarkUnread: boolean;
   canOpenSourceSite: boolean;
   canExtractReadable: boolean;
@@ -12,6 +13,7 @@ type ArticleDetailTopBarProps = {
 };
 
 export function ArticleDetailTopBar({
+  title,
   canMarkUnread,
   canOpenSourceSite,
   canExtractReadable,
@@ -23,7 +25,7 @@ export function ArticleDetailTopBar({
 }: ArticleDetailTopBarProps) {
   return (
     <div className="detail-panel-head">
-      <h2>文章内容</h2>
+      <h2 className="detail-panel-title">{title}</h2>
       <ArticleDetailToolbar
         canMarkUnread={canMarkUnread}
         canOpenSourceSite={canOpenSourceSite}

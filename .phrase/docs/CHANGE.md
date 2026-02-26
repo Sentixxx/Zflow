@@ -1,6 +1,12 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change256 日期:2026-02-27 | 文件:frontend/src/components/ArticleDetailTopBar.tsx,frontend/src/components/ArticleDetailContent.tsx | 操作:Modify | 影响:详情顶栏标题语义 | 说明:将顶栏固定“文章内容”改为动态文章标题并在未选中时显示引导文案，同时移除正文区重复标题 | 关联:task088
+- change257 日期:2026-02-27 | 文件:frontend/src/styles.css | 操作:Modify | 影响:详情标题样式 | 说明:新增detail-panel-title样式承接原大标题视觉并补充单行省略规则，保持顶栏布局稳定 | 关联:task088
+- change258 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task088 | 说明:新增并完成详情顶栏标题替换任务记录 | 关联:task088
+- change253 日期:2026-02-26 | 文件:frontend/src/components/ArticleDetailContent.tsx | 操作:Modify | 影响:详情正文渲染分层 | 说明:将详情内容按是否存在full_content区分为正文与摘要样式类，避免Readability原文沿用摘要样式导致尺寸失衡 | 关联:task087
+- change254 日期:2026-02-26 | 文件:frontend/src/styles.css | 操作:Modify | 影响:Readability正文排版与详情工具栏节奏 | 说明:新增detail-readable富文本样式规则（标题/列表/引用/代码/图片/表格）并统一详情区字号行距及顶部工具栏间距与图标方块尺寸 | 关联:task087
+- change255 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task087 | 说明:新增并完成Readability正文尺寸与详情区自然化样式优化任务记录 | 关联:task087
 - change249 日期:2026-02-26 | 文件:frontend/src/assets/mark-unread.svg,frontend/src/components/ArticleDetailToolbar.tsx | 操作:Add | 影响:标记未读按钮图标 | 说明:将下载的眼睛图标重命名为assets/mark-unread.svg并替换标记未读按钮字符图标为SVG资源 | 关联:task085
 - change250 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task085 | 说明:新增并完成标记未读按钮图标替换任务记录 | 关联:task085
 - change247 日期:2026-02-26 | 文件:frontend/src/assets/readability.svg,frontend/src/components/ArticleDetailToolbar.tsx | 操作:Add | 影响:Readability按钮图标 | 说明:将下载的阅读图标重命名为assets/readability.svg并替换Readability按钮文本占位图标为SVG资源 | 关联:task084

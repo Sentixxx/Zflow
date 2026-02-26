@@ -1,5 +1,13 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change256 日期:2026-02-27 | 文件:frontend/src/components/ArticleDetailTopBar.tsx,frontend/src/components/ArticleDetailContent.tsx | 操作:Modify | 影响:详情顶栏标题语义 | 说明:将顶栏固定“文章内容”改为动态文章标题并在未选中时显示引导文案，同时移除正文区重复标题 | 关联:task088
+change257 日期:2026-02-27 | 文件:frontend/src/styles.css | 操作:Modify | 影响:详情标题样式 | 说明:新增detail-panel-title样式承接原大标题视觉并补充单行省略规则，保持顶栏布局稳定 | 关联:task088
+change258 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task088 | 说明:新增并完成详情顶栏标题替换任务记录 | 关联:task088
+
+change253 日期:2026-02-26 | 文件:frontend/src/components/ArticleDetailContent.tsx | 操作:Modify | 影响:详情正文渲染分层 | 说明:将详情内容按是否存在full_content区分为正文与摘要样式类，避免Readability原文沿用摘要样式导致尺寸失衡 | 关联:task087
+change254 日期:2026-02-26 | 文件:frontend/src/styles.css | 操作:Modify | 影响:Readability正文排版与详情工具栏节奏 | 说明:新增detail-readable富文本样式规则（标题/列表/引用/代码/图片/表格）并统一详情区字号行距及顶部工具栏间距与图标方块尺寸 | 关联:task087
+change255 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task087 | 说明:新增并完成Readability正文尺寸与详情区自然化样式优化任务记录 | 关联:task087
+
 change251 日期:2026-02-26 | 文件:frontend/src/components/ArticleDetailToolbar.tsx,frontend/src/styles.css | 操作:Modify | 影响:详情工具栏图标间距一致性 | 说明:为三个图标新增固定16x16虚拟方块包裹并统一按钮尺寸/按钮间距，消除不同SVG内边距导致的视觉不齐 | 关联:task086
 change252 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task086 | 说明:新增并完成工具栏图标虚拟方块统一间距任务记录 | 关联:task086
 

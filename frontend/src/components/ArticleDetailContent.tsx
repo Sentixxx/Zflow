@@ -28,9 +28,14 @@ export function ArticleDetailContent({
   onOpenSourceSite,
   onExtractReadable,
 }: ArticleDetailContentProps) {
+  const hasFullContent = Boolean(sanitizedFullContentHTML);
+  const contentClassName = hasFullContent ? "detail-summary detail-readable" : "detail-summary";
+  const panelTitle = article ? article.title || "(无标题)" : "请选择一篇文章查看详情";
+
   return (
     <>
       <ArticleDetailTopBar
+        title={panelTitle}
         canMarkUnread={canMarkUnread}
         canOpenSourceSite={canOpenSourceSite}
         canExtractReadable={canExtractReadable}
@@ -44,7 +49,6 @@ export function ArticleDetailContent({
         {!article && <p className="detail-empty">请选择一篇文章查看详情</p>}
         {article && (
           <>
-            <h3 className="detail-title">{article.title || "(无标题)"}</h3>
             <p className="meta-row article-meta">
               <span>🗓 {article.published_at || "-"}</span>
               <span>{article.is_read ? "已读" : "未读"}</span>
@@ -59,11 +63,11 @@ export function ArticleDetailContent({
                 "-"
               )}
             </p>
-            <h4 className="detail-section-title">{sanitizedFullContentHTML ? "正文" : "摘要"}</h4>
-            {sanitizedFullContentHTML ? (
-              <div className="detail-summary" dangerouslySetInnerHTML={{ __html: sanitizedFullContentHTML }} />
+            <h4 className="detail-section-title">{hasFullContent ? "正文" : "摘要"}</h4>
+            {hasFullContent ? (
+              <div className={contentClassName} dangerouslySetInnerHTML={{ __html: sanitizedFullContentHTML }} />
             ) : sanitizedSummaryHTML ? (
-              <div className="detail-summary" dangerouslySetInnerHTML={{ __html: sanitizedSummaryHTML }} />
+              <div className={contentClassName} dangerouslySetInnerHTML={{ __html: sanitizedSummaryHTML }} />
             ) : (
               <p className="detail-summary">(无摘要)</p>
             )}

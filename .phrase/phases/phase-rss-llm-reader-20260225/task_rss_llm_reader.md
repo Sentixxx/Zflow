@@ -109,3 +109,5 @@ task083 [x] 场景:用户在文章详情工具栏一键抓取原始站点正文 
 task084 [x] 场景:用户将Readability按钮图标替换为指定素材以统一视觉 | Given:详情工具栏Readability按钮当前为文本占位图标 | When:将本地下载SVG重命名并放入前端assets后替换按钮图标 | Then:Readability按钮显示指定阅读图标且保留现有交互与禁用状态 | 验证:npm run build + npm run test + 手动测试
 task085 [x] 场景:用户将标记未读按钮图标替换为指定素材以统一视觉 | Given:详情工具栏标记未读按钮当前使用字符图标 | When:将本地下载眼睛SVG重命名并放入前端assets后替换按钮图标 | Then:标记未读按钮显示指定眼睛图标且保留现有交互与禁用状态 | 验证:npm run build + npm run test + 手动测试
 task086 [x] 场景:用户统一文章内容右侧图标按钮的视觉间距 | Given:不同SVG资源在viewBox内留白不一致导致视觉间距不齐 | When:将每个图标包裹在固定尺寸虚拟方块并统一按钮尺寸与工具栏间距 | Then:三个工具栏图标获得一致的视觉边界与对齐节奏且保持交互不变 | 验证:npm run build + 手动测试
+task087 [x] 场景:用户阅读Readability抓取原文时获得自然且稳定的正文排版 | Given:详情区同时存在摘要文本与Readability抽取HTML正文 | When:打开含full_content的文章并浏览标题/段落/图片/代码块与详情工具栏 | Then:Readability正文使用独立字号与行距并正确约束富文本元素尺寸+详情区头部与图标工具栏间距更协调 | 验证:npm run build + 手动测试
+task088 [x] 场景:用户在文章详情顶栏直接看到当前文章标题 | Given:详情区顶栏标题固定显示“文章内容”且正文区域重复展示文章标题 | When:用户打开任意文章详情 | Then:顶栏标题替换为当前文章标题并在未选中文章时显示引导文案+正文区域不再重复显示同名标题 | 验证:npm run build + 手动测试
