@@ -1095,8 +1095,12 @@ export function App() {
             ⋯
           </button>
         </div>
-        {expanded && folderFeeds.map((feed) => renderFeedNode(feed, paddingLeft + 18))}
-        {expanded && children.map((child) => renderFolderNode(child, depth + 1))}
+        <div className={`folder-children ${expanded ? "expanded" : "collapsed"}`}>
+          <div className="folder-children-inner">
+            {folderFeeds.map((feed) => renderFeedNode(feed, paddingLeft + 18))}
+            {children.map((child) => renderFolderNode(child, depth + 1))}
+          </div>
+        </div>
       </div>
     );
   };
@@ -1210,6 +1214,7 @@ export function App() {
 
         <section className="panel detail-panel">
           <ArticleDetailContent
+            key={selectedArticle?.id ?? "empty"}
             article={selectedArticle}
             sanitizedSummaryHTML={sanitizedSummaryHTML}
             sanitizedFullContentHTML={sanitizedFullContentHTML}

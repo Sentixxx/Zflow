@@ -1,5 +1,17 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change281 日期:2026-02-27 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:分组展开与详情切换动效触发 | 说明:分组节点改为容器渲染并通过expanded/collapsed类驱动展开动画，文章详情组件按文章id重挂载以触发轻量淡入过渡 | 关联:task096
+change282 日期:2026-02-27 | 文件:frontend/src/styles.css | 操作:Modify | 影响:全局交互动效 | 说明:统一布局/侧栏/列表项/按钮过渡曲线并新增分组展开动画与详情淡入动画，同时补充prefers-reduced-motion降级规则 | 关联:task096
+change283 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task096 | 说明:新增并完成页面交互动效平滑化任务记录 | 关联:task096
+
+change278 日期:2026-02-27 | 文件:frontend/src/components/article-detail/ArticleFloatingActions.tsx | 操作:Modify | 影响:悬浮侧栏结构 | 说明:悬浮侧栏新增右下感应区容器并将按钮改为纯图标展示，保留tooltip提示以支撑后续功能接入 | 关联:task095
+change279 日期:2026-02-27 | 文件:frontend/src/styles.css | 操作:Modify | 影响:悬浮侧栏显隐交互 | 说明:新增右下靠近触发的隐藏/显现动画与圆形图标按钮样式，桌面默认隐藏靠近显示，移动端保持可见 | 关联:task095
+change280 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task095 | 说明:新增并完成悬浮侧栏图标化与靠近显现任务记录 | 关联:task095
+
+change275 日期:2026-02-27 | 文件:frontend/src/components/article-detail/ArticleFloatingActions.tsx,frontend/src/components/article-detail/ArticleDetailContent.tsx,frontend/src/components/article-detail/index.ts | 操作:Add | 影响:文章详情悬浮侧栏UI | 说明:新增右下悬浮快捷操作组件并在详情内容区挂载，包含回到顶部/一键翻译按钮（仅UI占位） | 关联:task094
+change276 日期:2026-02-27 | 文件:frontend/src/styles.css | 操作:Modify | 影响:悬浮侧栏视觉样式 | 说明:新增悬浮侧栏容器、按钮、图标与移动端位置/尺寸适配样式，固定在右下偏下位置 | 关联:task094
+change277 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task094 | 说明:新增并完成文章详情悬浮侧栏UI任务记录 | 关联:task094
+
 change273 日期:2026-02-27 | 文件:frontend/src/App.tsx,frontend/src/components/article-detail/ArticleDetailToolbar.tsx | 操作:Modify | 影响:详情来源跳转行为 | 说明:来源按钮改为优先打开文章原始链接（article.link）并仅在缺失时回退站点origin，同时更新tooltip与aria文案为打开原文链接 | 关联:task093
 change274 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task093 | 说明:新增并完成来源按钮打开原文链接修复任务记录 | 关联:task093
 

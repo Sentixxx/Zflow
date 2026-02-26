@@ -1,5 +1,6 @@
 import type { Article } from "@/types";
 import { ArticleDetailTopBar } from "./ArticleDetailTopBar";
+import { ArticleFloatingActions } from "./ArticleFloatingActions";
 
 type ArticleDetailContentProps = {
   article: Article | null;
@@ -74,6 +75,7 @@ export function ArticleDetailContent({
           </>
         )}
       </div>
+      {article && <ArticleFloatingActions />}
     </>
   );
 }
