@@ -1,6 +1,50 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change249 日期:2026-02-26 | 文件:frontend/src/assets/mark-unread.svg,frontend/src/components/ArticleDetailToolbar.tsx | 操作:Add | 影响:标记未读按钮图标 | 说明:将下载的眼睛图标重命名为assets/mark-unread.svg并替换标记未读按钮字符图标为SVG资源 | 关联:task085
+- change250 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task085 | 说明:新增并完成标记未读按钮图标替换任务记录 | 关联:task085
+- change247 日期:2026-02-26 | 文件:frontend/src/assets/readability.svg,frontend/src/components/ArticleDetailToolbar.tsx | 操作:Add | 影响:Readability按钮图标 | 说明:将下载的阅读图标重命名为assets/readability.svg并替换Readability按钮文本占位图标为SVG资源 | 关联:task084
+- change248 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task084 | 说明:新增并完成Readability按钮图标替换任务记录 | 关联:task084
+- change242 日期:2026-02-26 | 文件:backend/internal/handler/server.go,backend/internal/handler/server_test.go | 操作:Modify | 影响:文章详情Readability抽取 | 说明:新增POST /api/v1/articles/{id}/readability接口并接入go-readability抽取逻辑，写回entries.full_content并补充接口回归测试 | 关联:task083
+- change243 日期:2026-02-26 | 文件:backend/go.mod,backend/go.sum | 操作:Modify | 影响:后端依赖 | 说明:新增go-readability及其依赖以支持服务端Readability抽取 | 关联:task083
+- change244 日期:2026-02-26 | 文件:frontend/src/api.ts,frontend/src/App.tsx | 操作:Modify | 影响:前端抓取原文调用链 | 说明:新增extractArticleReadable API并在App中接入抓取状态管理与详情实时更新 | 关联:task083
+- change245 日期:2026-02-26 | 文件:frontend/src/components/ArticleDetailContent.tsx,frontend/src/components/ArticleDetailTopBar.tsx,frontend/src/components/ArticleDetailToolbar.tsx | 操作:Modify | 影响:详情工具栏功能 | 说明:详情工具栏新增Readability按钮并通过组件props贯通抓取能力、禁用态与提示文案 | 关联:task083
+- change246 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task083 | 说明:新增并完成Readability抓取原文任务记录 | 关联:task083
+- change239 日期:2026-02-26 | 文件:frontend/src/components/ToolbarIconButton.tsx,frontend/src/components/ArticleDetailToolbar.tsx | 操作:Add | 影响:详情工具栏按钮渲染 | 说明:新增通用ToolbarIconButton并让ArticleDetailToolbar改为配置式组合，统一右侧按钮渲染入口 | 关联:task082
+- change240 日期:2026-02-26 | 文件:frontend/src/styles.css | 操作:Modify | 影响:详情按钮样式管理 | 说明:将详情右侧按钮样式类统一为toolbar-icon-btn并保留原有悬浮/按压/禁用反馈 | 关联:task082
+- change241 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task082 | 说明:新增并完成文章内容右侧按钮样式统一管理任务记录 | 关联:task082
+- change236 日期:2026-02-26 | 文件:frontend/src/components/ArticleDetailTopBar.tsx,frontend/src/components/ArticleDetailContent.tsx | 操作:Modify | 影响:文章内容内部结构 | 说明:新增ArticleDetailTopBar并将文章内容组件改为内部组合顶栏+正文，顶栏复用详情工具栏组件 | 关联:task081
+- change237 日期:2026-02-26 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:详情区编排职责 | 说明:移除App内文章内容顶栏结构并改为向ArticleDetailContent传递工具栏能力参数，进一步降低主组件渲染复杂度 | 关联:task081
+- change238 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task081 | 说明:新增并完成文章内容组件内顶栏子组件化任务记录 | 关联:task081
+- change233 日期:2026-02-26 | 文件:frontend/src/components/ArticleList.tsx,frontend/src/components/ArticleDetailContent.tsx | 操作:Add | 影响:文章区组件化 | 说明:新增文章列表主体与详情正文组件，承接原App内文章卡片映射和详情内容渲染逻辑 | 关联:task080
+- change234 日期:2026-02-26 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:主组件职责 | 说明:将文章列表与详情正文渲染替换为组件组合调用，保留既有状态与事件编排不变并修正RssFallbackIcon导入 | 关联:task080
+- change235 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task080 | 说明:新增并完成进一步组件化拆分任务记录 | 关联:task080
+- change229 日期:2026-02-26 | 文件:frontend/src/components/TopBar.tsx,frontend/src/components/RefreshFailureBanner.tsx | 操作:Add | 影响:顶部区域组件化 | 说明:新增TopBar与RefreshFailureBanner组件，将顶部刷新交互与失败提示从App.tsx拆出为独立可复用视图 | 关联:task079
+- change230 日期:2026-02-26 | 文件:frontend/src/components/ArticleListToolbar.tsx,frontend/src/components/ArticleDetailToolbar.tsx | 操作:Add | 影响:工具栏组件化 | 说明:新增文章列表筛选工具栏和详情工具栏组件，统一按钮渲染并通过props保持现有交互语义 | 关联:task079
+- change231 日期:2026-02-26 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:主组件复杂度 | 说明:App.tsx改为组合式渲染并复用四个新组件，保留原有状态管理与业务流程不变 | 关联:task079
+- change232 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task079 | 说明:新增并完成前端主界面组件化拆分任务记录 | 关联:task079
+- change227 日期:2026-02-26 | 文件:frontend/src/assets/source-site.svg,frontend/src/App.tsx,frontend/src/styles.css | 操作:Add | 影响:来源网站图标资源化 | 说明:将来源网站SVG落地到assets目录并改为组件引用资源文件，移除内联SVG长路径并保持按钮视觉与行为一致 | 关联:task078
+- change228 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task078 | 说明:新增并完成来源网站SVG资源化任务记录 | 关联:task078
+- change225 日期:2026-02-26 | 文件:frontend/src/App.tsx,frontend/src/styles.css | 操作:Modify | 影响:文章详情工具栏图标一致性 | 说明:将来源网站按钮改为与标记未读一致的无边框图标按钮并使用🌏图标，移除旧文本按钮样式 | 关联:task077
+- change226 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task077 | 说明:新增并完成来源网站图标化与风格统一任务记录 | 关联:task077
+- change222 日期:2026-02-26 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:文章详情工具栏交互 | 说明:将标记未读按钮从底部移动到右上角工具栏并改为图标按钮，未选中文章或已未读状态时禁用 | 关联:task076
+- change223 日期:2026-02-26 | 文件:frontend/src/styles.css | 操作:Modify | 影响:详情工具栏视觉 | 说明:新增无边框图标按钮样式并提供悬浮、按压与禁用反馈，移除底部detail-actions样式依赖 | 关联:task076
+- change224 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task076 | 说明:新增并完成详情工具栏标记未读图标化任务记录 | 关联:task076
+- change221 日期:2026-02-26 | 文件:frontend/src/App.tsx,frontend/src/styles.css | 操作:Modify | 影响:文章详情工具栏布局 | 说明:将来源网站按钮从详情底部动作区移动到详情面板右上角工具栏并新增头部布局样式，保留标记未读按钮在底部 | 关联:task075
+- change219 日期:2026-02-26 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:文章详情操作区 | 说明:新增来源网站按钮并按文章链接域名优先、订阅源域名兜底解析来源站点，在新标签页打开且缺失URL时禁用按钮 | 关联:task075
+- change220 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task075 | 说明:新增并完成文章详情来源网站跳转任务记录 | 关联:task075
+- change217 日期:2026-02-26 | 文件:frontend/src/App.tsx,frontend/src/styles.css | 操作:Modify | 影响:文章列表筛选按钮提示 | 说明:为已读筛选与排序筛选按钮新增可见tooltip提示并调整为纯状态文案（无点击引导语） | 关联:task074
+- change218 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task074 | 说明:新增并完成筛选按钮提示文本任务记录 | 关联:task074
+- change211 日期:2026-02-26 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:远端抓取失败可观测性 | 说明:新增远端抓取失败订阅源列表状态并在顶部渲染可关闭失败面板，直接展示失败源与错误原因 | 关联:task072
+- change212 日期:2026-02-26 | 文件:frontend/src/styles.css | 操作:Modify | 影响:刷新按钮提示与尺寸 | 说明:将刷新tooltip调整到按钮下方并限制宽度防止越界，同时放大刷新按钮与图标尺寸提升可读性 | 关联:task072
+- change213 日期:2026-02-26 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:文章列表来源展示 | 说明:全部文章卡片来源行新增站点icon渲染并按feed_id严格匹配对应icon_url，加载失败回退默认RSS图标 | 关联:task073
+- change214 日期:2026-02-26 | 文件:frontend/src/styles.css | 操作:Modify | 影响:文章来源图标样式 | 说明:新增文章来源行图标尺寸与对齐样式，保证图标与来源名称视觉一致 | 关联:task073
+- change215 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task072 | 说明:新增并完成远端抓取失败可见性与刷新提示细节优化任务记录 | 关联:task072
+- change216 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task073 | 说明:新增并完成全部文章来源图标展示任务记录 | 关联:task073
+- change207 日期:2026-02-26 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:刷新执行链路 | 说明:远端抓取刷新改为Promise.allSettled并输出成功/失败汇总，避免单个订阅源失败导致整体刷新中断 | 关联:task071
+- change208 日期:2026-02-26 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:刷新按钮状态管理 | 说明:新增文章刷新与订阅远端抓取的loading状态和禁用逻辑，防止重复点击触发并发刷新 | 关联:task071
+- change209 日期:2026-02-26 | 文件:frontend/src/styles.css | 操作:Modify | 影响:顶部刷新按钮交互反馈 | 说明:刷新按钮改为更自然的圆角样式并新增悬浮tooltip与loading旋转动画 | 关联:task071
+- change210 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task071 | 说明:新增并完成刷新稳定性与提示反馈任务记录 | 关联:task071
 - change202 日期:2026-02-26 | 文件:.rules | 操作:Modify | 影响:前端工程规范 | 说明:融合Gist前端规范并补齐架构组件、性能工程、安全渲染、深色模式、状态与资源管理、PWA边界与Vitest测试约束 | 关联:task070
 - change203 日期:2026-02-26 | 文件:frontend/src/App.tsx,frontend/src/lib/feed-utils.ts,frontend/src/lib/sanitize.ts,frontend/src/components/RssFallbackIcon.tsx,frontend/src/types.ts | 操作:Modify | 影响:前端架构与安全渲染 | 说明:抽离feed域名图标复用与HTML清洗工具、提取RSS占位组件并同步前端类型，降低App复杂度且保持功能不变 | 关联:task070
 - change204 日期:2026-02-26 | 文件:frontend/src/styles.css | 操作:Modify | 影响:主题系统 | 说明:引入语义化主题变量并支持prefers-color-scheme深色模式，不改变现有交互逻辑 | 关联:task070

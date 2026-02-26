@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiClient } from "./api";
 import type { Article, Feed, Folder } from "./types";
-import { filterAndSortArticles, formatArticleTime } from "./lib/article-list";
+import { filterAndSortArticles } from "./lib/article-list";
 import type { ReadFilter, SortMode } from "./lib/article-list";
 import { sanitizeRichHTML } from "./lib/sanitize";
 import { buildFeedIconURLByHost, feedHost } from "./lib/feed-utils";
 import { RssFallbackIcon } from "./components/RssFallbackIcon";
+import { TopBar } from "./components/TopBar";
+import { RefreshFailureBanner } from "./components/RefreshFailureBanner";
+import type { RefreshFailure } from "./components/RefreshFailureBanner";
+import { ArticleListToolbar } from "./components/ArticleListToolbar";
+import { ArticleList } from "./components/ArticleList";
+import { ArticleDetailContent } from "./components/ArticleDetailContent";
 
 const DEFAULT_API_BASE = "http://localhost:8080";
 const PREFETCH_BATCH_SIZE = 20;
@@ -36,6 +42,15 @@ function scriptLangByFileName(name: string): ScriptLang | null {
   if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) return "javascript";
   if (lower.endsWith(".sh") || lower.endsWith(".bash") || lower.endsWith(".zsh")) return "shell";
   return null;
+}
+
+function toWebsiteOrigin(raw: string | undefined): string {
+  if (!raw) return "";
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return "";
+  }
 }
 
 export function App() {
@@ -78,6 +93,10 @@ export function App() {
   const [dragOverDeleteZone, setDragOverDeleteZone] = useState<boolean>(false);
   const [pendingDeleteFeed, setPendingDeleteFeed] = useState<Feed | null>(null);
   const [listBounce, setListBounce] = useState<boolean>(false);
+  const [isRefreshingArticles, setIsRefreshingArticles] = useState<boolean>(false);
+  const [isRefreshingFeeds, setIsRefreshingFeeds] = useState<boolean>(false);
+  const [isExtractingReadable, setIsExtractingReadable] = useState<boolean>(false);
+  const [refreshFailures, setRefreshFailures] = useState<RefreshFailure[]>([]);
   const [status, setStatus] = useState("准备就绪");
   const [error, setError] = useState("");
   const lastLoadAtRef = useRef<number>(0);
@@ -94,6 +113,11 @@ export function App() {
   const feedNameByID = useMemo(() => {
     const map = new Map<number, string>();
     feeds.forEach((feed) => map.set(feed.id, feed.title || feed.url || `#${feed.id}`));
+    return map;
+  }, [feeds]);
+  const feedByID = useMemo(() => {
+    const map = new Map<number, Feed>();
+    feeds.forEach((feed) => map.set(feed.id, feed));
     return map;
   }, [feeds]);
   const feedIconURLByHost = useMemo(() => buildFeedIconURLByHost(feeds, apiBase), [feeds, apiBase]);
@@ -178,6 +202,17 @@ export function App() {
     }
     return "全部文章";
   }, [selectedFeedID, selectedFolderID, feedNameByID, folderNameByID]);
+  const selectedArticleSourceSiteURL = useMemo(() => {
+    if (!selectedArticle) {
+      return "";
+    }
+    const byArticleLink = toWebsiteOrigin(selectedArticle.link);
+    if (byArticleLink) {
+      return byArticleLink;
+    }
+    const sourceFeed = feedByID.get(selectedArticle.feed_id);
+    return toWebsiteOrigin(sourceFeed?.url);
+  }, [selectedArticle, feedByID]);
 
   const setMessage = (message: string, isError = false) => {
     if (isError) {
@@ -213,13 +248,17 @@ export function App() {
     }
   };
 
-  const loadFeeds = async () => {
+  const loadFeeds = async (options?: { silentStatus?: boolean }) => {
     try {
       const data = await client.listFeeds();
       setFeeds(data);
-      setMessage("订阅列表已刷新");
+      if (!options?.silentStatus) {
+        setMessage("订阅列表已刷新");
+      }
+      return data;
     } catch (e) {
       setMessage((e as Error).message, true);
+      return null;
     }
   };
 
@@ -232,13 +271,15 @@ export function App() {
     }
   };
 
-  const loadArticles = async (): Promise<Article[] | null> => {
+  const loadArticles = async (options?: { silentStatus?: boolean }): Promise<Article[] | null> => {
     try {
       const data = await client.listArticles();
       setArticles(data);
       setBufferedCount(PREFETCH_BATCH_SIZE);
       setVisibleCount(VISIBLE_STEP_SIZE);
-      setMessage("文章列表已刷新");
+      if (!options?.silentStatus) {
+        setMessage("文章列表已刷新");
+      }
       return data;
     } catch (e) {
       setMessage((e as Error).message, true);
@@ -247,19 +288,68 @@ export function App() {
   };
 
   const refreshFeedsFromNetwork = async () => {
+    if (isRefreshingFeeds) {
+      return;
+    }
+    setIsRefreshingFeeds(true);
+    setRefreshFailures([]);
     try {
-      setMessage("正在刷新订阅源...");
+      setMessage("正在远端抓取订阅源...");
       const currentFeeds = await client.listFeeds();
       if (currentFeeds.length === 0) {
         setMessage("暂无订阅源可刷新");
         return;
       }
-      await Promise.all(currentFeeds.map((feed) => client.refreshFeed(feed.id)));
-      await Promise.all([loadFeeds(), loadArticles()]);
-      setMessage("订阅源刷新完成");
+      const settled = await Promise.allSettled(currentFeeds.map((feed) => client.refreshFeed(feed.id)));
+      const successCount = settled.filter((item) => item.status === "fulfilled").length;
+      const failedCount = settled.length - successCount;
+      const failures: RefreshFailure[] = settled.flatMap((item, index) => {
+        if (item.status === "fulfilled") {
+          return [];
+        }
+        const feed = currentFeeds[index];
+        const reason = item.reason instanceof Error ? item.reason.message : String(item.reason || "未知错误");
+        return [
+          {
+            feedID: feed.id,
+            feedTitle: feed.title || feed.url || `#${feed.id}`,
+            reason,
+          },
+        ];
+      });
+      setRefreshFailures(failures);
+      await Promise.all([loadFeeds({ silentStatus: true }), loadArticles({ silentStatus: true })]);
+      if (failedCount > 0) {
+        setMessage(`订阅源刷新完成：成功 ${successCount}，失败 ${failedCount}`);
+      } else {
+        setRefreshFailures([]);
+        setMessage(`订阅源刷新完成：成功 ${successCount}`);
+      }
     } catch (e) {
       setMessage((e as Error).message, true);
+    } finally {
+      setIsRefreshingFeeds(false);
     }
+  };
+
+  const handleRefreshArticles = async () => {
+    if (isRefreshingArticles) {
+      return;
+    }
+    setIsRefreshingArticles(true);
+    setMessage("正在刷新文章...");
+    try {
+      const data = await loadArticles({ silentStatus: true });
+      if (data) {
+        setMessage("文章列表已刷新");
+      }
+    } finally {
+      setIsRefreshingArticles(false);
+    }
+  };
+
+  const handleRefreshFeeds = async () => {
+    await loadFeeds();
   };
 
   const addFeed = async () => {
@@ -351,6 +441,31 @@ export function App() {
       setMessage("文章已标记为未读");
     } catch (e) {
       setMessage((e as Error).message, true);
+    }
+  };
+
+  const openSourceWebsite = () => {
+    if (!selectedArticleSourceSiteURL) {
+      return;
+    }
+    window.open(selectedArticleSourceSiteURL, "_blank", "noopener,noreferrer");
+  };
+
+  const extractReadableContent = async () => {
+    if (!selectedArticle || isExtractingReadable) {
+      return;
+    }
+    setIsExtractingReadable(true);
+    setMessage("正在使用 Readability 抓取原文...");
+    try {
+      const updated = await client.extractArticleReadable(selectedArticle.id);
+      setSelectedArticle(updated);
+      setArticles((current) => current.map((entry) => (entry.id === updated.id ? { ...entry, full_content: updated.full_content } : entry)));
+      setMessage("原文抓取完成");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    } finally {
+      setIsExtractingReadable(false);
     }
   };
 
@@ -1014,21 +1129,15 @@ export function App() {
 
   return (
     <div className="shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">▸</span>
-          <h1>Zflow</h1>
-        </div>
-        <div className={`top-status ${error ? "error" : ""}`}>{error || status}</div>
-        <div className="top-actions">
-          <button className="icon-btn" onClick={loadArticles} title="刷新文章">
-            ⟳
-          </button>
-          <button className="icon-btn" onClick={refreshFeedsFromNetwork} title="刷新订阅">
-            ◎
-          </button>
-        </div>
-      </header>
+      <TopBar
+        statusText={error || status}
+        isError={Boolean(error)}
+        isRefreshingArticles={isRefreshingArticles}
+        isRefreshingFeeds={isRefreshingFeeds}
+        onRefreshArticles={handleRefreshArticles}
+        onRefreshFeeds={refreshFeedsFromNetwork}
+      />
+      <RefreshFailureBanner failures={refreshFailures} onClose={() => setRefreshFailures([])} />
 
       <main className={`layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={layoutStyle}>
         <section className={`panel sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
@@ -1100,46 +1209,19 @@ export function App() {
         <section className="panel list-panel">
           <div className="list-header">
             <h2>{articleListTitle}</h2>
-            <div className="list-toolbar">
-              <button
-                className={`list-icon-btn ${readFilter === "unread" ? "is-unread" : "is-read"}`}
-                onClick={toggleReadFilter}
-                title={readFilter === "unread" ? "当前仅显示未读，点击显示全部" : "当前显示全部，点击仅显示未读"}
-                aria-label={readFilter === "unread" ? "仅显示未读" : "显示全部（含已读）"}
-              >
-                <span className="glyph">{readFilter === "unread" ? "○" : "●"}</span>
-              </button>
-              <button
-                className={`list-icon-btn ${sortMode === "latest" ? "sort-latest" : "sort-oldest"}`}
-                onClick={toggleSortMode}
-                title={sortMode === "latest" ? "当前最新优先，点击切换最早优先" : "当前最早优先，点击切换最新优先"}
-                aria-label={sortMode === "latest" ? "最新优先" : "最早优先"}
-              >
-                <span className="glyph">{sortMode === "latest" ? "↓" : "↑"}</span>
-              </button>
-            </div>
+            <ArticleListToolbar readFilter={readFilter} sortMode={sortMode} onToggleReadFilter={toggleReadFilter} onToggleSortMode={toggleSortMode} />
           </div>
           <div className={`list article-list ${listBounce ? "bounce" : ""}`} onScroll={onArticleListScroll}>
-            {pagedArticles.length === 0 && <div className="item">暂无文章</div>}
-            {pagedArticles.map((article) => (
-              <button
-                key={article.id}
-                className={`item article ${selectedArticle?.id === article.id ? "active" : ""}`}
-                onClick={() => selectArticle(article.id)}
-                title={article.is_read ? "已读文章，点击查看详情" : "未读文章，点击查看并自动标记已读"}
-              >
-                <div className="article-source">{feedNameByID.get(article.feed_id) || `订阅源 #${article.feed_id}`}</div>
-                <div>
-                  <strong className="article-title">{article.title || "(无标题)"}</strong>
-                  <span className={`pill ${article.is_read ? "read" : "unread"}`} title={article.is_read ? "已读状态" : "未读状态"}>
-                    {article.is_read ? "已读" : "未读"}
-                  </span>
-                </div>
-                <div className="meta">
-                  {formatArticleTime(article.published_at || article.created_at)}
-                </div>
-              </button>
-            ))}
+            <ArticleList
+              articles={pagedArticles}
+              selectedArticleID={selectedArticle?.id ?? null}
+              feedByID={feedByID}
+              feedNameByID={feedNameByID}
+              apiBase={apiBase}
+              onSelectArticle={(id) => {
+                void selectArticle(id);
+              }}
+            />
           </div>
           <div className="pager">
             <span className="meta">
@@ -1153,42 +1235,19 @@ export function App() {
         )}
 
         <section className="panel detail-panel">
-          <h2>文章内容</h2>
-          <div className="detail">
-            {!selectedArticle && <p className="detail-empty">请选择一篇文章查看详情</p>}
-            {selectedArticle && (
-              <>
-                <h3 className="detail-title">{selectedArticle.title || "(无标题)"}</h3>
-                <p className="meta-row article-meta">
-                  <span>🗓 {selectedArticle.published_at || "-"}</span>
-                  <span>{selectedArticle.is_read ? "已读" : "未读"}</span>
-                </p>
-                <p className="meta detail-link">
-                  链接：
-                  {selectedArticle.link ? (
-                    <a href={selectedArticle.link} target="_blank" rel="noreferrer">
-                      {selectedArticle.link}
-                    </a>
-                  ) : (
-                    "-"
-                  )}
-                </p>
-                <h4 className="detail-section-title">{sanitizedFullContentHTML ? "正文" : "摘要"}</h4>
-                {sanitizedFullContentHTML ? (
-                  <div className="detail-summary" dangerouslySetInnerHTML={{ __html: sanitizedFullContentHTML }} />
-                ) : sanitizedSummaryHTML ? (
-                  <div className="detail-summary" dangerouslySetInnerHTML={{ __html: sanitizedSummaryHTML }} />
-                ) : (
-                  <p className="detail-summary">(无摘要)</p>
-                )}
-                <div className="row detail-actions">
-                  <button className="secondary" onClick={markUnread} title="将当前文章改为未读">
-                    标记未读
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <ArticleDetailContent
+            article={selectedArticle}
+            sanitizedSummaryHTML={sanitizedSummaryHTML}
+            sanitizedFullContentHTML={sanitizedFullContentHTML}
+            canMarkUnread={Boolean(selectedArticle?.is_read)}
+            canOpenSourceSite={Boolean(selectedArticleSourceSiteURL)}
+            canExtractReadable={Boolean(selectedArticle?.link)}
+            isExtractingReadable={isExtractingReadable}
+            sourceSiteURL={selectedArticleSourceSiteURL}
+            onMarkUnread={markUnread}
+            onOpenSourceSite={openSourceWebsite}
+            onExtractReadable={extractReadableContent}
+          />
         </section>
       </main>
 
@@ -1291,13 +1350,13 @@ export function App() {
                     </div>
                     <div className="row settings-actions">
                       <button onClick={addFeed}>添加并首抓</button>
-                      <button className="secondary" onClick={loadFeeds}>
+                      <button className="secondary" onClick={handleRefreshFeeds}>
                         刷新订阅
                       </button>
-                      <button className="secondary" onClick={refreshFeedsFromNetwork}>
+                      <button className="secondary" onClick={refreshFeedsFromNetwork} disabled={isRefreshingFeeds || isRefreshingArticles}>
                         远端抓取
                       </button>
-                      <button className="secondary" onClick={loadArticles}>
+                      <button className="secondary" onClick={handleRefreshArticles} disabled={isRefreshingArticles || isRefreshingFeeds}>
                         刷新文章
                       </button>
                     </div>

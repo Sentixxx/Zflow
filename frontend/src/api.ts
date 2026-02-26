@@ -130,6 +130,12 @@ export class ApiClient {
     });
   }
 
+  async extractArticleReadable(id: number): Promise<Article> {
+    return this.request<Article>(`/api/v1/articles/${id}/readability`, {
+      method: "POST",
+    });
+  }
+
   async exportProfile(): Promise<Blob> {
     const response = await fetch(this.buildURL("/api/v1/data/export/profile"));
     if (!response.ok) {

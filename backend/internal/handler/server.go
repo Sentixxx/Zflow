@@ -25,6 +25,7 @@ import (
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
 	"github.com/Sentixxx/Zflow/backend/internal/service"
 	"github.com/Sentixxx/Zflow/backend/pkg/logger"
+	readability "github.com/go-shiori/go-readability"
 )
 
 type Server struct {
@@ -894,7 +895,72 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "readability" {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		article, ok := s.store.GetArticle(id)
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
+			return
+		}
+		if strings.TrimSpace(article.Link) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "article link is empty"})
+			return
+		}
+		content, err := s.fetchReadableContent(r.Context(), article.Link)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "readability fetch failed: " + err.Error()})
+			return
+		}
+		if err := s.store.UpdateArticleFullContent(id, content); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save extracted content"})
+			return
+		}
+		updated, ok := s.store.GetArticle(id)
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "article not found"})
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+		return
+	}
+
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+}
+
+func (s *Server) fetchReadableContent(ctx context.Context, rawURL string) (string, error) {
+	parsedURL, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return "", fmt.Errorf("invalid url: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Zflow/0.1 (+https://github.com/Sentixxx/Zflow)")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	resp, err := s.httpClient().Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("upstream status %d", resp.StatusCode)
+	}
+	doc, err := readability.FromReader(resp.Body, parsedURL)
+	if err != nil {
+		return "", err
+	}
+	content := strings.TrimSpace(doc.Content)
+	if content == "" {
+		content = strings.TrimSpace(doc.TextContent)
+	}
+	if content == "" {
+		return "", errors.New("empty readable content")
+	}
+	return content, nil
 }
 
 type fetchResult struct {

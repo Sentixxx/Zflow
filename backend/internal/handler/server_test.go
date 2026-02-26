@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
@@ -173,5 +174,91 @@ func TestCORSPreflightAndHeaders(t *testing.T) {
 	}
 	if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
 		t.Fatalf("Access-Control-Allow-Origin = %q, want *", rr.Header().Get("Access-Control-Allow-Origin"))
+	}
+}
+
+func TestArticleReadabilityExtraction(t *testing.T) {
+	articleHTML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html>
+<html><head><title>Readable</title></head>
+<body>
+  <article>
+    <h1>Readable Title</h1>
+    <p>这是 Readability 抽取测试段落。</p>
+  </article>
+</body></html>`))
+	}))
+	defer articleHTML.Close()
+
+	feedXML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Readability Feed</title>
+    <item>
+      <title>Readability Item</title>
+      <link>` + articleHTML.URL + `</link>
+      <description>desc</description>
+      <pubDate>Wed, 25 Feb 2026 11:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>`))
+	}))
+	defer feedXML.Close()
+
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	feedService := service.NewFeedService(repo)
+	server := NewServer(feedService, t.TempDir())
+
+	createBody, _ := json.Marshal(map[string]string{"url": feedXML.URL})
+	reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/feeds", bytes.NewReader(createBody))
+	rrCreate := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrCreate, reqCreate)
+	if rrCreate.Code != http.StatusCreated {
+		t.Fatalf("POST /api/v1/feeds status = %d, want %d", rrCreate.Code, http.StatusCreated)
+	}
+
+	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/articles", nil)
+	rrList := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrList, reqList)
+	if rrList.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles status = %d, want %d", rrList.Code, http.StatusOK)
+	}
+	var listResp struct {
+		Articles []struct {
+			ID int64 `json:"id"`
+		} `json:"articles"`
+	}
+	if err := json.Unmarshal(rrList.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("unmarshal list response error = %v", err)
+	}
+	if len(listResp.Articles) != 1 {
+		t.Fatalf("articles len = %d, want 1", len(listResp.Articles))
+	}
+
+	articleID := listResp.Articles[0].ID
+	reqReadable := httptest.NewRequest(http.MethodPost, "/api/v1/articles/"+strconv.FormatInt(articleID, 10)+"/readability", nil)
+	rrReadable := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrReadable, reqReadable)
+	if rrReadable.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/articles/:id/readability status = %d, want %d, body=%s", rrReadable.Code, http.StatusOK, rrReadable.Body.String())
+	}
+
+	var detailResp struct {
+		FullContent string `json:"full_content"`
+	}
+	if err := json.Unmarshal(rrReadable.Body.Bytes(), &detailResp); err != nil {
+		t.Fatalf("unmarshal readability response error = %v", err)
+	}
+	if detailResp.FullContent == "" {
+		t.Fatalf("full_content is empty, want non-empty")
+	}
+	if !strings.Contains(detailResp.FullContent, "Readability 抽取测试段落") {
+		t.Fatalf("full_content = %q, want contains readability text", detailResp.FullContent)
 	}
 }
