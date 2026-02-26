@@ -52,10 +52,10 @@ function scriptLangByFileName(name: string): ScriptLang | null {
   return null;
 }
 
-function toWebsiteOrigin(raw: string | undefined): string {
+function toValidURL(raw: string | undefined): string {
   if (!raw) return "";
   try {
-    return new URL(raw).origin;
+    return new URL(raw).toString();
   } catch {
     return "";
   }
@@ -225,16 +225,20 @@ export function App() {
     }
     return "全部文章";
   }, [selectedFeedID, selectedFolderID, feedNameByID, folderNameByID]);
-  const selectedArticleSourceSiteURL = useMemo(() => {
+  const selectedArticleOpenURL = useMemo(() => {
     if (!selectedArticle) {
       return "";
     }
-    const byArticleLink = toWebsiteOrigin(selectedArticle.link);
+    const byArticleLink = toValidURL(selectedArticle.link);
     if (byArticleLink) {
       return byArticleLink;
     }
     const sourceFeed = feedByID.get(selectedArticle.feed_id);
-    return toWebsiteOrigin(sourceFeed?.url);
+    const byFeedURL = toValidURL(sourceFeed?.url);
+    if (!byFeedURL) {
+      return "";
+    }
+    return new URL(byFeedURL).origin;
   }, [selectedArticle, feedByID]);
 
   const handleSaveAPIBase = () => {
@@ -405,10 +409,10 @@ export function App() {
   };
 
   const openSourceWebsite = () => {
-    if (!selectedArticleSourceSiteURL) {
+    if (!selectedArticleOpenURL) {
       return;
     }
-    window.open(selectedArticleSourceSiteURL, "_blank", "noopener,noreferrer");
+    window.open(selectedArticleOpenURL, "_blank", "noopener,noreferrer");
   };
 
   const extractReadableContent = async () => {
@@ -1210,10 +1214,10 @@ export function App() {
             sanitizedSummaryHTML={sanitizedSummaryHTML}
             sanitizedFullContentHTML={sanitizedFullContentHTML}
             canMarkUnread={Boolean(selectedArticle?.is_read)}
-            canOpenSourceSite={Boolean(selectedArticleSourceSiteURL)}
+            canOpenSourceSite={Boolean(selectedArticleOpenURL)}
             canExtractReadable={Boolean(selectedArticle?.link)}
             isExtractingReadable={isExtractingReadable}
-            sourceSiteURL={selectedArticleSourceSiteURL}
+            sourceSiteURL={selectedArticleOpenURL}
             onMarkUnread={markUnread}
             onOpenSourceSite={openSourceWebsite}
             onExtractReadable={extractReadableContent}

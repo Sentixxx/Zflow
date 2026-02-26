@@ -55,8 +55,8 @@ export function ArticleDetailToolbar({
       <ToolbarIconButton
         onClick={onOpenSourceSite}
         disabled={!canOpenSourceSite}
-        title={canOpenSourceSite ? `在新标签页打开来源网站：${sourceSiteURL}` : "当前文章缺少可用来源网站"}
-        ariaLabel="打开来源网站"
+        title={canOpenSourceSite ? `在新标签页打开原文：${sourceSiteURL}` : "当前文章缺少可用链接"}
+        ariaLabel="打开原文链接"
       >
         <span className="detail-icon-slot" aria-hidden="true">
           <img className="detail-icon-image icon-source-site" src={sourceSiteIcon} alt="" />
