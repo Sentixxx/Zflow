@@ -1,6 +1,12 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change309 日期:2026-02-26 | 文件:backend/internal/handler/system_handlers.go,backend/internal/handler/readability_helpers.go | 操作:Add | 影响:系统与正文提取handler分层 | 说明:新增system_handlers与readability_helpers文件，将health/network设置处理与Readability提取能力按职责拆分出server.go | 关联:task103
+- change310 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:后端入口职责边界 | 说明:移除已下沉的系统与Readability实现并清理依赖导入，保持路由与公共能力不变使server.go更聚焦装配层 | 关联:task103
+- change311 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task103 | 说明:新增并完成系统handler与Readability能力继续拆分任务记录 | 关联:task103
+- change306 日期:2026-02-26 | 文件:backend/internal/handler/data_handlers.go,backend/internal/handler/ai_handlers.go,backend/internal/handler/feed_folder_handlers.go,backend/internal/handler/article_handlers.go,backend/internal/handler/feed_mutation_handlers.go | 操作:Add | 影响:后端handler分层 | 说明:按领域拆分导入导出、AI、feed/folder、article与feed写操作handler，降低server.go复杂度并保持路由不变 | 关联:task102
+- change307 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:后端入口聚合 | 说明:移除已拆分handler实现并保留Server结构、路由装配与共享基础能力，server.go聚焦入口与公共逻辑 | 关联:task102
+- change308 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task102 | 说明:新增并完成后端handler按功能拆分任务记录 | 关联:task102
 - change304 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:分段翻译术语一致性 | 说明:为逐段翻译引入上下文记忆窗口（最近原文+已译文）并在提示词中强制术语一致，减少跨段名词漂移与语义断裂 | 关联:task101
 - change305 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task101 | 说明:新增并完成分段翻译上下文一致性任务记录 | 关联:task101
 - change300 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:文章缓存刷新接口 | 说明:新增POST /api/v1/articles/{id}/refresh-cache，当前执行Readability缓存刷新并返回最新文章详情，为后续评分/总结等缓存刷新预留统一入口 | 关联:task100
