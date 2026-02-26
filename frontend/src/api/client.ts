@@ -3,6 +3,12 @@ import { createLogger } from "@/lib/logger";
 
 const apiLogger = createLogger("api");
 
+export type TranslateStreamEvent =
+  | { type: "start"; article_id: number; target_lang: string; total: number; sources?: string[] }
+  | { type: "chunk"; article_id: number; target_lang: string; total: number; index: number; source: string; translated: string }
+  | { type: "done"; article_id: number; total: number }
+  | { type: "error"; article_id: number; error: string };
+
 export class ApiClient {
   constructor(private readonly baseURL: string) {}
 
@@ -151,6 +157,66 @@ export class ApiClient {
     });
   }
 
+  async refreshArticleCache(id: number): Promise<Article> {
+    return this.request<Article>(`/api/v1/articles/${id}/refresh-cache`, {
+      method: "POST",
+    });
+  }
+
+  async translateArticle(id: number, targetLang = "zh-CN"): Promise<{ translated_text: string; target_lang: string; article_id: number }> {
+    return this.request<{ translated_text: string; target_lang: string; article_id: number }>(`/api/v1/articles/${id}/translate`, {
+      method: "POST",
+      body: JSON.stringify({ target_lang: targetLang }),
+    });
+  }
+
+  async translateArticleStream(
+    id: number,
+    targetLang: string,
+    onEvent: (event: TranslateStreamEvent) => void,
+  ): Promise<void> {
+    const response = await fetch(this.buildURL(`/api/v1/articles/${id}/translate/stream`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_lang: targetLang }),
+    });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      throw new Error((data.error as string) || `HTTP ${response.status}`);
+    }
+    if (!response.body) {
+      throw new Error("stream body is empty");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          continue;
+        }
+        const parsed = JSON.parse(trimmed) as TranslateStreamEvent;
+        onEvent(parsed);
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail) {
+      const parsed = JSON.parse(tail) as TranslateStreamEvent;
+      onEvent(parsed);
+    }
+  }
+
   async exportProfile(): Promise<Blob> {
     const response = await fetch(this.buildURL("/api/v1/data/export/profile"));
     if (!response.ok) {
@@ -195,6 +261,22 @@ export class ApiClient {
     return this.request<{ proxy_url?: string }>("/api/v1/settings/network", {
       method: "PATCH",
       body: JSON.stringify({ proxy_url: proxyURL }),
+    });
+  }
+
+  async getAISettings(): Promise<{ api_key?: string; base_url?: string; model?: string; target_lang?: string }> {
+    return this.request<{ api_key?: string; base_url?: string; model?: string; target_lang?: string }>("/api/v1/settings/ai");
+  }
+
+  async updateAISettings(payload: { api_key: string; base_url: string; model: string; target_lang: string }): Promise<{
+    api_key?: string;
+    base_url?: string;
+    model?: string;
+    target_lang?: string;
+  }> {
+    return this.request<{ api_key?: string; base_url?: string; model?: string; target_lang?: string }>("/api/v1/settings/ai", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
     });
   }
 }

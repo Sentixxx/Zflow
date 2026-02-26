@@ -35,7 +35,13 @@ type ResizeTarget = "sidebar" | "list";
 type FolderContextMenu = { folder: Folder; x: number; y: number } | null;
 type FeedContextMenu = { feed: Feed; x: number; y: number } | null;
 type ScriptLang = "shell" | "python" | "javascript";
-type SettingsTab = "connection" | "subscription" | "script" | "data";
+type SettingsTab = "connection" | "subscription" | "script" | "ai" | "data";
+type TranslationParagraph = {
+  index: number;
+  source: string;
+  translated: string;
+  status: "pending" | "done";
+};
 
 function normalizeScriptLang(raw: string | undefined): ScriptLang {
   if (raw === "python" || raw === "javascript") {
@@ -64,6 +70,10 @@ function toValidURL(raw: string | undefined): string {
 export function App() {
   const [apiBase, setApiBase] = useState<string>(localStorage.getItem("zflow_api_base") || DEFAULT_API_BASE);
   const [networkProxyURL, setNetworkProxyURL] = useState<string>("");
+  const [aiAPIKey, setAIAPIKey] = useState<string>("");
+  const [aiBaseURL, setAIBaseURL] = useState<string>("");
+  const [aiModel, setAIModel] = useState<string>("");
+  const [aiTargetLang, setAITargetLang] = useState<string>("zh-CN");
   const [feedURL, setFeedURL] = useState("");
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const selectedFeedID = useReaderStore((state) => state.selectedFeedID);
@@ -105,6 +115,9 @@ export function App() {
   const [isRefreshingArticles, setIsRefreshingArticles] = useState<boolean>(false);
   const [isRefreshingFeeds, setIsRefreshingFeeds] = useState<boolean>(false);
   const [isExtractingReadable, setIsExtractingReadable] = useState<boolean>(false);
+  const [isRefreshingArticleCache, setIsRefreshingArticleCache] = useState<boolean>(false);
+  const [isTranslatingArticle, setIsTranslatingArticle] = useState<boolean>(false);
+  const [translationParagraphsByArticleID, setTranslationParagraphsByArticleID] = useState<Record<number, TranslationParagraph[]>>({});
   const [refreshFailures, setRefreshFailures] = useState<RefreshFailure[]>([]);
   const [status, setStatus] = useState("准备就绪");
   const [error, setError] = useState("");
@@ -240,6 +253,12 @@ export function App() {
     }
     return new URL(byFeedURL).origin;
   }, [selectedArticle, feedByID]);
+  const currentTranslationParagraphs = useMemo(() => {
+    if (!selectedArticle) {
+      return [];
+    }
+    return translationParagraphsByArticleID[selectedArticle.id] || [];
+  }, [selectedArticle, translationParagraphsByArticleID]);
 
   const handleSaveAPIBase = () => {
     localStorage.setItem("zflow_api_base", apiBase);
@@ -260,6 +279,36 @@ export function App() {
       const data = await client.updateNetworkSettings(networkProxyURL.trim());
       setNetworkProxyURL((data.proxy_url || "").trim());
       setMessage("网络代理设置已保存并应用");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const loadAISettings = async () => {
+    try {
+      const data = await client.getAISettings();
+      setAIAPIKey((data.api_key || "").trim());
+      setAIBaseURL((data.base_url || "").trim());
+      setAIModel((data.model || "").trim());
+      setAITargetLang((data.target_lang || "zh-CN").trim() || "zh-CN");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    }
+  };
+
+  const saveAISettings = async () => {
+    try {
+      const data = await client.updateAISettings({
+        api_key: aiAPIKey.trim(),
+        base_url: aiBaseURL.trim(),
+        model: aiModel.trim(),
+        target_lang: aiTargetLang.trim() || "zh-CN",
+      });
+      setAIAPIKey((data.api_key || "").trim());
+      setAIBaseURL((data.base_url || "").trim());
+      setAIModel((data.model || "").trim());
+      setAITargetLang((data.target_lang || "zh-CN").trim() || "zh-CN");
+      setMessage("AI 设置已保存");
     } catch (e) {
       setMessage((e as Error).message, true);
     }
@@ -433,6 +482,80 @@ export function App() {
     }
   };
 
+  const refreshCurrentArticleCache = async () => {
+    if (!selectedArticle || isRefreshingArticleCache) {
+      return;
+    }
+    setIsRefreshingArticleCache(true);
+    setMessage("正在刷新文章缓存...");
+    try {
+      const updated = await client.refreshArticleCache(selectedArticle.id);
+      setSelectedArticle(updated);
+      setArticles((current) => current.map((entry) => (entry.id === updated.id ? { ...entry, ...updated } : entry)));
+      setTranslationParagraphsByArticleID((current) => ({ ...current, [updated.id]: [] }));
+      setMessage("文章缓存已刷新");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    } finally {
+      setIsRefreshingArticleCache(false);
+    }
+  };
+
+  const translateArticle = async () => {
+    if (!selectedArticle || isTranslatingArticle) {
+      return;
+    }
+    const articleID = selectedArticle.id;
+    setIsTranslatingArticle(true);
+    setMessage("正在调用 AI 翻译...");
+    setTranslationParagraphsByArticleID((current) => ({ ...current, [articleID]: [] }));
+    try {
+      await client.translateArticleStream(articleID, aiTargetLang.trim() || "zh-CN", (event) => {
+        if (event.type === "start") {
+          const paragraphs: TranslationParagraph[] = Array.from({ length: Math.max(0, event.total) }, (_, idx) => ({
+            index: idx + 1,
+            source: event.sources?.[idx] || "",
+            translated: "",
+            status: "pending",
+          }));
+          setTranslationParagraphsByArticleID((current) => ({ ...current, [articleID]: paragraphs }));
+          return;
+        }
+        if (event.type === "chunk") {
+          setTranslationParagraphsByArticleID((current) => {
+            const existing = current[articleID] || [];
+            const next = [...existing];
+            const targetIndex = Math.max(0, event.index - 1);
+            while (next.length < event.total) {
+              next.push({
+                index: next.length + 1,
+                source: "",
+                translated: "",
+                status: "pending",
+              });
+            }
+            next[targetIndex] = {
+              index: event.index,
+              source: event.source || "",
+              translated: event.translated || "",
+              status: "done",
+            };
+            return { ...current, [articleID]: next };
+          });
+          return;
+        }
+        if (event.type === "error") {
+          throw new Error(event.error || "translation stream failed");
+        }
+      });
+      setMessage("AI 翻译完成");
+    } catch (e) {
+      setMessage((e as Error).message, true);
+    } finally {
+      setIsTranslatingArticle(false);
+    }
+  };
+
   const { pushArticleRoute, clearArticleRoute } = useArticleRoute(selectedArticle?.id ?? null, (id) => {
     void selectArticle(id);
   });
@@ -535,7 +658,7 @@ export function App() {
     const bootstrap = async () => {
       const [, , loadedArticles] = await Promise.all([loadFeeds(), loadFolders(), loadArticles()]);
       rebuildStickyUnreadIDs(loadedArticles ?? [], selectedFeedID, selectedFolderID, readFilter);
-      await loadNetworkSettings();
+      await Promise.all([loadNetworkSettings(), loadAISettings()]);
     };
     void bootstrap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1222,10 +1345,16 @@ export function App() {
             canOpenSourceSite={Boolean(selectedArticleOpenURL)}
             canExtractReadable={Boolean(selectedArticle?.link)}
             isExtractingReadable={isExtractingReadable}
+            canRefreshArticleCache={Boolean(selectedArticle)}
+            isRefreshingArticleCache={isRefreshingArticleCache}
+            isTranslatingArticle={isTranslatingArticle}
             sourceSiteURL={selectedArticleOpenURL}
+            translationParagraphs={currentTranslationParagraphs}
             onMarkUnread={markUnread}
             onOpenSourceSite={openSourceWebsite}
             onExtractReadable={extractReadableContent}
+            onRefreshArticleCache={refreshCurrentArticleCache}
+            onTranslateArticle={translateArticle}
           />
         </section>
       </main>
@@ -1302,6 +1431,9 @@ export function App() {
                 </button>
                 <button className={`settings-tab ${settingsTab === "connection" ? "active" : ""}`} onClick={() => setSettingsTab("connection")}>
                   连接设置
+                </button>
+                <button className={`settings-tab ${settingsTab === "ai" ? "active" : ""}`} onClick={() => setSettingsTab("ai")}>
+                  AI 设置
                 </button>
                 <button className={`settings-tab ${settingsTab === "data" ? "active" : ""}`} onClick={() => setSettingsTab("data")}>
                   数据管理
@@ -1402,6 +1534,24 @@ export function App() {
                       <input id="networkProxy" value={networkProxyURL} placeholder="http://127.0.0.1:7890" onChange={(e) => setNetworkProxyURL(e.target.value)} />
                       <button className="secondary" onClick={saveNetworkSettings}>
                         保存代理
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {settingsTab === "ai" && (
+                  <div className="settings-page-inner settings-section-card">
+                    <h4 className="section-title">AI 设置</h4>
+                    <label htmlFor="aiApiKey">API Key</label>
+                    <input id="aiApiKey" type="password" value={aiAPIKey} placeholder="sk-..." onChange={(e) => setAIAPIKey(e.target.value)} />
+                    <label htmlFor="aiBaseURL">Base URL（OpenAI 兼容）</label>
+                    <input id="aiBaseURL" value={aiBaseURL} placeholder="https://api.openai.com/v1" onChange={(e) => setAIBaseURL(e.target.value)} />
+                    <label htmlFor="aiModel">模型</label>
+                    <input id="aiModel" value={aiModel} placeholder="gpt-4o-mini" onChange={(e) => setAIModel(e.target.value)} />
+                    <label htmlFor="aiTargetLang">默认目标语言</label>
+                    <input id="aiTargetLang" value={aiTargetLang} placeholder="zh-CN" onChange={(e) => setAITargetLang(e.target.value)} />
+                    <div className="row">
+                      <button className="secondary" onClick={saveAISettings}>
+                        保存 AI 设置
                       </button>
                     </div>
                   </div>

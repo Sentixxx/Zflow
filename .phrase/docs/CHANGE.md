@@ -1,6 +1,27 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change304 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:分段翻译术语一致性 | 说明:为逐段翻译引入上下文记忆窗口（最近原文+已译文）并在提示词中强制术语一致，减少跨段名词漂移与语义断裂 | 关联:task101
+- change305 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task101 | 说明:新增并完成分段翻译上下文一致性任务记录 | 关联:task101
+- change300 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:文章缓存刷新接口 | 说明:新增POST /api/v1/articles/{id}/refresh-cache，当前执行Readability缓存刷新并返回最新文章详情，为后续评分/总结等缓存刷新预留统一入口 | 关联:task100
+- change301 日期:2026-02-26 | 文件:frontend/src/api/client.ts,frontend/src/App.tsx | 操作:Modify | 影响:前端缓存刷新调用链 | 说明:新增refreshArticleCache API并接入详情页状态流程，刷新后回填文章内容并清空该文章翻译段落缓存避免脏数据 | 关联:task100
+- change302 日期:2026-02-26 | 文件:frontend/src/components/article-detail/ArticleDetailToolbar.tsx,frontend/src/components/article-detail/ArticleDetailTopBar.tsx,frontend/src/components/article-detail/ArticleDetailContent.tsx,frontend/src/styles.css | 操作:Modify | 影响:详情工具栏扩展能力 | 说明:新增...折叠菜单承载“刷新当前文章缓存”工具并统一更多工具样式，避免主工具栏按钮继续膨胀 | 关联:task100
+- change303 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task100 | 说明:新增并完成详情工具栏缓存刷新入口任务记录 | 关联:task100
+- change294 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:文章翻译流式接口 | 说明:新增POST /api/v1/articles/{id}/translate/stream（NDJSON）并按段落发出start/chunk/done事件，翻译请求改为段落级执行并保留旧/translate聚合输出 | 关联:task099
+- change295 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:AI请求稳定性 | 说明:为AI调用新增60秒专用HTTP客户端并补齐日志中间件Flusher转发，修复context deadline exceeded与流式被中间件阻断问题 | 关联:task099
+- change296 日期:2026-02-26 | 文件:backend/internal/handler/server_test.go | 操作:Modify | 影响:后端流式回归测试 | 说明:新增流式翻译测试覆盖段落拆分与start/chunk/done事件序列，确保逐段输出可用 | 关联:task099
+- change297 日期:2026-02-26 | 文件:frontend/src/api/client.ts,frontend/src/App.tsx,frontend/src/components/article-detail/ArticleDetailContent.tsx,frontend/src/styles.css | 操作:Modify | 影响:前端翻译渲染体验 | 说明:接入translate/stream事件流并改为逐段中英对照渲染，未完成段落展示加载动画，翻译过程可渐进更新 | 关联:task099
+- change298 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task099 | 说明:新增并完成流式分段翻译与进度可视化任务记录 | 关联:task099
+- change299 日期:2026-02-26 | 文件:Docs/ai-translation-chain.md | 操作:Modify | 影响:翻译链路文档 | 说明:文档升级为流式翻译协议说明，补充/translate/stream事件格式与中英对照渐进渲染预期 | 关联:task099
+- change288 日期:2026-02-26 | 文件:backend/internal/handler/server.go | 操作:Modify | 影响:AI设置与翻译配置读取 | 说明:新增/api/v1/settings/ai接口并持久化api_key/base_url/model/target_lang，翻译接口改为优先读取AI设置后再调用上游模型 | 关联:task098
+- change289 日期:2026-02-26 | 文件:backend/internal/handler/server_test.go | 操作:Modify | 影响:后端接口回归测试 | 说明:新增AI设置读写测试并调整翻译测试为先写入AI设置后执行翻译，覆盖“设置驱动翻译链路” | 关联:task098
+- change290 日期:2026-02-26 | 文件:frontend/src/api/client.ts,frontend/src/App.tsx | 操作:Modify | 影响:前端AI设置页与翻译调用 | 说明:新增AI设置获取/保存API并在设置中心增加AI设置Tab，翻译默认目标语言改为读取设置值 | 关联:task098
+- change291 日期:2026-02-26 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task098 | 说明:新增并完成AI设置驱动翻译链路任务记录 | 关联:task098
+- change293 日期:2026-02-26 | 文件:backend/internal/handler/server.go,Docs/ai-translation-chain.md | 操作:Modify | 影响:AI配置来源约束 | 说明:移除AI翻译链路的环境变量回退逻辑，改为仅从设置中心读取AI配置，并同步更新文档说明 | 关联:task098
+- change287 日期:2026-02-27 | 文件:Docs/ai-translation-chain.md | 操作:Add | 影响:AI翻译链路文档 | 说明:新增端到端翻译流程说明，补充接口契约、环境变量、前端接入点、验证步骤与常见排查项 | 关联:task097
+- change284 日期:2026-02-27 | 文件:backend/internal/handler/server.go,backend/internal/handler/server_test.go | 操作:Modify | 影响:文章AI翻译接口 | 说明:新增POST /api/v1/articles/{id}/translate并接入OpenAI兼容Chat Completions调用链，支持target_lang与内容提取清洗，补充接口回归测试 | 关联:task097
+- change285 日期:2026-02-27 | 文件:frontend/src/api/client.ts,frontend/src/App.tsx,frontend/src/components/article-detail/ArticleDetailContent.tsx,frontend/src/components/article-detail/ArticleFloatingActions.tsx,frontend/src/styles.css | 操作:Modify | 影响:前端翻译交互闭环 | 说明:新增translateArticle API调用并将悬浮栏翻译按钮接入真实请求，支持翻译中禁用态与详情区AI翻译结果展示，同时回到顶部按钮改为真实滚动行为 | 关联:task097
+- change286 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task097 | 说明:新增并完成AI翻译链路打通任务记录 | 关联:task097
 - change281 日期:2026-02-27 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:分组展开与详情切换动效触发 | 说明:分组节点改为容器渲染并通过expanded/collapsed类驱动展开动画，文章详情组件按文章id重挂载以触发轻量淡入过渡 | 关联:task096
 - change282 日期:2026-02-27 | 文件:frontend/src/styles.css | 操作:Modify | 影响:全局交互动效 | 说明:统一布局/侧栏/列表项/按钮过渡曲线并新增分组展开动画与详情淡入动画，同时补充prefers-reduced-motion降级规则 | 关联:task096
 - change283 日期:2026-02-27 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task096 | 说明:新增并完成页面交互动效平滑化任务记录 | 关联:task096
