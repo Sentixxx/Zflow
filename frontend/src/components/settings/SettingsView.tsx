@@ -103,17 +103,34 @@ export function SettingsView(props: SettingsViewProps) {
     onImportProfileJSON,
     onImportOPML,
   } = props;
+  const tabOptions: Array<{ value: SettingsTab; label: string }> = [
+    { value: "subscription", label: "订阅管理" },
+    { value: "script", label: "脚本设置" },
+    { value: "connection", label: "连接设置" },
+    { value: "ai", label: "AI 设置" },
+    { value: "data", label: "数据管理" },
+  ];
 
   return (
     <div className="settings-modal-body">
       <aside className="settings-nav">
-        <button className={`settings-tab ${settingsTab === "subscription" ? "active" : ""}`} onClick={() => onSettingsTabChange("subscription")}>订阅管理</button>
-        <button className={`settings-tab ${settingsTab === "script" ? "active" : ""}`} onClick={() => onSettingsTabChange("script")}>脚本设置</button>
-        <button className={`settings-tab ${settingsTab === "connection" ? "active" : ""}`} onClick={() => onSettingsTabChange("connection")}>连接设置</button>
-        <button className={`settings-tab ${settingsTab === "ai" ? "active" : ""}`} onClick={() => onSettingsTabChange("ai")}>AI 设置</button>
-        <button className={`settings-tab ${settingsTab === "data" ? "active" : ""}`} onClick={() => onSettingsTabChange("data")}>数据管理</button>
+        {tabOptions.map((tab) => (
+          <button key={tab.value} className={`settings-tab ${settingsTab === tab.value ? "active" : ""}`} onClick={() => onSettingsTabChange(tab.value)}>
+            {tab.label}
+          </button>
+        ))}
       </aside>
       <section className="settings-page">
+        <div className="settings-mobile-tab-picker">
+          <label htmlFor="settingsMobileTab">设置分组</label>
+          <select id="settingsMobileTab" value={settingsTab} onChange={(event) => onSettingsTabChange(event.target.value as SettingsTab)}>
+            {tabOptions.map((tab) => (
+              <option key={tab.value} value={tab.value}>
+                {tab.label}
+              </option>
+            ))}
+          </select>
+        </div>
         {settingsTab === "subscription" && (
           <SubscriptionSettingsCard
             feedURL={feedURL}

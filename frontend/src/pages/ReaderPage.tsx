@@ -33,6 +33,7 @@ const PREFETCH_BATCH_SIZE = 20;
 const VISIBLE_STEP_SIZE = 10;
 const LOAD_MORE_COOLDOWN_MS = 80;
 type SidebarMode = "subscriptions" | "favorites";
+type MobilePane = "nav" | "list" | "detail";
 type ReaderPageProps = {
   initialSettingsOpen?: boolean;
 };
@@ -86,6 +87,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const [refreshFailures, setRefreshFailures] = useState<RefreshFailure[]>([]);
   const [status, setStatus] = useState("准备就绪");
   const [error, setError] = useState("");
+  const [mobilePane, setMobilePane] = useState<MobilePane>("list");
   const lastLoadAtRef = useRef<number>(0);
   const bounceTimerRef = useRef<number | null>(null);
   const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
@@ -201,6 +203,16 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     () => filteredAndSortedArticles.slice(0, Math.min(visibleCount, effectiveBufferedCount)),
     [filteredAndSortedArticles, visibleCount, effectiveBufferedCount],
   );
+  const selectedArticleIndex = useMemo(() => {
+    if (!selectedArticle) {
+      return -1;
+    }
+    return filteredAndSortedArticles.findIndex((article) => article.id === selectedArticle.id);
+  }, [filteredAndSortedArticles, selectedArticle]);
+  const previousArticleID = selectedArticleIndex > 0 ? filteredAndSortedArticles[selectedArticleIndex - 1].id : null;
+  const nextArticleID =
+    selectedArticleIndex >= 0 && selectedArticleIndex < filteredAndSortedArticles.length - 1 ? filteredAndSortedArticles[selectedArticleIndex + 1].id : null;
+  const detailProgressText = selectedArticleIndex >= 0 ? `第 ${selectedArticleIndex + 1} / ${filteredAndSortedArticles.length} 条` : "";
   const articleListTitle = useMemo(() => {
     if (sidebarMode === "favorites") {
       return "收藏文章";
@@ -213,6 +225,20 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     }
     return "全部文章";
   }, [sidebarMode, selectedFeedID, selectedFolderID, feedNameByID, folderNameByID]);
+  const hasListContextOverrides = sidebarMode !== "subscriptions" || selectedFeedID != null || selectedFolderID != null || readFilter !== "all" || sortMode !== "latest";
+  const listContextSummary = useMemo(() => {
+    let scopeLabel = "全部文章";
+    if (sidebarMode === "favorites") {
+      scopeLabel = "收藏文章";
+    } else if (selectedFeedID != null) {
+      scopeLabel = `订阅：${feedNameByID.get(selectedFeedID) || `#${selectedFeedID}`}`;
+    } else if (selectedFolderID != null) {
+      scopeLabel = `分类：${folderNameByID.get(selectedFolderID) || `#${selectedFolderID}`}`;
+    }
+    const readLabel = readFilter === "unread" ? "仅未读" : "含已读";
+    const sortLabel = sortMode === "latest" ? "最新优先" : "最早优先";
+    return `${scopeLabel} · ${readLabel} · ${sortLabel}`;
+  }, [sidebarMode, selectedFeedID, selectedFolderID, feedNameByID, folderNameByID, readFilter, sortMode]);
   const selectedArticleOpenURL = useMemo(() => {
     if (!selectedArticle) {
       return "";
@@ -351,6 +377,9 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
       if (article.is_read) {
         setSelectedArticle(article);
         pushArticleRoute(article.id);
+        if (isNarrow) {
+          setMobilePane("detail");
+        }
         setMessage(`已打开文章 #${id}`);
         return;
       }
@@ -359,6 +388,9 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
       setSelectedArticle(updated);
       pushArticleRoute(updated.id);
       setArticles((current) => current.map((entry) => (entry.id === id ? { ...entry, is_read: true } : entry)));
+      if (isNarrow) {
+        setMobilePane("detail");
+      }
       setMessage(`已打开文章 #${id}（已自动标记已读）`);
     } catch (e) {
       setMessage((e as Error).message, true);
@@ -410,13 +442,35 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const toggleSortMode = () => {
     handleSortModeChange(sortMode === "latest" ? "oldest" : "latest");
   };
+  const resetListContext = () => {
+    setSidebarMode("subscriptions");
+    setSelectedFeedID(null);
+    setSelectedFolderID(null);
+    setReadFilter("all");
+    setSortMode("latest");
+    setBufferedCount(PREFETCH_BATCH_SIZE);
+    setVisibleCount(VISIBLE_STEP_SIZE);
+    rebuildStickyUnreadIDs(articles, null, null, "all");
+    if (isNarrow) {
+      setMobilePane("list");
+    }
+    setMessage("已回到默认视图");
+  };
 
   const toggleSettings = () => {
     setSettingsOpen((v) => !v);
   };
 
+  const openQuickAddFeed = () => {
+    setSettingsTab("subscription");
+    setSettingsOpen(true);
+  };
+
   const switchSidebarMode = (mode: SidebarMode) => {
     setSidebarMode(mode);
+    if (isNarrow) {
+      setMobilePane("list");
+    }
     if (mode === "favorites") {
       setSelectedFeedID(null);
       setSelectedFolderID(null);
@@ -436,6 +490,9 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     setBufferedCount(PREFETCH_BATCH_SIZE);
     setVisibleCount(VISIBLE_STEP_SIZE);
     rebuildStickyUnreadIDs(source, nextFeedID, null, readFilter);
+    if (isNarrow) {
+      setMobilePane("list");
+    }
     if (feedID != null) {
       selectScriptFeed(feedID);
     }
@@ -451,6 +508,9 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     setBufferedCount(PREFETCH_BATCH_SIZE);
     setVisibleCount(VISIBLE_STEP_SIZE);
     rebuildStickyUnreadIDs(source, null, nextFolderID, readFilter);
+    if (isNarrow) {
+      setMobilePane("list");
+    }
   };
 
   const {
@@ -516,6 +576,24 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const { isNarrow, layoutStyle, beginResize } = useReaderLayout({ sidebarCollapsed });
 
   useEffect(() => {
+    if (!isNarrow) {
+      setMobilePane("list");
+      return;
+    }
+    setSidebarCollapsed(false);
+    setMobilePane(selectedArticle ? "detail" : "list");
+  }, [isNarrow]);
+
+  useEffect(() => {
+    if (!isNarrow) {
+      return;
+    }
+    if (mobilePane === "detail" && !selectedArticle) {
+      setMobilePane("list");
+    }
+  }, [isNarrow, mobilePane, selectedArticle]);
+
+  useEffect(() => {
     const bootstrap = async () => {
       const [, , loadedArticles] = await Promise.all([loadFeeds(), loadFolders(), loadArticles()]);
       rebuildStickyUnreadIDs(loadedArticles ?? [], selectedFeedID, selectedFolderID, readFilter);
@@ -546,6 +624,22 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
       clearArticleRoute();
     }
   }, [articles, selectedArticle, clearArticleRoute]);
+
+  useEffect(() => {
+    if (!selectedArticle) {
+      return;
+    }
+    const inCurrentList = filteredAndSortedArticles.some((article) => article.id === selectedArticle.id);
+    if (inCurrentList) {
+      return;
+    }
+    setSelectedArticle(null);
+    clearArticleRoute();
+    if (isNarrow) {
+      setMobilePane("list");
+    }
+    setMessage("当前文章不在此列表范围，已返回列表");
+  }, [filteredAndSortedArticles, selectedArticle, clearArticleRoute, isNarrow]);
 
   useEffect(() => {
     if (feeds.length === 0) {
@@ -638,17 +732,26 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
       <RefreshFailureBanner failures={refreshFailures} onClose={() => setRefreshFailures([])} />
 
       <main className={`layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={layoutStyle}>
-        <section className={`panel sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+        <section className={`panel sidebar ${sidebarCollapsed ? "collapsed" : ""} ${isNarrow && mobilePane !== "nav" ? "mobile-hidden" : "mobile-active"}`}>
           <div className="sidebar-header">
             <h2 className={`sidebar-title ${sidebarCollapsed ? "hidden" : ""}`}>内容导航</h2>
-            <button
-              className="sidebar-toggle"
-              onClick={() => setSidebarCollapsed((v) => !v)}
-              aria-label={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
-              title={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
-            >
-              <span className={`chevron ${sidebarCollapsed ? "right" : "left"}`}>⌃</span>
-            </button>
+            {!sidebarCollapsed && (
+              <div className="sidebar-header-actions">
+                <button className="sidebar-quick-add-btn" onClick={openQuickAddFeed} title="快速添加订阅源" aria-label="快速添加订阅源">
+                  +
+                </button>
+              </div>
+            )}
+            {!isNarrow && (
+              <button
+                className="sidebar-toggle"
+                onClick={() => setSidebarCollapsed((v) => !v)}
+                aria-label={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
+                title={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
+              >
+                <span className={`chevron ${sidebarCollapsed ? "right" : "left"}`}>⌃</span>
+              </button>
+            )}
           </div>
 
           {!sidebarCollapsed && (
@@ -722,11 +825,19 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
           />
         )}
 
-        <section className="panel list-panel">
+        <section className={`panel list-panel ${isNarrow && mobilePane !== "list" ? "mobile-hidden" : "mobile-active"}`}>
           <div className="list-header">
             <h2>{articleListTitle}</h2>
             <ArticleListToolbar readFilter={readFilter} sortMode={sortMode} onToggleReadFilter={toggleReadFilter} onToggleSortMode={toggleSortMode} />
           </div>
+          {hasListContextOverrides && (
+            <div className="list-context-bar">
+              <span className="list-context-text">{listContextSummary}</span>
+              <button className="list-context-reset" onClick={resetListContext}>
+                回到默认视图
+              </button>
+            </div>
+          )}
           <div className={`list article-list ${listBounce ? "bounce" : ""}`} onScroll={onArticleListScroll}>
             <ArticleList
               articles={pagedArticles}
@@ -750,7 +861,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
           <div className="resizer" onMouseDown={beginResize("list")} role="separator" aria-orientation="vertical" aria-label="调整文章列表宽度" />
         )}
 
-        <section className="panel detail-panel">
+        <section className={`panel detail-panel ${isNarrow && mobilePane !== "detail" ? "mobile-hidden" : "mobile-active"}`}>
           <ArticleDetailContent
             key={selectedArticle?.id ?? "empty"}
             article={selectedArticle}
@@ -766,16 +877,51 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
             isRefreshingArticleCache={isRefreshingArticleCache}
             isTranslatingArticle={isTranslatingArticle}
             sourceSiteURL={selectedArticleOpenURL}
+            detailProgressText={detailProgressText}
             translationParagraphs={currentTranslationParagraphs}
+            canGoPrev={previousArticleID != null}
+            canGoNext={nextArticleID != null}
             onMarkUnread={markUnread}
             onToggleFavorite={toggleFavorite}
             onOpenSourceSite={openSourceWebsite}
             onExtractReadable={extractReadableContent}
             onRefreshArticleCache={refreshCurrentArticleCache}
             onTranslateArticle={translateArticle}
+            onGoPrev={() => {
+              if (previousArticleID == null) {
+                return;
+              }
+              void selectArticle(previousArticleID);
+            }}
+            onGoNext={() => {
+              if (nextArticleID == null) {
+                return;
+              }
+              void selectArticle(nextArticleID);
+            }}
           />
         </section>
       </main>
+
+      {isNarrow && (
+        <nav className="mobile-bottom-nav" aria-label="移动端分栏导航">
+          <button className={`mobile-bottom-nav-btn ${mobilePane === "nav" ? "active" : ""}`} onClick={() => setMobilePane("nav")}>
+            导航
+            <span className="mobile-bottom-nav-count">{feeds.length}</span>
+          </button>
+          <button className={`mobile-bottom-nav-btn ${mobilePane === "list" ? "active" : ""}`} onClick={() => setMobilePane("list")}>
+            列表
+            <span className="mobile-bottom-nav-count">{filteredAndSortedArticles.length}</span>
+          </button>
+          <button
+            className={`mobile-bottom-nav-btn ${mobilePane === "detail" ? "active" : ""}`}
+            onClick={() => setMobilePane("detail")}
+            disabled={!selectedArticle}
+          >
+            详情
+          </button>
+        </nav>
+      )}
 
       {draggingFeedID != null && (
         <div

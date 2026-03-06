@@ -13,6 +13,7 @@ type ArticleDetailTopBarProps = {
   canToggleReadableMode: boolean;
   readableModeEnabled: boolean;
   sourceSiteURL: string;
+  contextText?: string;
   onMarkUnread: () => void;
   onToggleFavorite: () => void;
   onOpenSourceSite: () => void;
@@ -34,6 +35,7 @@ export function ArticleDetailTopBar({
   canToggleReadableMode,
   readableModeEnabled,
   sourceSiteURL,
+  contextText,
   onMarkUnread,
   onToggleFavorite,
   onOpenSourceSite,
@@ -43,7 +45,10 @@ export function ArticleDetailTopBar({
 }: ArticleDetailTopBarProps) {
   return (
     <div className="detail-panel-head">
-      <h2 className="detail-panel-title">{title}</h2>
+      <div className="detail-panel-title-wrap">
+        <h2 className="detail-panel-title">{title}</h2>
+        {contextText && <p className="detail-panel-context">{contextText}</p>}
+      </div>
       <ArticleDetailToolbar
         canMarkUnread={canMarkUnread}
         canToggleFavorite={canToggleFavorite}

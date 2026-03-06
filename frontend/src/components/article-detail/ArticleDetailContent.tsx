@@ -17,6 +17,9 @@ type ArticleDetailContentProps = {
   isRefreshingArticleCache: boolean;
   isTranslatingArticle: boolean;
   sourceSiteURL: string;
+  detailProgressText: string;
+  canGoPrev: boolean;
+  canGoNext: boolean;
   translationParagraphs: Array<{
     index: number;
     source: string;
@@ -29,6 +32,8 @@ type ArticleDetailContentProps = {
   onExtractReadable: () => void;
   onRefreshArticleCache: () => void;
   onTranslateArticle: () => void;
+  onGoPrev: () => void;
+  onGoNext: () => void;
 };
 
 export function ArticleDetailContent({
@@ -45,6 +50,9 @@ export function ArticleDetailContent({
   isRefreshingArticleCache,
   isTranslatingArticle,
   sourceSiteURL,
+  detailProgressText,
+  canGoPrev,
+  canGoNext,
   translationParagraphs,
   onMarkUnread,
   onToggleFavorite,
@@ -52,6 +60,8 @@ export function ArticleDetailContent({
   onExtractReadable,
   onRefreshArticleCache,
   onTranslateArticle,
+  onGoPrev,
+  onGoNext,
 }: ArticleDetailContentProps) {
   const detailRef = useRef<HTMLDivElement | null>(null);
   const [readableModeEnabled, setReadableModeEnabled] = useState<boolean>(false);
@@ -86,6 +96,7 @@ export function ArticleDetailContent({
         canToggleReadableMode={hasUsableFullContent}
         readableModeEnabled={readableModeEnabled}
         sourceSiteURL={sourceSiteURL}
+        contextText={detailProgressText}
         onMarkUnread={onMarkUnread}
         onToggleFavorite={onToggleFavorite}
         onOpenSourceSite={onOpenSourceSite}
@@ -97,6 +108,15 @@ export function ArticleDetailContent({
         {!article && <p className="detail-empty">请选择一篇文章查看详情</p>}
         {article && (
           <>
+            <div className="detail-sequence-nav" aria-label="文章顺序导航">
+              <button className="detail-sequence-btn" onClick={onGoPrev} disabled={!canGoPrev}>
+                上一篇
+              </button>
+              <span className="detail-sequence-progress">{detailProgressText || "第 - / - 条"}</span>
+              <button className="detail-sequence-btn" onClick={onGoNext} disabled={!canGoNext}>
+                下一篇
+              </button>
+            </div>
             <p className="meta-row article-meta">
               <span>🗓 {article.published_at || "-"}</span>
               <span>{article.is_read ? "已读" : "未读"}</span>
@@ -146,6 +166,10 @@ export function ArticleDetailContent({
       </div>
       {article && (
         <ArticleFloatingActions
+          onPrev={onGoPrev}
+          onNext={onGoNext}
+          canGoPrev={canGoPrev}
+          canGoNext={canGoNext}
           onScrollTop={() => {
             detailRef.current?.scrollTo({ top: 0, behavior: "smooth" });
           }}
