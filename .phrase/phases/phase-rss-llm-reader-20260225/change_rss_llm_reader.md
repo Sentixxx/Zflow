@@ -1,5 +1,40 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change360 日期:2026-03-06 | 文件:frontend/src/hooks/useReaderLayout.ts | 操作:Add | 影响:阅读页布局交互分层 | 说明:新增useReaderLayout hook承接窄屏判断、三栏宽度状态与分隔条拖拽逻辑，减少ReaderPage内联布局函数体积 | 关联:task118
+change361 日期:2026-03-06 | 文件:frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:阅读页侧栏与布局耦合 | 说明:移除重复侧栏副作用并改为组合useReaderLayout与useSidebarFeedActions，修复中断态接线后继续保持设置卡片弹窗交互 | 关联:task118
+change362 日期:2026-03-06 | 文件:frontend/src/hooks/useSidebarFeedActions.ts | 操作:Modify | 影响:侧栏菜单状态控制 | 说明:补充closeFeedContextMenu与setManageCategoryFeed导出，统一ReaderPage对右键菜单与分类弹窗的关闭/切换接线 | 关联:task118
+change363 日期:2026-03-06 | 文件:.tmp/plan_readerpage_split_round3_continue_20260306.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读本轮继续拆分计划书，再执行ReaderPage第三轮拆分与修复 | 关联:task118
+change364 日期:2026-03-06 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与全局变更追踪 | 说明:新增并完成task118记录，并将本轮拆分变更同步到全局CHANGE索引 | 关联:task118
+
+change356 日期:2026-03-06 | 文件:frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:设置交互形态 | 说明:恢复ReaderPage内SettingsModal弹窗接入与设置状态管理，侧栏设置按钮改回弹窗打开，设置卡片继续以组件组合渲染 | 关联:task117
+change357 日期:2026-03-06 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:设置路由行为 | 说明:/settings路由改为进入ReaderPage并以initialSettingsOpen打开设置弹窗，不再直达独立SettingsPage视图 | 关联:task117
+change358 日期:2026-03-06 | 文件:frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:脚本设置入口一致性 | 说明:订阅源上下文菜单“设置脚本”恢复为在阅读页弹窗中打开并自动切换到script标签 | 关联:task117
+change359 日期:2026-03-06 | 文件:.tmp/plan_revert_settings_modal_20260306.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:计划留痕与任务追踪 | 说明:记录“设置从页面回归卡片弹窗”执行计划并新增完成task117与全局索引同步 | 关联:task117
+
+change352 日期:2026-03-06 | 文件:frontend/src/pages/SettingsPage.tsx,frontend/src/pages/index.ts,frontend/src/App.tsx | 操作:Add | 影响:设置页面路由分层 | 说明:新增独立SettingsPage承载设置中心并更新App路由使/settings直达设置页，保留阅读页与设置页页面级组合 | 关联:task116
+change353 日期:2026-03-06 | 文件:frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:阅读页职责收敛 | 说明:移除ReaderPage内设置弹窗与设置状态/同步逻辑，侧栏设置按钮改为路由跳转，订阅源菜单“设置脚本”改为进入SettingsPage | 关联:task116
+change354 日期:2026-03-06 | 文件:frontend/src/components/settings/SettingsView.tsx,frontend/src/components/settings/SettingsModal.tsx,frontend/src/components/settings/index.ts,frontend/src/components/index.ts | 操作:Modify | 影响:设置视图复用 | 说明:新增SettingsView复用设置导航与卡片组合，SettingsModal改为容器壳复用同一视图并同步组件导出 | 关联:task116
+change355 日期:2026-03-06 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成task116记录，并将本轮设置页面拆分变更同步到全局CHANGE索引 | 关联:task116
+
+change348 日期:2026-03-06 | 文件:frontend/src/components/sidebar/SidebarTree.tsx,frontend/src/components/sidebar/index.ts,frontend/src/components/index.ts | 操作:Add | 影响:侧栏渲染分层 | 说明:新增SidebarTree组件承接文件夹/订阅递归渲染与收藏列表展示，并接入components统一导出 | 关联:task115
+change349 日期:2026-03-06 | 文件:frontend/src/hooks/useArticleActions.ts | 操作:Add | 影响:文章行为函数分层 | 说明:新增useArticleActions下沉标记未读、收藏切换、Readability抓取、缓存刷新与翻译动作 | 关联:task115
+change350 日期:2026-03-06 | 文件:frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:阅读页职责边界 | 说明:ReaderPage改为组合SidebarTree与useArticleActions，删除内联侧栏递归渲染与多组文章动作函数，主文件聚焦状态编排 | 关联:task115
+change351 日期:2026-03-06 | 文件:.tmp/plan_readerpage_split_round2_20260306.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:计划留痕与任务追踪 | 说明:按规则先输出本轮拆分计划并新增完成task115记录，同时同步全局CHANGE索引 | 关联:task115
+
+change344 日期:2026-03-06 | 文件:frontend/src/pages/ReaderPage.tsx,frontend/src/pages/index.ts | 操作:Add | 影响:前端页面分层 | 说明:新增pages目录并将阅读器主界面迁移为ReaderPage，支持通过initialSettingsOpen参数控制设置页入口 | 关联:task114
+change345 日期:2026-03-06 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:前端入口职责 | 说明:App重写为wouter路由壳，按路径组合页面（/为ReaderPage，/settings为ReaderPage设置入口）并提供兜底路由 | 关联:task114
+change346 日期:2026-03-06 | 文件:.tmp/plan_page_split_20260306.md | 操作:Add | 影响:本次执行计划留痕 | 说明:按规则先输出页面拆分计划书并据此执行迁移 | 关联:task114
+change347 日期:2026-03-06 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成task114记录并同步全局CHANGE索引 | 关联:task114
+
+change340 日期:2026-03-06 | 文件:frontend/src/components/settings/SettingsModal.tsx,frontend/src/components/settings/SubscriptionSettingsCard.tsx,frontend/src/components/settings/ScriptSettingsCard.tsx,frontend/src/components/settings/ConnectionSettingsCard.tsx,frontend/src/components/settings/AISettingsCard.tsx,frontend/src/components/settings/DataSettingsCard.tsx,frontend/src/components/settings/index.ts,frontend/src/components/settings/types.ts | 操作:Add | 影响:设置模块组件分层 | 说明:新增settings子目录并将设置弹窗及5个设置卡片拆分为独立组件，统一通过SettingsModal组合渲染 | 关联:task113
+change341 日期:2026-03-06 | 文件:frontend/src/hooks/useSettingsActions.ts | 操作:Add | 影响:设置行为函数分层 | 说明:新增useSettingsActions下沉设置读写、脚本加载保存、导入导出行为，减少App内设置相关函数密度 | 关联:task113
+change342 日期:2026-03-06 | 文件:frontend/src/App.tsx,frontend/src/components/index.ts | 操作:Modify | 影响:前端主组件职责 | 说明:App改为导入SettingsModal与settings hook并移除设置弹窗内联大块JSX，主文件聚焦状态编排和功能拼装 | 关联:task113
+change343 日期:2026-03-06 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成task113记录并同步全局CHANGE索引 | 关联:task113
+
+change337 日期:2026-03-06 | 文件:.claude/memory/MEMORY_INDEX.md,.claude/memory/memory_init.md,.claude/memory/memory_coding.md,.claude/memory/memory_docs.md,.claude/memory/memory_release.md | 操作:Modify | 影响:跨阶段持久化记忆规则 | 说明:新增“修改前先输出并阅读计划书临时文件”的统一约束，覆盖init/coding/docs/release全部记忆入口 | 关联:task112
+change338 日期:2026-03-06 | 文件:.tmp/plan_memory_rule_20260306.md | 操作:Add | 影响:本次执行计划留痕 | 说明:按新规则先产出本次临时计划书并作为后续修改依据 | 关联:task112
+change339 日期:2026-03-06 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务追踪与全局索引 | 说明:新增并完成task112记录，同时把本次变更同步到全局CHANGE索引 | 关联:task112
+
 change333 日期:2026-02-26 | 文件:backend/internal/model/article.go,backend/internal/repository/feed_repository.go,backend/internal/repository/sqlite_feed_repository_impl.go,backend/internal/service/article_service.go | 操作:Modify | 影响:文章收藏与清理能力 | 说明:为文章模型与仓储新增is_favorite/favorited_at字段、收藏状态更新接口与按保留天数清理非收藏过期文章能力，并将该能力接入service层 | 关联:task111
 change334 日期:2026-02-26 | 文件:backend/internal/handler/server.go,backend/internal/handler/system_handlers.go,backend/internal/handler/article_handlers.go,backend/internal/handler/server_test.go | 操作:Modify | 影响:后端API与调度策略 | 说明:新增/api/v1/articles/{id}/favorite与/api/v1/settings/data接口，RefreshAllFeeds周期流程接入过期清理策略（默认90天）并补充收藏与清理回归测试 | 关联:task111
 change335 日期:2026-02-26 | 文件:frontend/src/types/domain.ts,frontend/src/api/client.ts,frontend/src/App.tsx,frontend/src/components/article-detail/ArticleDetailToolbar.tsx,frontend/src/components/article-detail/ArticleDetailTopBar.tsx,frontend/src/components/article-detail/ArticleDetailContent.tsx,frontend/src/components/article-list/ArticleList.tsx,frontend/src/styles.css,frontend/src/lib/article-list.test.ts | 操作:Modify | 影响:前端收藏交互与侧栏导航 | 说明:前端接入收藏状态与数据设置API，详情工具栏新增空心五角星收藏按钮，左侧新增订阅源/收藏顶部切换与收藏列表视图，并在数据管理页新增文章保留天数设置 | 关联:task111

@@ -11,3 +11,6 @@
 ## Push Rules
 - 改写历史后，推送统一使用 `git push --force-with-lease`。
 - 未获用户允许时不推送。
+
+## Plan-First Rule
+- 做出任何文件修改前，先在仓库目录输出计划书临时文件，并在修改前先阅读该计划书。

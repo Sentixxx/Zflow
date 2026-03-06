@@ -134,3 +134,10 @@ task108 [x] 场景:维护者将usecase命名统一为service以提升可读性 |
 task109 [x] 场景:维护者移除Deprecated兼容层并精简后端体积 | Given:代码中存在internal/domain与internal/store兼容别名以及legacy图标回退路径 | When:删除已无调用的Deprecated兼容目录并移除legacy icons回退逻辑 | Then:后端目录与运行路径更精简，去除无效兼容代码且现有接口行为保持稳定 | 验证:go test ./...
 task110 [x] 场景:维护者将db/config/scheduler从“渐进迁移”推进为“已落地” | Given:内部文档仍将db/config/scheduler标记为渐进迁移且缺少对应模块级测试覆盖 | When:补齐config/db/scheduler单元测试并更新internal分层状态文档 | Then:三个模块具备可回归测试与清晰职责边界，internal状态统一标记为已落地 | 验证:go test ./...
 task111 [x] 场景:用户可收藏文章并通过策略清理过期非收藏文章 | Given:系统需要新增收藏入口与独立浏览视图且默认按90天清理历史文章 | When:用户切换文章收藏状态、在侧栏顶部切换订阅源/收藏、并在数据管理调整保留天数 | Then:后端支持favorite字段与收藏接口+定时清理仅删除非收藏过期文章且可配置retention_days，前端显示空心五角星收藏入口与收藏视图切换并完成联调 | 验证:go test ./... + npm run build + npm run test + 手动测试
+task112 [x] 场景:维护者在执行任何文件改动前先提供计划书并按计划实施 | Given:会话将新增/修改/删除仓库文件 | When:开始实际改动前 | Then:先在仓库目录输出临时计划文件+先读取计划后再执行修改 | 验证:文档检查+手动测试
+task113 [x] 场景:维护者按功能拆分前端设置模块以降低App复杂度 | Given:App.tsx聚合设置弹窗5个卡片和多组设置行为函数 | When:将设置UI拆分为独立组件并把设置读写/导入导出/脚本处理下沉到hooks | Then:设置卡片可独立维护+App以组合与导入为主+构建结果保持通过 | 验证:npm run build + 手动测试
+task114 [x] 场景:维护者将前端入口改为页面组合模式并把阅读主页面迁移到pages目录 | Given:App.tsx仍承载完整阅读器页面与大量状态逻辑 | When:将阅读器主界面迁移到ReaderPage并让App只负责路由组合 | Then:App成为路由壳+页面边界清晰且支持/settings页面级入口+构建通过 | 验证:npm run build + 手动测试
+task115 [x] 场景:维护者继续拆分ReaderPage中的侧栏渲染和文章动作以降低文件复杂度 | Given:ReaderPage仍内嵌递归侧栏渲染与多组文章动作函数 | When:将侧栏树渲染抽到SidebarTree组件并将文章动作下沉到useArticleActions hook | Then:ReaderPage改为组合调用，渲染与行为职责边界更清晰且构建通过 | 验证:npm run build + 手动测试
+task116 [x] 场景:维护者将设置能力从阅读页完全拆出为独立SettingPage并保持路由可用 | Given:ReaderPage仍保留设置状态与弹窗，设置与阅读流程耦合 | When:新增SettingsPage承载设置中心并让App路由指向该页面，同时ReaderPage只保留跳转入口 | Then:设置流程与阅读流程解耦+App维持页面组合模式+ReaderPage继续瘦身且构建通过 | 验证:npm run build + 手动测试
+task117 [x] 场景:用户要求设置保持卡片弹窗形态而非独立页面 | Given:设置入口被调整为独立SettingsPage导致交互偏离预期 | When:将路由与ReaderPage设置交互调整回弹窗模式 | Then:侧栏设置按钮恢复为打开卡片弹窗+订阅源菜单“设置脚本”直达弹窗script标签+/settings路由改为打开ReaderPage设置弹窗 | 验证:npm run build + 手动测试
+task118 [x] 场景:维护者继续拆分ReaderPage侧栏与布局逻辑以降低页面耦合 | Given:ReaderPage在上一轮拆分中断后仍残留侧栏重复副作用与内联布局拖拽逻辑 | When:修复useSidebarFeedActions接线并抽离布局拖拽到useReaderLayout hook | Then:侧栏状态由hook单一管理+ReaderPage移除重复副作用与宽度拖拽函数+页面继续保持设置卡片弹窗形态且构建通过 | 验证:npm run build + 手动测试
