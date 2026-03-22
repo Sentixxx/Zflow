@@ -39,8 +39,14 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		protocol, ok := parseAIProtocol(req.Protocol, req.BaseURL)
+		if !ok {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "protocol must be openai or anthropic"})
+			return
+		}
+
 		cfg := aiSettings{
-			Protocol:   normalizeAIProtocol(req.Protocol),
+			Protocol:   protocol,
 			APIKey:     strings.TrimSpace(req.APIKey),
 			BaseURL:    strings.TrimSpace(req.BaseURL),
 			Model:      strings.TrimSpace(req.Model),
@@ -55,9 +61,6 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if cfg.TargetLang == "" {
 			cfg.TargetLang = defaultAITargetLang
-		}
-		if cfg.Protocol == "" {
-			cfg.Protocol = defaultAIProtocol
 		}
 
 		if err := s.store.SetSetting(settingKeyAIProtocol, cfg.Protocol); err != nil {
@@ -477,11 +480,11 @@ func (s *Server) loadAISettings() (aiSettings, error) {
 		return aiSettings{}, err
 	}
 
-	if protocol == "" {
-		protocol = defaultAIProtocol
-	}
 	if baseURL == "" {
 		baseURL = defaultAIBaseURL
+	}
+	if protocol == "" {
+		protocol = inferAIProtocolFromBaseURL(baseURL)
 	}
 	if model == "" {
 		model = defaultAIModel
@@ -500,4 +503,30 @@ func normalizeAIProtocol(raw string) string {
 	default:
 		return "openai"
 	}
+}
+
+func parseAIProtocol(raw string, baseURL string) (string, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return inferAIProtocolFromBaseURL(baseURL), true
+	}
+	switch strings.ToLower(trimmed) {
+	case "openai":
+		return "openai", true
+	case "anthropic":
+		return "anthropic", true
+	default:
+		return "", false
+	}
+}
+
+func inferAIProtocolFromBaseURL(raw string) string {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	if normalized == "" {
+		return defaultAIProtocol
+	}
+	if strings.Contains(normalized, "/anthropic") || strings.Contains(normalized, "/v1/messages") {
+		return "anthropic"
+	}
+	return defaultAIProtocol
 }

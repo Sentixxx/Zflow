@@ -1,6 +1,41 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change501 日期:2026-03-22 | 文件:.tmp/plan_20260322_generic_readable_summary_prompt.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“通用易读型摘要 prompt 与 query 模式优化”计划书，再执行摘要链路改造 | 关联:task169
+- change502 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service.go,backend/internal/service/article_summary_service_test.go,backend/internal/model/article.go,backend/internal/handler/server_test.go,frontend/src/types/domain.ts,frontend/src/hooks/useSettingsActions.ts,Docs/ai-summary-research-review-20260322.md,.phrase/phases/phase-rss-llm-reader-20260225/tech-refer_summary_memory_pipeline_20260322.md | 操作:Modify | 影响:AI 摘要主链路与研究文档 | 说明:将摘要 prompt/query 改为通用主旨优先风格，引入二次语义重写与 query_mode/rewrite_passed 调试信息，并补充相关研究文档 | 关联:task169
+- change503 日期:2026-03-22 | 文件:tasks/todo.md,tasks/lessons.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/change_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成 task169，记录通用易读型摘要改造、经验教训与验证结果 | 关联:task169
+- change498 日期:2026-03-22 | 文件:.tmp/plan_20260322_remove_ai_summary_length_limit.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“移除 AI 摘要结果限长”计划书，再执行摘要裁断移除 | 关联:task164
+- change499 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service.go,backend/internal/service/article_summary_service_test.go | 操作:Modify | 影响:AI 摘要结果处理 | 说明:移除最终 AI 摘要固定字符截断，仅保留空白归一化，并补充长摘要不截断回归测试 | 关联:task164
+- change500 日期:2026-03-22 | 文件:tasks/todo.md,tasks/lessons.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/change_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成 task164，记录 AI 摘要去限长结果与验证结论 | 关联:task164
+- change495 日期:2026-03-22 | 文件:.tmp/plan_20260322_reset_summary_before_regenerate.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“摘要重生成重置与日志补强”计划书，再执行维护流程修正 | 关联:task163
+- change496 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service.go,backend/internal/service/article_summary_service_test.go | 操作:Modify | 影响:摘要维护流程 | 说明:批量重生成摘要改为先清空旧结果再逐篇重算，并补充结构化日志与旧摘要不残留回归测试 | 关联:task163
+- change497 日期:2026-03-22 | 文件:tasks/todo.md,tasks/lessons.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/change_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成 task163，记录摘要重生成状态重置与日志补强结果 | 关联:task163
+- change492 日期:2026-03-22 | 文件:.tmp/plan_20260322_fix_server_bind_logging.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“启动端口冲突日志修复”计划书，再执行监听时序修正 | 关联:task162
+- change493 日期:2026-03-22 | 文件:backend/cmd/server/main.go,backend/cmd/server/main_test.go | 操作:Modify | 影响:HTTP 启动入口 | 说明:启动流程改为先显式监听端口再记录 server started，并为端口占用失败补充 PORT/ZFLOW_ADDR 提示与回归测试 | 关联:task162
+- change494 日期:2026-03-22 | 文件:tasks/todo.md,tasks/lessons.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/change_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成 task162，记录启动日志时序修复与验证结果 | 关联:task162
+- change488 日期:2026-03-22 | 文件:.tmp/plan_20260322_batch_regenerate_summaries.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“批量重生成摘要”计划书，再执行维护入口与前后端接线 | 关联:task161
+- change489 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service.go,backend/internal/handler/server.go,backend/internal/handler/system_handlers.go,backend/internal/handler/server_test.go | 操作:Modify | 影响:摘要维护接口 | 说明:新增最近 100 篇文章摘要批量重生成能力及维护接口，并补充后端回归测试 | 关联:task161
+- change490 日期:2026-03-22 | 文件:frontend/src/api/client.ts,frontend/src/hooks/useSettingsActions.ts,frontend/src/components/settings/DataSettingsCard.tsx,frontend/src/components/settings/SettingsView.tsx,frontend/src/pages/SettingsPage.tsx,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:数据管理 UI | 说明:数据管理页新增“重生成最近 100 篇摘要”按钮并接通维护接口 | 关联:task161
+- change491 日期:2026-03-22 | 文件:tasks/todo.md,tasks/lessons.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/change_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成 task161，记录批量摘要重生成能力与验证结果 | 关联:task161
+- change484 日期:2026-03-22 | 文件:.tmp/plan_20260322_generic_summary_sampling.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“通用摘要采样优化”计划书，再执行 AI 摘要输入结构升级 | 关联:task160
+- change485 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service.go | 操作:Modify | 影响:AI 摘要输入采样 | 说明:将 AI 摘要输入从头部截断改为全篇覆盖式采样，按开头/中段/结尾和信息量优先选取正文块 | 关联:task160
+- change486 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service_test.go | 操作:Modify | 影响:AI 摘要测试 | 说明:新增全篇采样测试，验证中后段关键信息会进入摘要 prompt 而不是只依赖开头内容 | 关联:task160
+- change487 日期:2026-03-22 | 文件:tasks/todo.md,tasks/lessons.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/change_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成 task160，记录通用摘要采样优化与验证结果 | 关联:task160
+- change481 日期:2026-03-22 | 文件:.tmp/plan_20260322_summary_status_badge.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“摘要状态徽标”计划书，再执行卡片状态展示 | 关联:task159
+- change482 日期:2026-03-22 | 文件:frontend/src/components/article-detail/ArticleDetailContent.tsx,frontend/src/styles.css | 操作:Modify | 影响:摘要卡片状态展示 | 说明:为摘要卡片头部新增 AI 摘要/快速摘要状态标签，并补充对应徽标样式 | 关联:task159
+- change483 日期:2026-03-22 | 文件:tasks/todo.md,tasks/lessons.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/change_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成 task159，记录摘要状态徽标实现与验证结果 | 关联:task159
+- change477 日期:2026-03-22 | 文件:.tmp/plan_20260322_chunk_ai_summary_input.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“长文 AI 摘要分批阈值”计划书，再执行摘要分块与聚合实现 | 关联:task158
+- change478 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service.go | 操作:Modify | 影响:AI 摘要长文处理 | 说明:为超长正文增加按 1200 字符阈值分块的两阶段摘要链路，先做局部摘要再聚合最终摘要 | 关联:task158
+- change479 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service_test.go | 操作:Modify | 影响:AI 摘要测试 | 说明:新增正文分块阈值测试和长文多次 AI 调用聚合测试 | 关联:task158
+- change480 日期:2026-03-22 | 文件:tasks/todo.md,tasks/lessons.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/change_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成 task158，记录长文 AI 摘要分批阈值与验证结果 | 关联:task158
+- change473 日期:2026-03-22 | 文件:backend/internal/handler/ai_handlers.go | 操作:Modify | 影响:AI 设置保存校验 | 说明:为 AI 协议保存增加严格校验，禁止未知协议值被静默回退成 openai | 关联:task157
+- change474 日期:2026-03-22 | 文件:frontend/src/hooks/useSettingsActions.ts | 操作:Modify | 影响:AI 设置保存反馈 | 说明:保存 AI 设置后校验服务端返回协议与当前选择一致，不一致时直接报错 | 关联:task157
+- change475 日期:2026-03-22 | 文件:backend/internal/handler/server_test.go | 操作:Modify | 影响:AI 设置回归测试 | 说明:新增 Anthropic 协议持久化测试并补充 GET /settings/ai 默认协议断言 | 关联:task157
+- change476 日期:2026-03-22 | 文件:tasks/todo.md,tasks/lessons.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/change_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成 task157，记录 AI 协议保存修复与验证结果 | 关联:task157
+- change469 日期:2026-03-22 | 文件:.tmp/plan_20260322_finish_ai_summary_protocol.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“AI 摘要协议接通”计划书，再执行设置链路与测试补全 | 关联:task156
+- change470 日期:2026-03-22 | 文件:frontend/src/components/settings/AISettingsCard.tsx,frontend/src/components/settings/SettingsView.tsx,frontend/src/hooks/useSettingsActions.ts,frontend/src/api/client.ts,frontend/src/pages/SettingsPage.tsx,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:AI 设置与协议选择 | 说明:前端 AI 设置新增 openai/anthropic 协议选择，并把 protocol 字段接通到保存/加载与页面状态链路 | 关联:task156
+- change471 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service_test.go | 操作:Modify | 影响:AI 摘要回归测试 | 说明:新增 Anthropic 摘要单测，验证请求头、返回解析和 display_summary ready 状态 | 关联:task156
+- change472 日期:2026-03-22 | 文件:tasks/todo.md,tasks/lessons.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/change_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成 task156，记录 AI 摘要协议接通与验证结果 | 关联:task156
 - change465 日期:2026-03-22 | 文件:.tmp/plan_20260322_auto_extract_readable.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“缺少正文时自动抓取”计划书，再执行详情自动抓取与防重复回写修复 | 关联:task155
 - change466 日期:2026-03-22 | 文件:frontend/src/hooks/useArticleActions.ts | 操作:Modify | 影响:文章异步操作 | 说明:正文抓取、收藏、未读和缓存刷新改为按文章ID安全回写，避免旧请求返回后把详情切回旧文章 | 关联:task155
 - change467 日期:2026-03-22 | 文件:frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:详情自动正文抓取 | 说明:在缺少正文且存在链接时进入详情后自动触发一次 Readability 抓取，并按文章ID去重自动尝试 | 关联:task155
@@ -381,6 +416,30 @@
 - change081 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:订阅列表交互 | 说明:新增订阅源行内删除按钮与确认删除流程 | 关联:task028
 - change082 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:分类树结构 | 说明:新增分类左侧箭头并支持展开/收起状态管理 | 关联:task028
 - change083 日期:2026-02-25 | 文件:frontend/src/styles.css | 操作:Modify | 影响:侧栏视觉 | 说明:新增删除按钮与分类箭头样式并移除旧文件夹图标样式 | 关联:task028
+- change523 日期:2026-03-22 | 文件:Docs/ai-summary-research-review-20260322.md | 操作:Add | 影响:摘要研究文档 | 说明:新增面向论文写作的 AI 摘要研究综述，整理长文摘要、长度控制与层级聚合论文 | 关联:task168
+- change524 日期:2026-03-22 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task168 | 说明:新增并完成摘要论文研究综述文档落盘任务 | 关联:task168
+- change516 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service.go | 操作:Modify | 影响:AI 摘要生成链路 | 说明:移除阶段与最终摘要固定长度限制，放宽 prompt 并增加句边界收尾处理 | 关联:task167
+- change517 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service.go | 操作:Modify | 影响:长文聚合策略 | 说明:让最终聚合同时读取阶段摘要与原文片段，并输出摘要调试信息 | 关联:task167
+- change518 日期:2026-03-22 | 文件:backend/internal/handler/dev_handlers.go | 操作:Modify | 影响:单篇摘要调试接口 | 说明:刷新当前文章摘要接口返回 summary_debug 供开发调试使用 | 关联:task167
+- change519 日期:2026-03-22 | 文件:frontend/src/hooks/useSettingsActions.ts | 操作:Modify | 影响:顶栏摘要调试状态 | 说明:刷新当前文章摘要后在顶栏展示策略、chunks/windows 和收尾状态 | 关联:task167
+- change520 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service_test.go | 操作:Modify | 影响:摘要回归测试 | 说明:补充聚合原文锚点、句边界收尾与更高输出预算相关测试 | 关联:task167
+- change521 日期:2026-03-22 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/tech-refer_summary_memory_pipeline_20260322.md | 操作:Modify | 影响:摘要技术记忆 | 说明:记录长文摘要范式、长度控制与聚合回锚相关研究结论 | 关联:task167
+- change522 日期:2026-03-22 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task167 | 说明:新增并完成 AI 摘要去长度限制化与层级聚合适配任务 | 关联:task167
+- change511 日期:2026-03-22 | 文件:backend/internal/handler/dev_handlers.go | 操作:Modify | 影响:单篇摘要调试接口 | 说明:新增刷新当前文章 AI 摘要开发接口并返回最新文章详情 | 关联:task166
+- change512 日期:2026-03-22 | 文件:backend/internal/handler/server_test.go | 操作:Modify | 影响:开发调试接口测试 | 说明:补充刷新当前文章摘要接口回归测试 | 关联:task166
+- change513 日期:2026-03-22 | 文件:frontend/src/hooks/useSettingsActions.ts | 操作:Modify | 影响:摘要调试动作编排 | 说明:新增当前文章摘要刷新动作、进行中禁用态与更详细的顶栏状态文案 | 关联:task166
+- change514 日期:2026-03-22 | 文件:frontend/src/components/settings/DataSettingsCard.tsx | 操作:Modify | 影响:开发调试区交互 | 说明:新增“刷新当前文章摘要”按钮并显示当前刷新状态 | 关联:task166
+- change515 日期:2026-03-22 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task166 | 说明:新增并完成当前文章摘要显式刷新与顶栏详细状态任务 | 关联:task166
+- change501 日期:2026-03-22 | 文件:backend/internal/model/article.go | 操作:Modify | 影响:文章摘要模型 | 说明:新增 ai_summary、ai_summary_status、ai_summary_updated_at 字段并保留 display_summary 展示层 | 关联:task165
+- change502 日期:2026-03-22 | 文件:backend/internal/repository/sqlite_feed_repository_impl.go | 操作:Modify | 影响:摘要持久化与迁移 | 说明:为 entries 表补 AI 摘要字段并新增同时写入 AI 层和展示层的仓储更新方法 | 关联:task165
+- change503 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service.go | 操作:Modify | 影响:摘要生成与清除流程 | 说明:将摘要状态拆为 AI 层和展示层，重生成先清 AI 层再重建，并新增单篇/批量清除与结构化日志 | 关联:task165
+- change504 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service.go | 操作:Modify | 影响:AI 摘要分块策略 | 说明:新增图片噪音过滤并按文章总长选择直出、连续窗口分块或多窗口带聚合 | 关联:task165
+- change505 日期:2026-03-22 | 文件:backend/internal/handler/dev_handlers.go | 操作:Add | 影响:开发调试接口 | 说明:新增清除当前文章与最近 100 篇 AI 摘要接口并接入 server 路由 | 关联:task165
+- change506 日期:2026-03-22 | 文件:frontend/src/hooks/useSettingsActions.ts | 操作:Modify | 影响:设置动作编排 | 说明:新增单篇/批量清除 AI 摘要动作并在操作后刷新当前文章详情与文章列表 | 关联:task165
+- change507 日期:2026-03-22 | 文件:frontend/src/components/settings/DataSettingsCard.tsx | 操作:Modify | 影响:设置页开发调试区 | 说明:新增清除当前文章、清除最近 100 篇与说明文案入口 | 关联:task165
+- change508 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service_test.go | 操作:Modify | 影响:摘要回归测试 | 说明:补充图片噪音过滤、清除后回退 RSS 摘要与新摘要状态语义测试 | 关联:task165
+- change509 日期:2026-03-22 | 文件:backend/internal/handler/server_test.go | 操作:Modify | 影响:开发调试接口测试 | 说明:新增单篇/批量清除 AI 摘要接口回归测试 | 关联:task165
+- change510 日期:2026-03-22 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task165 | 说明:新增并完成 AI 摘要存储分层与开发调试清除任务 | 关联:task165
 - change084 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task028 | 说明:新增并完成订阅删除与分类折叠交互任务 | 关联:task028
 - change075 日期:2026-02-25 | 文件:frontend/src/api.ts | 操作:Modify | 影响:订阅刷新API | 说明:新增refreshFeed接口以触发单订阅远端抓取 | 关联:task027
 - change076 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:刷新交互 | 说明:将刷新订阅按钮改为真实远端抓取并新增设置内远端抓取入口 | 关联:task027

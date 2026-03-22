@@ -27,6 +27,9 @@ export interface Article {
   title: string;
   link: string;
   summary?: string;
+  ai_summary?: string;
+  ai_summary_status?: string;
+  ai_summary_updated_at?: string;
   display_summary?: string;
   display_summary_status?: string;
   display_summary_updated_at?: string;
@@ -37,4 +40,13 @@ export interface Article {
   is_favorite: boolean;
   favorited_at?: string;
   created_at: string;
+  summary_debug?: {
+    strategy?: string;
+    query_mode?: string;
+    chunk_count?: number;
+    window_count?: number;
+    rewrite_passed?: boolean;
+    final_sentence_closed?: boolean;
+    used_ai?: boolean;
+  };
 }

@@ -17,6 +17,7 @@ export function SettingsPage() {
   const [, setLocation] = useLocation();
   const [apiBase, setApiBase] = useState<string>(localStorage.getItem("zflow_api_base") || DEFAULT_API_BASE);
   const [networkProxyURL, setNetworkProxyURL] = useState<string>("");
+  const [aiProtocol, setAIProtocol] = useState<"openai" | "anthropic">("openai");
   const [aiAPIKey, setAIAPIKey] = useState<string>("");
   const [aiBaseURL, setAIBaseURL] = useState<string>("");
   const [aiModel, setAIModel] = useState<string>("");
@@ -59,6 +60,11 @@ export function SettingsPage() {
     saveAISettings,
     loadDataSettings,
     saveDataSettings,
+    regenerateSummaries,
+    refreshCurrentArticleAISummary,
+    clearCurrentArticleAISummary,
+    clearRecentAISummaries,
+    isRefreshingCurrentArticleAISummary,
     selectScriptFeed,
     saveFeedScript,
     uploadScriptFile,
@@ -69,8 +75,12 @@ export function SettingsPage() {
   } = useSettingsActions({
     client,
     feeds,
+    selectedArticleID: null,
+    selectedArticleTitle: "",
+    selectedArticleSummaryStatus: "",
     apiBase,
     networkProxyURL,
+    aiProtocol,
     aiAPIKey,
     aiBaseURL,
     aiModel,
@@ -80,6 +90,7 @@ export function SettingsPage() {
     scriptContent,
     scriptLang,
     setNetworkProxyURL,
+    setAIProtocol,
     setAIAPIKey,
     setAIBaseURL,
     setAIModel,
@@ -92,6 +103,7 @@ export function SettingsPage() {
     loadFeeds,
     loadFolders,
     loadArticles,
+    onSelectedArticleUpdated: undefined,
     setMessage,
   });
 
@@ -252,18 +264,27 @@ export function SettingsPage() {
             networkProxyURL={networkProxyURL}
             onNetworkProxyURLChange={setNetworkProxyURL}
             onSaveNetworkSettings={saveNetworkSettings}
+            aiProtocol={aiProtocol}
             aiAPIKey={aiAPIKey}
             aiBaseURL={aiBaseURL}
             aiModel={aiModel}
             aiTargetLang={aiTargetLang}
+            onAIProtocolChange={setAIProtocol}
             onAIAPIKeyChange={setAIAPIKey}
             onAIBaseURLChange={setAIBaseURL}
             onAIModelChange={setAIModel}
             onAITargetLangChange={setAITargetLang}
             onSaveAISettings={saveAISettings}
             articleRetentionDays={articleRetentionDays}
+            selectedArticleID={null}
+            selectedArticleTitle=""
+            isRefreshingCurrentArticleAISummary={isRefreshingCurrentArticleAISummary}
             onArticleRetentionDaysChange={setArticleRetentionDays}
             onSaveDataSettings={saveDataSettings}
+            onRefreshCurrentArticleAISummary={refreshCurrentArticleAISummary}
+            onClearCurrentArticleAISummary={clearCurrentArticleAISummary}
+            onClearRecentAISummaries={clearRecentAISummaries}
+            onRegenerateSummaries={regenerateSummaries}
             onExportProfileJSON={exportProfileJSON}
             onExportOPML={exportOPML}
             onImportProfileJSON={importProfileJSON}

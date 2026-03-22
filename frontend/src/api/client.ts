@@ -170,6 +170,24 @@ export class ApiClient {
     });
   }
 
+  async clearArticleAISummary(id: number): Promise<Article> {
+    return this.request<Article>(`/api/v1/dev/articles/${id}/clear-ai-summary`, {
+      method: "POST",
+    });
+  }
+
+  async refreshArticleAISummary(id: number): Promise<Article> {
+    return this.request<Article>(`/api/v1/dev/articles/${id}/refresh-ai-summary`, {
+      method: "POST",
+    });
+  }
+
+  async clearRecentAISummaries(): Promise<{ cleared?: number }> {
+    return this.request<{ cleared?: number }>("/api/v1/dev/articles/clear-recent-ai-summaries", {
+      method: "POST",
+    });
+  }
+
   async translateArticle(id: number, targetLang = "zh-CN"): Promise<{ translated_text: string; target_lang: string; article_id: number }> {
     return this.request<{ translated_text: string; target_lang: string; article_id: number }>(`/api/v1/articles/${id}/translate`, {
       method: "POST",
@@ -271,8 +289,8 @@ export class ApiClient {
     });
   }
 
-  async getAISettings(): Promise<{ api_key?: string; base_url?: string; model?: string; target_lang?: string }> {
-    return this.request<{ api_key?: string; base_url?: string; model?: string; target_lang?: string }>("/api/v1/settings/ai");
+  async getAISettings(): Promise<{ protocol?: "openai" | "anthropic"; api_key?: string; base_url?: string; model?: string; target_lang?: string }> {
+    return this.request<{ protocol?: "openai" | "anthropic"; api_key?: string; base_url?: string; model?: string; target_lang?: string }>("/api/v1/settings/ai");
   }
 
   async getDataSettings(): Promise<{ retention_days?: number }> {
@@ -286,13 +304,20 @@ export class ApiClient {
     });
   }
 
-  async updateAISettings(payload: { api_key: string; base_url: string; model: string; target_lang: string }): Promise<{
+  async regenerateSummaries(): Promise<{ refreshed?: number }> {
+    return this.request<{ refreshed?: number }>("/api/v1/settings/data/regenerate-summaries", {
+      method: "POST",
+    });
+  }
+
+  async updateAISettings(payload: { protocol: "openai" | "anthropic"; api_key: string; base_url: string; model: string; target_lang: string }): Promise<{
+    protocol?: "openai" | "anthropic";
     api_key?: string;
     base_url?: string;
     model?: string;
     target_lang?: string;
   }> {
-    return this.request<{ api_key?: string; base_url?: string; model?: string; target_lang?: string }>("/api/v1/settings/ai", {
+    return this.request<{ protocol?: "openai" | "anthropic"; api_key?: string; base_url?: string; model?: string; target_lang?: string }>("/api/v1/settings/ai", {
       method: "PATCH",
       body: JSON.stringify(payload),
     });

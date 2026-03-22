@@ -1293,7 +1293,15 @@ button:active {
 }
 
 .detail-summary-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
+}
+
+.detail-summary-card-header-main {
+  min-width: 0;
 }
 
 .detail-summary-card-kicker {
@@ -1315,6 +1323,33 @@ button:active {
   font-size: 18px;
   line-height: 1.35;
   color: var(--ink-strong);
+}
+
+.detail-summary-card-status {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.detail-summary-card-status.is-ready {
+  background: color-mix(in srgb, #0f766e 12%, transparent);
+  color: #0f766e;
+}
+
+.detail-summary-card-status.is-fallback {
+  background: color-mix(in srgb, #b45309 12%, transparent);
+  color: #b45309;
+}
+
+.detail-summary-card-status.is-neutral {
+  background: color-mix(in srgb, var(--ink-muted) 12%, transparent);
+  color: var(--muted);
 }
 
 .detail-summary-card-body {
@@ -2100,6 +2135,13 @@ a {
 
 .settings-actions > * {
   width: 100%;
+}
+
+.settings-inline-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 @media (max-width: 900px) {

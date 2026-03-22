@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
+	"github.com/Sentixxx/Zflow/backend/internal/service"
 )
 
 func TestCreateFeedAndList(t *testing.T) {
@@ -223,6 +224,7 @@ func TestAISettingsGetAndPatch(t *testing.T) {
 		t.Fatalf("GET /api/v1/settings/ai status(after patch) = %d, want %d", rrGet2.Code, http.StatusOK)
 	}
 	var resp struct {
+		Protocol   string `json:"protocol"`
 		APIKey     string `json:"api_key"`
 		BaseURL    string `json:"base_url"`
 		Model      string `json:"model"`
@@ -231,7 +233,78 @@ func TestAISettingsGetAndPatch(t *testing.T) {
 	if err := json.Unmarshal(rrGet2.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal ai settings response error = %v", err)
 	}
-	if resp.APIKey != "test-ai-key" || resp.BaseURL != "https://example-ai.local/v1" || resp.Model != "test-model" || resp.TargetLang != "ja" {
+	if resp.Protocol != "openai" || resp.APIKey != "test-ai-key" || resp.BaseURL != "https://example-ai.local/v1" || resp.Model != "test-model" || resp.TargetLang != "ja" {
+		t.Fatalf("ai settings response mismatch: %+v", resp)
+	}
+}
+
+func TestAISettingsPersistsAnthropicProtocol(t *testing.T) {
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	reqPatch := httptest.NewRequest(http.MethodPatch, "/api/v1/settings/ai", bytes.NewReader([]byte(`{
+		"protocol":"anthropic",
+		"api_key":"test-ai-key",
+		"base_url":"https://example-ai.local/anthropic",
+		"model":"test-model",
+		"target_lang":"zh-CN"
+	}`)))
+	rrPatch := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrPatch, reqPatch)
+	if rrPatch.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/v1/settings/ai status = %d, want %d, body=%s", rrPatch.Code, http.StatusOK, rrPatch.Body.String())
+	}
+
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/settings/ai", nil)
+	rrGet := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrGet, reqGet)
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/settings/ai status = %d, want %d", rrGet.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Protocol string `json:"protocol"`
+		BaseURL  string `json:"base_url"`
+	}
+	if err := json.Unmarshal(rrGet.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal ai settings response error = %v", err)
+	}
+	if resp.Protocol != "anthropic" || resp.BaseURL != "https://example-ai.local/anthropic" {
+		t.Fatalf("ai settings response mismatch: %+v", resp)
+	}
+}
+
+func TestAISettingsInfersAnthropicProtocolFromBaseURL(t *testing.T) {
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	if err := repo.SetSetting(settingKeyAIBaseURL, "https://api.minimaxi.com/anthropic"); err != nil {
+		t.Fatalf("SetSetting(ai_base_url) error = %v", err)
+	}
+	if err := repo.SetSetting(settingKeyAIApiKey, "test-ai-key"); err != nil {
+		t.Fatalf("SetSetting(ai_api_key) error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/settings/ai", nil)
+	rrGet := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrGet, reqGet)
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/settings/ai status = %d, want %d", rrGet.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Protocol string `json:"protocol"`
+		BaseURL  string `json:"base_url"`
+	}
+	if err := json.Unmarshal(rrGet.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal ai settings response error = %v", err)
+	}
+	if resp.Protocol != "anthropic" || resp.BaseURL != "https://api.minimaxi.com/anthropic" {
 		t.Fatalf("ai settings response mismatch: %+v", resp)
 	}
 }
@@ -869,5 +942,226 @@ func TestDataSettingsAndRetentionCleanupKeepFavorites(t *testing.T) {
 	}
 	if !listResp2.Articles[0].IsFavorite {
 		t.Fatalf("remaining article is_favorite = false, want true")
+	}
+}
+
+func TestRegenerateSummariesEndpoint(t *testing.T) {
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+		{Title: "A1", Link: "https://example.com/1", Summary: "<p>第一篇摘要</p>"},
+		{Title: "A2", Link: "https://example.com/2", Summary: "<p>第二篇摘要</p>"},
+	}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings/data/regenerate-summaries", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/settings/data/regenerate-summaries status = %d, want %d, body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp struct {
+		Refreshed int `json:"refreshed"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal regenerate summaries response error = %v", err)
+	}
+	if resp.Refreshed != 2 {
+		t.Fatalf("refreshed = %d, want 2", resp.Refreshed)
+	}
+
+	for _, article := range repo.ListArticles() {
+		if article.DisplaySummary == "" {
+			t.Fatalf("article %d display_summary is empty", article.ID)
+		}
+	}
+}
+
+func TestClearCurrentArticleAISummaryEndpoint(t *testing.T) {
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+		{
+			Title:       "A1",
+			Link:        "https://example.com/1",
+			Summary:     "<p>RSS 摘要</p>",
+			FullContent: "<article><p>正文内容</p></article>",
+		},
+	}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+	article := repo.ListArticles()[0]
+	if err := repo.UpdateArticleSummaryState(article.ID, "AI 摘要内容", service.DisplaySummaryReady, "<p>AI 摘要内容</p>", service.DisplaySummaryReady); err != nil {
+		t.Fatalf("UpdateArticleSummaryState() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/articles/"+strconv.FormatInt(article.ID, 10)+"/clear-ai-summary", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/dev/articles/:id/clear-ai-summary status = %d, want %d, body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp struct {
+		AISummary            string `json:"ai_summary"`
+		DisplaySummary       string `json:"display_summary"`
+		DisplaySummaryStatus string `json:"display_summary_status"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal clear current summary response error = %v", err)
+	}
+	if resp.AISummary != "" {
+		t.Fatalf("ai_summary = %q, want empty", resp.AISummary)
+	}
+	if !strings.Contains(resp.DisplaySummary, "RSS 摘要") {
+		t.Fatalf("display_summary = %q, want raw rss fallback", resp.DisplaySummary)
+	}
+	if resp.DisplaySummaryStatus != service.DisplaySummaryFallback {
+		t.Fatalf("display_summary_status = %q, want %q", resp.DisplaySummaryStatus, service.DisplaySummaryFallback)
+	}
+}
+
+func TestRefreshCurrentArticleAISummaryEndpoint(t *testing.T) {
+	aiMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"刷新后的 AI 摘要"}}]}`))
+	}))
+	defer aiMock.Close()
+
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	if err := repo.SetSetting("ai_api_key", "test-key"); err != nil {
+		t.Fatalf("SetSetting(ai_api_key) error = %v", err)
+	}
+	if err := repo.SetSetting("ai_base_url", aiMock.URL); err != nil {
+		t.Fatalf("SetSetting(ai_base_url) error = %v", err)
+	}
+	if err := repo.SetSetting("ai_model", "test-model"); err != nil {
+		t.Fatalf("SetSetting(ai_model) error = %v", err)
+	}
+
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+		{
+			Title:       "A1",
+			Link:        "https://example.com/1",
+			Summary:     "<p>RSS 原始摘要</p>",
+			FullContent: "<article><p>正文内容足够长，可以重新生成 AI 摘要。</p></article>",
+		},
+	}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+
+	server := NewServer(repo, t.TempDir())
+	article := repo.ListArticles()[0]
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/articles/"+strconv.FormatInt(article.ID, 10)+"/refresh-ai-summary", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/dev/articles/:id/refresh-ai-summary status = %d, want %d, body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp struct {
+		AISummary            string `json:"ai_summary"`
+		AISummaryStatus      string `json:"ai_summary_status"`
+		DisplaySummary       string `json:"display_summary"`
+		DisplaySummaryStatus string `json:"display_summary_status"`
+		SummaryDebug         struct {
+			Strategy            string `json:"strategy"`
+			QueryMode           string `json:"query_mode"`
+			ChunkCount          int    `json:"chunk_count"`
+			WindowCount         int    `json:"window_count"`
+			RewritePassed       bool   `json:"rewrite_passed"`
+			FinalSentenceClosed bool   `json:"final_sentence_closed"`
+			UsedAI              bool   `json:"used_ai"`
+		} `json:"summary_debug"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal refresh ai summary response error = %v", err)
+	}
+	if resp.AISummary != "刷新后的 AI 摘要。" {
+		t.Fatalf("ai_summary = %q, want refreshed ai summary", resp.AISummary)
+	}
+	if resp.AISummaryStatus != service.AISummaryReady {
+		t.Fatalf("ai_summary_status = %q, want %q", resp.AISummaryStatus, service.AISummaryReady)
+	}
+	if !strings.Contains(resp.DisplaySummary, "刷新后的 AI 摘要") {
+		t.Fatalf("display_summary = %q, want refreshed ai summary in display layer", resp.DisplaySummary)
+	}
+	if resp.DisplaySummaryStatus != service.DisplaySummaryReady {
+		t.Fatalf("display_summary_status = %q, want %q", resp.DisplaySummaryStatus, service.DisplaySummaryReady)
+	}
+	if resp.SummaryDebug.Strategy == "" {
+		t.Fatalf("summary_debug.strategy is empty, want debug info")
+	}
+	if resp.SummaryDebug.QueryMode == "" {
+		t.Fatalf("summary_debug.query_mode is empty, want query mode info")
+	}
+	if !resp.SummaryDebug.UsedAI {
+		t.Fatalf("summary_debug.used_ai = false, want true")
+	}
+	if !resp.SummaryDebug.FinalSentenceClosed {
+		t.Fatalf("summary_debug.final_sentence_closed = false, want true")
+	}
+}
+
+func TestClearRecentAISummariesEndpoint(t *testing.T) {
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+		{Title: "A1", Link: "https://example.com/1", Summary: "<p>摘要一</p>"},
+		{Title: "A2", Link: "https://example.com/2", Summary: "<p>摘要二</p>"},
+	}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+	for _, article := range repo.ListArticles() {
+		if err := repo.UpdateArticleSummaryState(article.ID, "AI 摘要", service.DisplaySummaryReady, "<p>AI 摘要</p>", service.DisplaySummaryReady); err != nil {
+			t.Fatalf("UpdateArticleSummaryState() error = %v", err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/articles/clear-recent-ai-summaries", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/dev/articles/clear-recent-ai-summaries status = %d, want %d, body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp struct {
+		Cleared int `json:"cleared"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal clear recent summaries response error = %v", err)
+	}
+	if resp.Cleared != 2 {
+		t.Fatalf("cleared = %d, want 2", resp.Cleared)
+	}
+	for _, article := range repo.ListArticles() {
+		if article.AISummary != "" {
+			t.Fatalf("article %d ai_summary = %q, want empty", article.ID, article.AISummary)
+		}
+		if article.DisplaySummaryStatus != service.DisplaySummaryFallback {
+			t.Fatalf("article %d display_summary_status = %q, want fallback", article.ID, article.DisplaySummaryStatus)
+		}
 	}
 }

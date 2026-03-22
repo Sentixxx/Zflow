@@ -16,6 +16,10 @@ type updateDataSettingsRequest struct {
 	RetentionDays int `json:"retention_days"`
 }
 
+type regenerateSummariesResponse struct {
+	Refreshed int `json:"refreshed"`
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -97,4 +101,17 @@ func (s *Server) handleDataSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func (s *Server) handleSummaryRegeneration(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	refreshed, err := s.summaryUC.RefreshRecentArticles(100)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to regenerate summaries"})
+		return
+	}
+	writeJSON(w, http.StatusOK, regenerateSummariesResponse{Refreshed: refreshed})
 }

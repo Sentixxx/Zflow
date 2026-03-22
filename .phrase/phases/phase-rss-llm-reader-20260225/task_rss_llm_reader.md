@@ -178,3 +178,17 @@ task152 [x] 场景:用户抓取慢响应正文页面时不再因 8 秒超时而�
 task153 [x] 场景:用户在宽屏阅读正文详情时不再看到右侧明显空白带 | Given:右侧详情面板会因内部容器宽度限制产生留白 | When:打开文章详情阅读正文或摘要 | Then:详情内容按面板宽度自然铺开且页面整体宽度观感恢复正常 | 验证:npm run build + 手动测试
 task154 [x] 场景:用户阅读文章时不再需要在摘要和正文之间切换模式 | Given:详情页已有摘要卡片且正文可通过 Readability 抓取 | When:打开文章详情并抓取正文 | Then:摘要固定展示在上方+正文抓到后直接接在下方显示+工具栏按钮改为抓取/重新抓取正文 | 验证:npm run build + 手动测试
 task155 [x] 场景:用户打开缺少正文的文章时无需手动点击也能继续向下阅读 | Given:详情页已固定展示摘要且当前文章缺少full_content但存在可抓取链接 | When:用户打开文章详情 | Then:系统自动触发一次正文抓取并在成功后直接接到摘要下方，同时旧请求返回不会覆盖用户已切换到的新文章 | 验证:npm run build + 手动测试
+task156 [x] 场景:用户在配置 Anthropic 或 OpenAI 兼容模型后都能生成 AI 摘要 | Given:摘要服务已支持两类上游协议且设置中心可编辑 AI 参数 | When:用户在设置中选择协议并保存 Base URL、模型、API Key 后刷新订阅或打开文章详情 | Then:系统按所选协议调用对应摘要接口生成 display_summary，失败时继续回退本地摘要且设置值能被稳定加载/保存 | 验证:go test ./... + npm run build
+task157 [x] 场景:用户切换 AI 协议后不会在保存时被静默改回 OpenAI | Given:设置中心已支持 openai/anthropic 协议选择 | When:用户保存 Anthropic 等非默认协议并重新读取设置 | Then:后端仅接受合法协议值并持久化真实选择，前端若读回值不一致则报错而不是伪装成功 | 验证:go test ./... + npm run build
+task158 [x] 场景:用户为超长文章生成 AI 摘要时不会因单次正文过长而劣化 | Given:文章正文可能远超单次 prompt 的合理体积 | When:摘要 service 调用 AI 生成 display_summary | Then:系统按固定阈值切分正文做阶段摘要并聚合最终摘要，任一阶段失败时继续回退本地摘要 | 验证:go test ./...
+task159 [x] 场景:用户阅读摘要时能直接分辨当前摘要是否来自 AI | Given:系统存在 AI 摘要与本地回退两种 display_summary 来源 | When:打开文章详情摘要卡片 | Then:卡片头部显示 AI 摘要或快速摘要状态标签，帮助用户判断当前摘要来源 | 验证:npm run build
+task160 [x] 场景:用户生成 AI 摘要时不会因为正文前言过强而只看到开头复述 | Given:文章的关键内容可能位于正文中后段且前部存在导语或说明段 | When:摘要 service 为文章构建 AI 摘要输入 | Then:系统基于全篇覆盖与信息量优先策略采样正文块，让模型看到中后段主体内容而不是只看开头几段 | 验证:go test ./...
+task161 [x] 场景:用户能够批量重生成现有文章摘要以应用新摘要策略 | Given:库中已有旧文章且摘要生成逻辑已升级 | When:在数据管理中触发摘要重生成 | Then:系统批量重跑最近 100 篇文章的 display_summary 并返回处理数量，前端同步刷新文章列表 | 验证:go test ./... + npm run build
+task162 [x] 场景:用户在默认端口被占用时获得真实且可操作的启动反馈 | Given:后端默认监听 `:8080` 且该端口已被其他进程占用 | When:启动 HTTP 服务 | Then:系统不会提前打印 `server started` + 会返回带 `PORT/ZFLOW_ADDR` 提示的监听失败错误 | 验证:go test ./...
+task163 [x] 场景:维护者批量重生成摘要时不会残留旧结果且能看到执行进度 | Given:库中最近文章可能已经存在旧的 `display_summary` 结果 | When:触发“重生成最近 100 篇摘要”维护入口 | Then:系统先清空目标文章旧摘要状态再逐篇重跑，并输出开始/重置/完成日志便于排查失败位置 | 验证:go test ./internal/service ./internal/handler
+task164 [x] 场景:用户阅读 AI 摘要时不会再看到固定字符裁断留下的半句 | Given:AI 摘要上游可能返回超过旧上限的完整内容 | When:系统保存最终 AI 摘要展示结果 | Then:后端不再对最终 AI 摘要做人为限长，仅做空白归一化，长摘要可完整展示 | 验证:go test ./internal/service
+task165 [x] 场景:开发者调试 AI 摘要时可以清除单篇或最近 100 篇结果并验证新分块策略 | Given:文章已存在 AI 摘要且系统需要区分 AI 原文层和展示层 | When:开发调试区触发清除当前文章/最近 100 篇 AI 摘要或批量重生成摘要 | Then:系统只清 AI 层并让展示层回退到 RSS 摘要 + AI 分块会过滤图片噪音并按文章总长分层处理 + 前端同步刷新当前详情与列表状态 | 验证:go test ./internal/service ./internal/handler + go test ./cmd/server + npm run build
+task166 [x] 场景:开发者在调试摘要时可以显式刷新当前文章并看到更详细的顶栏状态 | Given:当前已选中文章且开发调试区需要单篇重拉摘要入口 | When:点击“刷新当前文章摘要”按钮 | Then:系统触发单篇摘要重建并禁用重复点击 + 顶栏显示当前文章标题与摘要状态信息 + 完成后同步刷新当前详情与列表 | 验证:go test ./internal/handler + npm run build
+task167 [x] 场景:用户阅读长文 AI 摘要时不再因链路内硬压缩而看到半句或过早收尾 | Given:文章摘要链路仍存在中间阶段长度限制、过短 prompt 约束和长文聚合信息丢失风险 | When:系统为单篇或长文文章生成 AI 摘要并在开发调试区刷新当前文章摘要 | Then:最终与阶段摘要不再做固定长度截断 + 聚合阶段同时参考阶段摘要和原文片段 + 单句无标点自动闭合/多句半截回退完整句 + 调试信息显示摘要策略与收尾状态 | 验证:go test ./internal/service ./internal/handler + npm run build
+task168 [x] 场景:研究者后续撰写论文时可以直接引用本次摘要论文调研结果 | Given:本次已查阅长文摘要、长度控制和层级聚合相关论文 | When:将研究结果整理为仓库内正式文档 | Then:系统在 Docs 下提供结构化综述文档，包含论文分组、核心结论、工程启发和参考文献清单 | 验证:手动检查文档内容与链接
+task169 [x] 场景:用户面对文章、帖子或回复等异构输入时能一眼看懂 AI 摘要主线 | Given:当前 AI 摘要已去掉硬截断但仍容易输出细节堆叠的长段复述 | When:系统为单篇或长文内容生成 AI 摘要并在开发调试区刷新当前文章摘要 | Then:prompt 改为通用主旨优先风格 + query 围绕主旨/重点/结论组织 + 过长结果进入二次语义重写而非字符裁剪 + 调试信息显示 query_mode 与 rewrite_passed | 验证:go test ./internal/service ./internal/handler + npm run build

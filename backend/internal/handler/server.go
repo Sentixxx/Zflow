@@ -149,9 +149,9 @@ func NewServer(feedStore repository.FeedRepository, dataDir string) *Server {
 			}
 			return service.SummaryAIConfig{
 				Protocol: cfg.Protocol,
-				APIKey:  cfg.APIKey,
-				BaseURL: cfg.BaseURL,
-				Model:   cfg.Model,
+				APIKey:   cfg.APIKey,
+				BaseURL:  cfg.BaseURL,
+				Model:    cfg.Model,
 			}, nil
 		},
 		defaultAIBaseURL,
@@ -167,6 +167,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/folders/", s.handleFolderByID)
 	mux.HandleFunc("/api/v1/articles", s.handleArticles)
 	mux.HandleFunc("/api/v1/articles/", s.handleArticleByID)
+	mux.HandleFunc("/api/v1/dev/articles/", s.handleDevArticles)
 	mux.HandleFunc("/api/v1/icons/", s.handleFeedIcon)
 	mux.HandleFunc("/api/v1/data/export/profile", s.handleExportProfile)
 	mux.HandleFunc("/api/v1/data/import/profile", s.handleImportProfile)
@@ -175,6 +176,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/settings/network", s.handleNetworkSettings)
 	mux.HandleFunc("/api/v1/settings/ai", s.handleAISettings)
 	mux.HandleFunc("/api/v1/settings/data", s.handleDataSettings)
+	mux.HandleFunc("/api/v1/settings/data/regenerate-summaries", s.handleSummaryRegeneration)
 	mux.HandleFunc("/healthz", s.handleHealth)
 }
 
@@ -1041,6 +1043,8 @@ func resourceFromPath(path string) string {
 		return "folder"
 	case strings.HasPrefix(path, "/api/v1/articles"):
 		return "entry"
+	case strings.HasPrefix(path, "/api/v1/dev"):
+		return "settings"
 	case strings.HasPrefix(path, "/api/v1/icons"):
 		return "icon"
 	case strings.HasPrefix(path, "/api/v1/data"):

@@ -86,6 +86,9 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 			title TEXT NOT NULL,
 			link TEXT NOT NULL DEFAULT '',
 			summary TEXT NOT NULL DEFAULT '',
+			ai_summary TEXT NOT NULL DEFAULT '',
+			ai_summary_status TEXT NOT NULL DEFAULT '',
+			ai_summary_updated_at TEXT NOT NULL DEFAULT '',
 			display_summary TEXT NOT NULL DEFAULT '',
 			display_summary_status TEXT NOT NULL DEFAULT '',
 			display_summary_updated_at TEXT NOT NULL DEFAULT '',
@@ -115,6 +118,15 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 		}
 	}
 	if err := s.ensureColumn(ctx, "entries", "full_content", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "ai_summary", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "ai_summary_status", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "ai_summary_updated_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "entries", "display_summary", "TEXT NOT NULL DEFAULT ''"); err != nil {
@@ -549,7 +561,7 @@ func (s *SQLiteFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string
 }
 
 func (s *SQLiteFeedRepository) ListArticles() []model.Article {
-	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries ORDER BY id DESC`)
+	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries ORDER BY id DESC`)
 	if err != nil {
 		return []model.Article{}
 	}
@@ -566,6 +578,9 @@ func (s *SQLiteFeedRepository) ListArticles() []model.Article {
 			&article.Title,
 			&article.Link,
 			&article.Summary,
+			&article.AISummary,
+			&article.AISummaryStatus,
+			&article.AISummaryAt,
 			&article.DisplaySummary,
 			&article.DisplaySummaryStatus,
 			&article.DisplaySummaryAt,
@@ -591,7 +606,7 @@ func (s *SQLiteFeedRepository) ListArticlesMissingDisplaySummary(feedID int64, l
 		limit = 100
 	}
 	rows, err := s.db.Query(
-		`SELECT id, feed_id, title, link, summary, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at
+		`SELECT id, feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at
 		 FROM entries
 		 WHERE feed_id = ? AND display_summary = ''
 		 ORDER BY id DESC
@@ -614,6 +629,9 @@ func (s *SQLiteFeedRepository) ListArticlesMissingDisplaySummary(feedID int64, l
 			&article.Title,
 			&article.Link,
 			&article.Summary,
+			&article.AISummary,
+			&article.AISummaryStatus,
+			&article.AISummaryAt,
 			&article.DisplaySummary,
 			&article.DisplaySummaryStatus,
 			&article.DisplaySummaryAt,
@@ -644,7 +662,7 @@ func (s *SQLiteFeedRepository) DeleteArticle(id int64) (bool, error) {
 }
 
 func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
-	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries WHERE id = ?`, id)
+	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries WHERE id = ?`, id)
 	var article model.Article
 	var readFlag int
 	var favoriteFlag int
@@ -654,6 +672,9 @@ func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
 		&article.Title,
 		&article.Link,
 		&article.Summary,
+		&article.AISummary,
+		&article.AISummaryStatus,
+		&article.AISummaryAt,
 		&article.DisplaySummary,
 		&article.DisplaySummaryStatus,
 		&article.DisplaySummaryAt,
@@ -674,6 +695,25 @@ func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
 
 func (s *SQLiteFeedRepository) UpdateArticleFullContent(id int64, content string) error {
 	_, err := s.db.Exec(`UPDATE entries SET full_content = ?, updated_at = ? WHERE id = ?`, strings.TrimSpace(content), time.Now().UTC().Format(time.RFC3339), id)
+	return err
+}
+
+func (s *SQLiteFeedRepository) UpdateArticleSummaryState(id int64, aiSummary string, aiStatus string, displaySummary string, displayStatus string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.Exec(
+		`UPDATE entries
+		 SET ai_summary = ?, ai_summary_status = ?, ai_summary_updated_at = ?,
+		     display_summary = ?, display_summary_status = ?, display_summary_updated_at = ?, updated_at = ?
+		 WHERE id = ?`,
+		strings.TrimSpace(aiSummary),
+		strings.TrimSpace(aiStatus),
+		now,
+		strings.TrimSpace(displaySummary),
+		strings.TrimSpace(displayStatus),
+		now,
+		now,
+		id,
+	)
 	return err
 }
 
@@ -850,8 +890,8 @@ func (s *SQLiteFeedRepository) insertEntriesTx(tx *sql.Tx, feedID int64, items [
 		existingKeys[key] = struct{}{}
 
 		if _, err := tx.Exec(
-			`INSERT INTO entries(feed_id, title, link, summary, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at, updated_at)
-			 VALUES(?, ?, ?, ?, ?, ?, ?, 0, 0, '', ?, ?)`,
+			`INSERT INTO entries(feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at, updated_at)
+			 VALUES(?, ?, ?, ?, '', '', '', '', '', '', ?, ?, ?, 0, 0, '', ?, ?)`,
 			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, cleaned.FullContent, cleaned.CoverURL, cleaned.PublishedAt, now, now,
 		); err != nil {
 			return insertedCount, err

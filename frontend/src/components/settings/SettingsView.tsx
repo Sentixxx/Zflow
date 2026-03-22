@@ -37,18 +37,27 @@ export type SettingsViewProps = {
   networkProxyURL: string;
   onNetworkProxyURLChange: (value: string) => void;
   onSaveNetworkSettings: () => void;
+  aiProtocol: "openai" | "anthropic";
   aiAPIKey: string;
   aiBaseURL: string;
   aiModel: string;
   aiTargetLang: string;
+  onAIProtocolChange: (value: "openai" | "anthropic") => void;
   onAIAPIKeyChange: (value: string) => void;
   onAIBaseURLChange: (value: string) => void;
   onAIModelChange: (value: string) => void;
   onAITargetLangChange: (value: string) => void;
   onSaveAISettings: () => void;
   articleRetentionDays: string;
+  selectedArticleID: number | null;
+  selectedArticleTitle: string;
+  isRefreshingCurrentArticleAISummary: boolean;
   onArticleRetentionDaysChange: (value: string) => void;
   onSaveDataSettings: () => void;
+  onRefreshCurrentArticleAISummary: () => void;
+  onClearCurrentArticleAISummary: () => void;
+  onClearRecentAISummaries: () => void;
+  onRegenerateSummaries: () => void;
   onExportProfileJSON: () => void;
   onExportOPML: () => void;
   onImportProfileJSON: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -86,18 +95,27 @@ export function SettingsView(props: SettingsViewProps) {
     networkProxyURL,
     onNetworkProxyURLChange,
     onSaveNetworkSettings,
+    aiProtocol,
     aiAPIKey,
     aiBaseURL,
     aiModel,
     aiTargetLang,
+    onAIProtocolChange,
     onAIAPIKeyChange,
     onAIBaseURLChange,
     onAIModelChange,
     onAITargetLangChange,
     onSaveAISettings,
     articleRetentionDays,
+    selectedArticleID,
+    selectedArticleTitle,
+    isRefreshingCurrentArticleAISummary,
     onArticleRetentionDaysChange,
     onSaveDataSettings,
+    onRefreshCurrentArticleAISummary,
+    onClearCurrentArticleAISummary,
+    onClearRecentAISummaries,
+    onRegenerateSummaries,
     onExportProfileJSON,
     onExportOPML,
     onImportProfileJSON,
@@ -172,10 +190,12 @@ export function SettingsView(props: SettingsViewProps) {
         )}
         {settingsTab === "ai" && (
           <AISettingsCard
+            aiProtocol={aiProtocol}
             aiAPIKey={aiAPIKey}
             aiBaseURL={aiBaseURL}
             aiModel={aiModel}
             aiTargetLang={aiTargetLang}
+            onAIProtocolChange={onAIProtocolChange}
             onAIAPIKeyChange={onAIAPIKeyChange}
             onAIBaseURLChange={onAIBaseURLChange}
             onAIModelChange={onAIModelChange}
@@ -186,8 +206,15 @@ export function SettingsView(props: SettingsViewProps) {
         {settingsTab === "data" && (
           <DataSettingsCard
             articleRetentionDays={articleRetentionDays}
+            selectedArticleID={selectedArticleID}
+            selectedArticleTitle={selectedArticleTitle}
+            isRefreshingCurrentArticleAISummary={isRefreshingCurrentArticleAISummary}
             onArticleRetentionDaysChange={onArticleRetentionDaysChange}
             onSaveDataSettings={onSaveDataSettings}
+            onRefreshCurrentArticleAISummary={onRefreshCurrentArticleAISummary}
+            onClearCurrentArticleAISummary={onClearCurrentArticleAISummary}
+            onClearRecentAISummaries={onClearRecentAISummaries}
+            onRegenerateSummaries={onRegenerateSummaries}
             onExportProfileJSON={onExportProfileJSON}
             onExportOPML={onExportOPML}
             onImportProfileJSON={onImportProfileJSON}

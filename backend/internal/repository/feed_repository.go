@@ -26,6 +26,7 @@ type FeedRepository interface {
 	DeleteArticle(id int64) (bool, error)
 	GetArticle(id int64) (model.Article, bool)
 	UpdateArticleFullContent(id int64, content string) error
+	UpdateArticleSummaryState(id int64, aiSummary string, aiStatus string, displaySummary string, displayStatus string) error
 	UpdateArticleDisplaySummary(id int64, summary string, status string) error
 	MarkArticleRead(id int64, read bool) (model.Article, bool, error)
 	MarkArticleFavorite(id int64, favorite bool) (model.Article, bool, error)

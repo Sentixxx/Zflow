@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -50,9 +52,26 @@ func main() {
 	}()
 
 	l := logger.NewModuleFromEnv("http")
+	listener, err := listenHTTPListener(cfg.Addr)
+	if err != nil {
+		l.Error("request", "http", "failed", "failed to bind http listener", "addr", cfg.Addr, "error", err.Error())
+		os.Exit(1)
+	}
+
 	l.Info("request", "http", "ok", "server started", "addr", cfg.Addr, "data_dir", cfg.DataDir, "refresh_interval", cfg.RefreshInterval.String())
-	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		l.Error("request", "http", "failed", "server stopped", "error", err.Error())
 		os.Exit(1)
 	}
+}
+
+func listenHTTPListener(addr string) (net.Listener, error) {
+	listener, err := net.Listen("tcp", addr)
+	if err == nil {
+		return listener, nil
+	}
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return nil, fmt.Errorf("listen tcp %s: address already in use; stop the existing process or set PORT/ZFLOW_ADDR to a free port: %w", addr, err)
+	}
+	return nil, err
 }

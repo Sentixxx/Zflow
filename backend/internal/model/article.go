@@ -1,19 +1,33 @@
 package model
 
+type SummaryDebug struct {
+	Strategy            string `json:"strategy,omitempty"`
+	QueryMode           string `json:"query_mode,omitempty"`
+	ChunkCount          int    `json:"chunk_count,omitempty"`
+	WindowCount         int    `json:"window_count,omitempty"`
+	RewritePassed       bool   `json:"rewrite_passed,omitempty"`
+	FinalSentenceClosed bool   `json:"final_sentence_closed,omitempty"`
+	UsedAI              bool   `json:"used_ai,omitempty"`
+}
+
 type Article struct {
-	ID                   int64  `json:"id"`
-	FeedID               int64  `json:"feed_id"`
-	Title                string `json:"title"`
-	Link                 string `json:"link"`
-	Summary              string `json:"summary,omitempty"`
-	DisplaySummary       string `json:"display_summary,omitempty"`
-	DisplaySummaryStatus string `json:"display_summary_status,omitempty"`
-	DisplaySummaryAt     string `json:"display_summary_updated_at,omitempty"`
-	FullContent          string `json:"full_content,omitempty"`
-	CoverURL             string `json:"cover_url,omitempty"`
-	PublishedAt          string `json:"published_at,omitempty"`
-	IsRead               bool   `json:"is_read"`
-	IsFavorite           bool   `json:"is_favorite"`
-	FavoritedAt          string `json:"favorited_at,omitempty"`
-	CreatedAt            string `json:"created_at"`
+	ID                   int64         `json:"id"`
+	FeedID               int64         `json:"feed_id"`
+	Title                string        `json:"title"`
+	Link                 string        `json:"link"`
+	Summary              string        `json:"summary,omitempty"`
+	AISummary            string        `json:"ai_summary,omitempty"`
+	AISummaryStatus      string        `json:"ai_summary_status,omitempty"`
+	AISummaryAt          string        `json:"ai_summary_updated_at,omitempty"`
+	DisplaySummary       string        `json:"display_summary,omitempty"`
+	DisplaySummaryStatus string        `json:"display_summary_status,omitempty"`
+	DisplaySummaryAt     string        `json:"display_summary_updated_at,omitempty"`
+	FullContent          string        `json:"full_content,omitempty"`
+	CoverURL             string        `json:"cover_url,omitempty"`
+	PublishedAt          string        `json:"published_at,omitempty"`
+	IsRead               bool          `json:"is_read"`
+	IsFavorite           bool          `json:"is_favorite"`
+	FavoritedAt          string        `json:"favorited_at,omitempty"`
+	CreatedAt            string        `json:"created_at"`
+	SummaryDebug         *SummaryDebug `json:"summary_debug,omitempty"`
 }

@@ -3,6 +3,17 @@ import { useRef } from "react";
 import { ArticleDetailTopBar } from "./ArticleDetailTopBar";
 import { ArticleFloatingActions } from "./ArticleFloatingActions";
 
+function getSummaryStatusMeta(status: string | undefined): { label: string; tone: "ready" | "fallback" | "neutral" } {
+  switch ((status || "").trim()) {
+    case "ready":
+      return { label: "AI 摘要", tone: "ready" };
+    case "fallback":
+      return { label: "快速摘要", tone: "fallback" };
+    default:
+      return { label: "摘要", tone: "neutral" };
+  }
+}
+
 type ArticleDetailContentProps = {
   article: Article | null;
   sanitizedSummaryHTML: string;
@@ -71,6 +82,7 @@ export function ArticleDetailContent({
   const hasTranslation = translationParagraphs.length > 0 || isTranslatingArticle;
   const showReadableContent = hasUsableFullContent && !hasTranslation;
   const hasSummaryCard = Boolean((sanitizedSummaryHTML || "").trim());
+  const summaryStatusMeta = getSummaryStatusMeta(article?.display_summary_status);
 
   return (
     <>
@@ -123,8 +135,11 @@ export function ArticleDetailContent({
             {hasSummaryCard && (
               <section className="detail-summary-card" aria-label="文章摘要">
                 <div className="detail-summary-card-header">
-                  <span className="detail-summary-card-kicker">Summary</span>
-                  <h4 className="detail-summary-card-title">文章摘要</h4>
+                  <div className="detail-summary-card-header-main">
+                    <span className="detail-summary-card-kicker">Summary</span>
+                    <h4 className="detail-summary-card-title">文章摘要</h4>
+                  </div>
+                  <span className={`detail-summary-card-status is-${summaryStatusMeta.tone}`}>{summaryStatusMeta.label}</span>
                 </div>
                 <div className="detail-summary-card-body detail-summary" dangerouslySetInnerHTML={{ __html: sanitizedSummaryHTML }} />
               </section>
