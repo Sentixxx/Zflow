@@ -10,8 +10,7 @@ type ArticleDetailTopBarProps = {
   isExtractingReadable: boolean;
   canRefreshArticleCache: boolean;
   isRefreshingArticleCache: boolean;
-  canToggleReadableMode: boolean;
-  readableModeEnabled: boolean;
+  hasReadableContent: boolean;
   sourceSiteURL: string;
   contextText?: string;
   onMarkUnread: () => void;
@@ -19,7 +18,6 @@ type ArticleDetailTopBarProps = {
   onOpenSourceSite: () => void;
   onExtractReadable: () => void;
   onRefreshArticleCache: () => void;
-  onToggleReadableMode: () => void;
 };
 
 export function ArticleDetailTopBar({
@@ -32,8 +30,7 @@ export function ArticleDetailTopBar({
   isExtractingReadable,
   canRefreshArticleCache,
   isRefreshingArticleCache,
-  canToggleReadableMode,
-  readableModeEnabled,
+  hasReadableContent,
   sourceSiteURL,
   contextText,
   onMarkUnread,
@@ -41,7 +38,6 @@ export function ArticleDetailTopBar({
   onOpenSourceSite,
   onExtractReadable,
   onRefreshArticleCache,
-  onToggleReadableMode,
 }: ArticleDetailTopBarProps) {
   return (
     <div className="detail-panel-head">
@@ -58,15 +54,13 @@ export function ArticleDetailTopBar({
         isExtractingReadable={isExtractingReadable}
         canRefreshArticleCache={canRefreshArticleCache}
         isRefreshingArticleCache={isRefreshingArticleCache}
-        canToggleReadableMode={canToggleReadableMode}
-        readableModeEnabled={readableModeEnabled}
+        hasReadableContent={hasReadableContent}
         sourceSiteURL={sourceSiteURL}
         onMarkUnread={onMarkUnread}
         onToggleFavorite={onToggleFavorite}
         onOpenSourceSite={onOpenSourceSite}
         onExtractReadable={onExtractReadable}
         onRefreshArticleCache={onRefreshArticleCache}
-        onToggleReadableMode={onToggleReadableMode}
       />
     </div>
   );

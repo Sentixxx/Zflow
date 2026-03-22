@@ -13,15 +13,13 @@ type ArticleDetailToolbarProps = {
   isExtractingReadable: boolean;
   canRefreshArticleCache: boolean;
   isRefreshingArticleCache: boolean;
-  canToggleReadableMode: boolean;
-  readableModeEnabled: boolean;
+  hasReadableContent: boolean;
   sourceSiteURL: string;
   onMarkUnread: () => void;
   onToggleFavorite: () => void;
   onOpenSourceSite: () => void;
   onExtractReadable: () => void;
   onRefreshArticleCache: () => void;
-  onToggleReadableMode: () => void;
 };
 
 export function ArticleDetailToolbar({
@@ -33,15 +31,13 @@ export function ArticleDetailToolbar({
   isExtractingReadable,
   canRefreshArticleCache,
   isRefreshingArticleCache,
-  canToggleReadableMode,
-  readableModeEnabled,
+  hasReadableContent,
   sourceSiteURL,
   onMarkUnread,
   onToggleFavorite,
   onOpenSourceSite,
   onExtractReadable,
   onRefreshArticleCache,
-  onToggleReadableMode,
 }: ArticleDetailToolbarProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
@@ -85,20 +81,18 @@ export function ArticleDetailToolbar({
         </span>
       </ToolbarIconButton>
       <ToolbarIconButton
-        onClick={canToggleReadableMode ? onToggleReadableMode : onExtractReadable}
-        disabled={isExtractingReadable || (!canToggleReadableMode && !canExtractReadable)}
+        onClick={onExtractReadable}
+        disabled={isExtractingReadable || !canExtractReadable}
         title={
           isExtractingReadable
             ? "正在抓取原文..."
-            : canToggleReadableMode
-              ? readableModeEnabled
-                ? "退出阅读模式"
-                : "进入阅读模式"
+            : hasReadableContent
+              ? "重新抓取正文"
               : canExtractReadable
-                ? "使用 Readability 抓取原文"
+                ? "抓取正文"
                 : "当前文章缺少可用链接"
         }
-        ariaLabel={canToggleReadableMode ? "切换阅读模式" : "抓取原文"}
+        ariaLabel={hasReadableContent ? "重新抓取正文" : "抓取正文"}
       >
         <span className="detail-icon-slot" aria-hidden="true">
           <img className="detail-icon-image icon-readability" src={readabilityIcon} alt="" />

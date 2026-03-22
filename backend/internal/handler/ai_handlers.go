@@ -39,7 +39,13 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		cfg := aiSettings{APIKey: strings.TrimSpace(req.APIKey), BaseURL: strings.TrimSpace(req.BaseURL), Model: strings.TrimSpace(req.Model), TargetLang: strings.TrimSpace(req.TargetLang)}
+		cfg := aiSettings{
+			Protocol:   normalizeAIProtocol(req.Protocol),
+			APIKey:     strings.TrimSpace(req.APIKey),
+			BaseURL:    strings.TrimSpace(req.BaseURL),
+			Model:      strings.TrimSpace(req.Model),
+			TargetLang: strings.TrimSpace(req.TargetLang),
+		}
 		if cfg.BaseURL != "" {
 			parsed, err := url.Parse(cfg.BaseURL)
 			if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
@@ -50,7 +56,14 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 		if cfg.TargetLang == "" {
 			cfg.TargetLang = defaultAITargetLang
 		}
+		if cfg.Protocol == "" {
+			cfg.Protocol = defaultAIProtocol
+		}
 
+		if err := s.store.SetSetting(settingKeyAIProtocol, cfg.Protocol); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save ai settings"})
+			return
+		}
 		if err := s.store.SetSetting(settingKeyAIApiKey, cfg.APIKey); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save ai settings"})
 			return
@@ -227,6 +240,15 @@ func (s *Server) streamArticleTranslation(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) translateTextWithAI(ctx context.Context, text string, targetLang string, settings aiSettings, history []translationPair) (string, error) {
+	switch normalizeAIProtocol(settings.Protocol) {
+	case "anthropic":
+		return s.translateTextWithAnthropic(ctx, text, targetLang, settings, history)
+	default:
+		return s.translateTextWithOpenAI(ctx, text, targetLang, settings, history)
+	}
+}
+
+func (s *Server) translateTextWithOpenAI(ctx context.Context, text string, targetLang string, settings aiSettings, history []translationPair) (string, error) {
 	apiKey := strings.TrimSpace(settings.APIKey)
 	if apiKey == "" {
 		return "", errors.New("missing AI API key")
@@ -293,6 +315,78 @@ func (s *Server) translateTextWithAI(ctx context.Context, text string, targetLan
 		return "", errors.New("empty translated content")
 	}
 	return result, nil
+}
+
+func (s *Server) translateTextWithAnthropic(ctx context.Context, text string, targetLang string, settings aiSettings, history []translationPair) (string, error) {
+	apiKey := strings.TrimSpace(settings.APIKey)
+	if apiKey == "" {
+		return "", errors.New("missing AI API key")
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(firstNonEmpty(settings.BaseURL, "https://api.minimaxi.com/anthropic")), "/")
+	model := strings.TrimSpace(firstNonEmpty(settings.Model, defaultAIModel))
+	contextText := buildTranslationContext(history)
+
+	reqPayload := map[string]any{
+		"model":      model,
+		"max_tokens": 800,
+		"system":     "You are a precise translator. Keep terminology consistent with prior translated context. Return only translated plain text for the current segment without explanations.",
+		"messages": []map[string]any{
+			{
+				"role": "user",
+				"content": []map[string]string{
+					{
+						"type": "text",
+						"text": fmt.Sprintf(
+							"Translate the CURRENT segment to %s.\nRequirements:\n1) Preserve meaning accurately.\n2) Keep names/terms consistent with prior context.\n3) Output only translated text for CURRENT segment.\n\nPrior translated context (for consistency):\n%s\n\nCURRENT segment:\n%s",
+							targetLang,
+							contextText,
+							text,
+						),
+					},
+				},
+			},
+		},
+		"temperature": 0.7,
+	}
+	payloadBytes, err := json.Marshal(reqPayload)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/v1/messages", bytes.NewReader(payloadBytes))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	resp, err := s.httpClientForAI().Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return "", fmt.Errorf("upstream status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var out struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&out); err != nil {
+		return "", err
+	}
+	for _, block := range out.Content {
+		if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
+			return strings.TrimSpace(block.Text), nil
+		}
+	}
+	return "", errors.New("empty translated content")
 }
 
 func (s *Server) translateParagraphs(
@@ -366,6 +460,10 @@ func (s *Server) loadAISettings() (aiSettings, error) {
 	if err != nil {
 		return aiSettings{}, err
 	}
+	protocol, err := get(settingKeyAIProtocol)
+	if err != nil {
+		return aiSettings{}, err
+	}
 	baseURL, err := get(settingKeyAIBaseURL)
 	if err != nil {
 		return aiSettings{}, err
@@ -379,6 +477,9 @@ func (s *Server) loadAISettings() (aiSettings, error) {
 		return aiSettings{}, err
 	}
 
+	if protocol == "" {
+		protocol = defaultAIProtocol
+	}
 	if baseURL == "" {
 		baseURL = defaultAIBaseURL
 	}
@@ -389,5 +490,14 @@ func (s *Server) loadAISettings() (aiSettings, error) {
 		targetLang = defaultAITargetLang
 	}
 
-	return aiSettings{APIKey: apiKey, BaseURL: baseURL, Model: model, TargetLang: targetLang}, nil
+	return aiSettings{Protocol: normalizeAIProtocol(protocol), APIKey: apiKey, BaseURL: baseURL, Model: model, TargetLang: targetLang}, nil
+}
+
+func normalizeAIProtocol(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "anthropic":
+		return "anthropic"
+	default:
+		return "openai"
+	}
 }

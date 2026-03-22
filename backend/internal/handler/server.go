@@ -9,6 +9,7 @@ import (
 	"hash/fnv"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -32,18 +33,21 @@ type Server struct {
 	clientMu  sync.RWMutex
 	iconDir   string
 	articleUC *service.ArticleService
+	summaryUC *service.ArticleSummaryService
 	logger    *logger.ModuleLogger
 }
 
 const (
 	settingKeyNetworkProxy  = "network_proxy_url"
 	settingKeyAIApiKey      = "ai_api_key"
+	settingKeyAIProtocol    = "ai_protocol"
 	settingKeyAIBaseURL     = "ai_base_url"
 	settingKeyAIModel       = "ai_model"
 	settingKeyAITargetLang  = "ai_target_lang"
 	settingKeyRetentionDays = "article_retention_days"
 	defaultAIBaseURL        = "https://api.openai.com/v1"
 	defaultAIModel          = "gpt-4o-mini"
+	defaultAIProtocol       = "openai"
 	defaultAITargetLang     = "zh-CN"
 	defaultRetentionDays    = 90
 )
@@ -79,6 +83,7 @@ type updateFeedTitleRequest struct {
 }
 
 type updateAISettingsRequest struct {
+	Protocol   string `json:"protocol"`
 	APIKey     string `json:"api_key"`
 	BaseURL    string `json:"base_url"`
 	Model      string `json:"model"`
@@ -90,6 +95,7 @@ type translateArticleRequest struct {
 }
 
 type aiSettings struct {
+	Protocol   string `json:"protocol"`
 	APIKey     string `json:"api_key"`
 	BaseURL    string `json:"base_url"`
 	Model      string `json:"model"`
@@ -132,7 +138,25 @@ func NewServer(feedStore repository.FeedRepository, dataDir string) *Server {
 		server.logger.Warn("settings", "network", "failed", "apply initial network proxy failed", "proxy_url", proxyURL, "error", err.Error())
 		_ = server.applyNetworkProxy("")
 	}
-	server.articleUC = service.NewArticleService(feedStore, server.httpClient)
+	server.articleUC = service.NewArticleService(feedStore, server.httpClientForReadability)
+	server.summaryUC = service.NewArticleSummaryService(
+		feedStore,
+		server.httpClientForAI,
+		func() (service.SummaryAIConfig, error) {
+			cfg, err := server.loadAISettings()
+			if err != nil {
+				return service.SummaryAIConfig{}, err
+			}
+			return service.SummaryAIConfig{
+				Protocol: cfg.Protocol,
+				APIKey:  cfg.APIKey,
+				BaseURL: cfg.BaseURL,
+				Model:   cfg.Model,
+			}, nil
+		},
+		defaultAIBaseURL,
+		defaultAIModel,
+	)
 	return server
 }
 
@@ -261,7 +285,13 @@ func (s *Server) refreshFeedByID(feedID int64) error {
 		}
 	}
 	s.tryRefreshFeedIcon(feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt, result.IconHints)
-	return s.store.UpdateFeedAfterRefresh(feedID, result.Title, result.Items, "", result.ETag, result.LastModified)
+	if err := s.store.UpdateFeedAfterRefresh(feedID, result.Title, result.Items, "", result.ETag, result.LastModified); err != nil {
+		return err
+	}
+	if err := s.summaryUC.BackfillFeed(feedID, len(result.Items)+10); err != nil {
+		s.logger.Warn("summary", "backfill", "failed", "display summary backfill failed after refresh feed", "feed_id", feedID, "error", err.Error())
+	}
+	return nil
 }
 
 type scriptItemPayload struct {
@@ -797,18 +827,35 @@ func (s *Server) httpClientForAI() *http.Client {
 	}
 }
 
+func (s *Server) httpClientForReadability() *http.Client {
+	base := s.httpClient()
+	return &http.Client{
+		Timeout:   25 * time.Second,
+		Transport: base.Transport,
+	}
+}
+
 func (s *Server) applyNetworkProxy(rawProxyURL string) error {
 	proxyURL := strings.TrimSpace(rawProxyURL)
 	if err := validateProxyURL(proxyURL); err != nil {
 		return err
 	}
 
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-	}
+	var parsedProxyURL *url.URL
 	if proxyURL != "" {
-		parsedProxyURL, _ := url.Parse(proxyURL)
-		transport.Proxy = http.ProxyURL(parsedProxyURL)
+		parsedProxyURL, _ = url.Parse(proxyURL)
+	}
+
+	transport := &http.Transport{
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			if shouldBypassProxy(req.URL) {
+				return nil, nil
+			}
+			if parsedProxyURL != nil {
+				return parsedProxyURL, nil
+			}
+			return http.ProxyFromEnvironment(req)
+		},
 	}
 
 	client := &http.Client{
@@ -820,6 +867,21 @@ func (s *Server) applyNetworkProxy(rawProxyURL string) error {
 	s.client = client
 	s.clientMu.Unlock()
 	return nil
+}
+
+func shouldBypassProxy(target *url.URL) bool {
+	if target == nil {
+		return true
+	}
+	host := strings.TrimSpace(target.Hostname())
+	if host == "" {
+		return true
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func validateProxyURL(raw string) error {

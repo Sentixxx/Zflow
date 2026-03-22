@@ -1041,9 +1041,9 @@ button:active {
   word-break: break-word;
   overflow: auto;
   flex: 1 1 auto;
-  max-width: 920px;
   width: 100%;
-  margin: 0 auto;
+  min-width: 0;
+  margin: 0;
   line-height: 1.78;
   font-size: 16px;
   color: var(--ink-strong);
@@ -1264,6 +1264,68 @@ button:active {
   margin: 0 0 12px;
   font-size: 17px;
   color: var(--ink-strong);
+}
+
+.detail-summary-card {
+  position: relative;
+  margin: 0 0 24px;
+  padding: 18px 20px 20px;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 18%, var(--line));
+  border-radius: 24px 24px 24px 52px;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--theme-primary) 12%, transparent) 0, transparent 36%),
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 94%, white 6%) 0%, color-mix(in srgb, var(--panel) 98%, transparent) 100%);
+  box-shadow: 0 14px 30px -24px color-mix(in srgb, var(--theme-primary) 40%, transparent);
+  overflow: hidden;
+}
+
+.detail-summary-card::after {
+  content: "";
+  position: absolute;
+  right: -14px;
+  bottom: -14px;
+  width: 88px;
+  height: 88px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 14%, transparent);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.detail-summary-card-header {
+  margin-bottom: 12px;
+}
+
+.detail-summary-card-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--theme-primary) 10%, transparent);
+  color: var(--theme-primary-strong);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.detail-summary-card-title {
+  margin: 10px 0 0;
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--ink-strong);
+}
+
+.detail-summary-card-body {
+  margin-bottom: 0;
+}
+
+.detail-summary-card-note {
+  margin: -2px 0 24px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .detail-summary {
@@ -1956,6 +2018,13 @@ a {
   letter-spacing: -0.01em;
 }
 
+.settings-help-text {
+  margin: -2px 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .settings-section-card .section-title:not(:first-child) {
   margin-top: 18px;
   padding-top: 14px;
@@ -2339,6 +2408,18 @@ a {
   .detail-sequence-btn {
     min-height: 40px;
     font-size: 14px;
+  }
+
+  .detail-summary-card {
+    padding: 16px 16px 18px;
+    border-radius: 22px 22px 22px 36px;
+  }
+
+  .detail-summary-card::after {
+    width: 64px;
+    height: 64px;
+    right: -12px;
+    bottom: -12px;
   }
 
   .settings-modal-header {

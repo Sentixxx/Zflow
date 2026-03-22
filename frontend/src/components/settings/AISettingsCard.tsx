@@ -27,11 +27,12 @@ export function AISettingsCard({
       <label htmlFor="aiApiKey">API Key</label>
       <input id="aiApiKey" type="password" value={aiAPIKey} placeholder="sk-..." onChange={(e) => onAIAPIKeyChange(e.target.value)} />
       <label htmlFor="aiBaseURL">Base URL（OpenAI 兼容）</label>
-      <input id="aiBaseURL" value={aiBaseURL} placeholder="https://api.openai.com/v1" onChange={(e) => onAIBaseURLChange(e.target.value)} />
+      <input id="aiBaseURL" value={aiBaseURL} placeholder="https://api.minimaxi.com/v1" onChange={(e) => onAIBaseURLChange(e.target.value)} />
       <label htmlFor="aiModel">模型</label>
-      <input id="aiModel" value={aiModel} placeholder="gpt-4o-mini" onChange={(e) => onAIModelChange(e.target.value)} />
+      <input id="aiModel" value={aiModel} placeholder="MiniMax-M2.7" onChange={(e) => onAIModelChange(e.target.value)} />
       <label htmlFor="aiTargetLang">默认目标语言</label>
       <input id="aiTargetLang" value={aiTargetLang} placeholder="zh-CN" onChange={(e) => onAITargetLangChange(e.target.value)} />
+      <p className="settings-help-text">可直接填写 MiniMax OpenAI 兼容配置，例如 Base URL `https://api.minimaxi.com/v1`、模型 `MiniMax-M2.7`。</p>
       <div className="row">
         <button className="secondary" onClick={onSaveAISettings}>
           保存 AI 设置

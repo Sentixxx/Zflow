@@ -23,14 +23,14 @@ var (
 )
 
 type ArticleService struct {
-	store      repository.FeedRepository
-	httpClient func() *http.Client
+	store             repository.FeedRepository
+	readabilityClient func() *http.Client
 }
 
-func NewArticleService(store repository.FeedRepository, httpClient func() *http.Client) *ArticleService {
+func NewArticleService(store repository.FeedRepository, readabilityClient func() *http.Client) *ArticleService {
 	return &ArticleService{
-		store:      store,
-		httpClient: httpClient,
+		store:             store,
+		readabilityClient: readabilityClient,
 	}
 }
 
@@ -129,7 +129,7 @@ func (u *ArticleService) fetchReadableContent(ctx context.Context, rawURL string
 	}
 	req.Header.Set("User-Agent", "Zflow/0.1 (+https://github.com/Sentixxx/Zflow)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-	resp, err := u.httpClient().Do(req)
+	resp, err := u.readabilityClient().Do(req)
 	if err != nil {
 		return "", err
 	}

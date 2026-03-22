@@ -22,9 +22,11 @@ type FeedRepository interface {
 	GetSetting(key string) (string, bool, error)
 	SetSetting(key, value string) error
 	ListArticles() []model.Article
+	ListArticlesMissingDisplaySummary(feedID int64, limit int) []model.Article
 	DeleteArticle(id int64) (bool, error)
 	GetArticle(id int64) (model.Article, bool)
 	UpdateArticleFullContent(id int64, content string) error
+	UpdateArticleDisplaySummary(id int64, summary string, status string) error
 	MarkArticleRead(id int64, read bool) (model.Article, bool, error)
 	MarkArticleFavorite(id int64, favorite bool) (model.Article, bool, error)
 	PurgeExpiredArticles(retentionDays int) (int, error)

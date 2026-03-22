@@ -1,5 +1,5 @@
 import type { Article } from "@/types";
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { ArticleDetailTopBar } from "./ArticleDetailTopBar";
 import { ArticleFloatingActions } from "./ArticleFloatingActions";
 
@@ -64,22 +64,13 @@ export function ArticleDetailContent({
   onGoNext,
 }: ArticleDetailContentProps) {
   const detailRef = useRef<HTMLDivElement | null>(null);
-  const [readableModeEnabled, setReadableModeEnabled] = useState<boolean>(false);
   const normalizedFull = (sanitizedFullContentHTML || "").trim();
   const looksLikePDFGarbage = /^%PDF-\d/i.test(normalizedFull) || (normalizedFull.includes("xref") && normalizedFull.includes("endobj"));
   const hasUsableFullContent = Boolean(normalizedFull) && !looksLikePDFGarbage;
-  const contentClassName = hasUsableFullContent ? "detail-summary detail-readable" : "detail-summary";
   const panelTitle = article ? article.title || "(无标题)" : "请选择一篇文章查看详情";
   const hasTranslation = translationParagraphs.length > 0 || isTranslatingArticle;
-  const showReadableContent = hasUsableFullContent && readableModeEnabled && !hasTranslation;
-
-  useEffect(() => {
-    if (!article) {
-      setReadableModeEnabled(false);
-      return;
-    }
-    setReadableModeEnabled(hasUsableFullContent);
-  }, [article?.id, hasUsableFullContent]);
+  const showReadableContent = hasUsableFullContent && !hasTranslation;
+  const hasSummaryCard = Boolean((sanitizedSummaryHTML || "").trim());
 
   return (
     <>
@@ -93,8 +84,7 @@ export function ArticleDetailContent({
         isExtractingReadable={isExtractingReadable}
         canRefreshArticleCache={canRefreshArticleCache}
         isRefreshingArticleCache={isRefreshingArticleCache}
-        canToggleReadableMode={hasUsableFullContent}
-        readableModeEnabled={readableModeEnabled}
+        hasReadableContent={hasUsableFullContent}
         sourceSiteURL={sourceSiteURL}
         contextText={detailProgressText}
         onMarkUnread={onMarkUnread}
@@ -102,7 +92,6 @@ export function ArticleDetailContent({
         onOpenSourceSite={onOpenSourceSite}
         onExtractReadable={onExtractReadable}
         onRefreshArticleCache={onRefreshArticleCache}
-        onToggleReadableMode={() => setReadableModeEnabled((current) => !current)}
       />
       <div className="detail" ref={detailRef}>
         {!article && <p className="detail-empty">请选择一篇文章查看详情</p>}
@@ -131,7 +120,16 @@ export function ArticleDetailContent({
                 "-"
               )}
             </p>
-            <h4 className="detail-section-title">{hasTranslation ? "正文（原文 / 译文）" : showReadableContent ? "正文" : "摘要"}</h4>
+            {hasSummaryCard && (
+              <section className="detail-summary-card" aria-label="文章摘要">
+                <div className="detail-summary-card-header">
+                  <span className="detail-summary-card-kicker">Summary</span>
+                  <h4 className="detail-summary-card-title">文章摘要</h4>
+                </div>
+                <div className="detail-summary-card-body detail-summary" dangerouslySetInnerHTML={{ __html: sanitizedSummaryHTML }} />
+              </section>
+            )}
+            <h4 className="detail-section-title">{hasTranslation ? "正文（原文 / 译文）" : "正文"}</h4>
             {hasTranslation ? (
               <div className="detail-summary detail-translation-inline">
                 {translationParagraphs.map((item) => (
@@ -155,9 +153,9 @@ export function ArticleDetailContent({
                 )}
               </div>
             ) : showReadableContent ? (
-              <div className={contentClassName} dangerouslySetInnerHTML={{ __html: sanitizedFullContentHTML }} />
-            ) : sanitizedSummaryHTML ? (
-              <div className={contentClassName} dangerouslySetInnerHTML={{ __html: sanitizedSummaryHTML }} />
+              <div className="detail-summary detail-readable" dangerouslySetInnerHTML={{ __html: sanitizedFullContentHTML }} />
+            ) : hasSummaryCard ? (
+              <p className="detail-summary-card-note">上方已展示摘要；点击工具栏中的正文按钮后，会把抓取到的正文直接接在这里继续阅读。</p>
             ) : (
               <p className="detail-summary">(无摘要)</p>
             )}

@@ -173,6 +173,12 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		if err := s.summaryUC.RefreshArticle(id); err != nil && !errors.Is(err, service.ErrArticleNotFound) {
+			s.logger.Warn("summary", "refresh", "failed", "display summary refresh failed after readability extraction", "article_id", id, "error", err.Error())
+		}
+		if article, ok := s.articleUC.Get(id); ok {
+			updated = article
+		}
 		writeJSON(w, http.StatusOK, updated)
 		return
 	}
@@ -195,6 +201,12 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to refresh cache"})
 			}
 			return
+		}
+		if err := s.summaryUC.RefreshArticle(id); err != nil && !errors.Is(err, service.ErrArticleNotFound) {
+			s.logger.Warn("summary", "refresh", "failed", "display summary refresh failed after cache refresh", "article_id", id, "error", err.Error())
+		}
+		if article, ok := s.articleUC.Get(id); ok {
+			updated = article
 		}
 		writeJSON(w, http.StatusOK, updated)
 		return

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
 )
@@ -98,5 +99,44 @@ func TestArticleServiceExtractReadableRejectPDF(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unsupported readability content type: pdf") {
 		t.Fatalf("error = %q, want pdf unsupported", err.Error())
+	}
+}
+
+func TestArticleServiceExtractReadableSlowBody(t *testing.T) {
+	articleHTML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html><html><body><article><p>Slow`))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		time.Sleep(1500 * time.Millisecond)
+		_, _ = w.Write([]byte(` body content for readability test.</p></article></body></html>`))
+	}))
+	defer articleHTML.Close()
+
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	articleService := NewArticleService(repo, func() *http.Client {
+		return &http.Client{Timeout: 5 * time.Second}
+	})
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+		{Title: "A1", Link: articleHTML.URL, Summary: "S1"},
+	}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+	articles := repo.ListArticles()
+	if len(articles) != 1 {
+		t.Fatalf("ListArticles len = %d, want 1", len(articles))
+	}
+
+	updated, err := articleService.ExtractReadable(context.Background(), articles[0].ID)
+	if err != nil {
+		t.Fatalf("ExtractReadable() error = %v", err)
+	}
+	if !strings.Contains(updated.FullContent, "Slow body content for readability test") {
+		t.Fatalf("full_content = %q, want slow body content", updated.FullContent)
 	}
 }

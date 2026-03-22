@@ -90,9 +90,13 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const [mobilePane, setMobilePane] = useState<MobilePane>("list");
   const lastLoadAtRef = useRef<number>(0);
   const bounceTimerRef = useRef<number | null>(null);
+  const autoReadableAttemptedRef = useRef<Set<number>>(new Set());
   const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
   const { feedsQuery, foldersQuery, articlesInfiniteQuery } = useReaderQueries(apiBase);
-  const sanitizedSummaryHTML = useMemo(() => sanitizeRichHTML(selectedArticle?.summary), [selectedArticle?.summary]);
+  const sanitizedSummaryHTML = useMemo(
+    () => sanitizeRichHTML(selectedArticle?.display_summary || selectedArticle?.summary),
+    [selectedArticle?.display_summary, selectedArticle?.summary],
+  );
   const sanitizedFullContentHTML = useMemo(() => sanitizeRichHTML(selectedArticle?.full_content), [selectedArticle?.full_content]);
 
   const setMessage = (message: string, isError = false) => {
@@ -423,6 +427,24 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const { pushArticleRoute, clearArticleRoute } = useArticleRoute(selectedArticle?.id ?? null, (id) => {
     void selectArticle(id);
   });
+
+  useEffect(() => {
+    if (!selectedArticle) {
+      return;
+    }
+    const normalizedFullContent = (selectedArticle.full_content || "").trim();
+    const looksLikePDFGarbage =
+      /^%PDF-\d/i.test(normalizedFullContent) || (normalizedFullContent.includes("xref") && normalizedFullContent.includes("endobj"));
+    const hasUsableFullContent = Boolean(normalizedFullContent) && !looksLikePDFGarbage;
+    if (hasUsableFullContent || !selectedArticle.link || isExtractingReadable) {
+      return;
+    }
+    if (autoReadableAttemptedRef.current.has(selectedArticle.id)) {
+      return;
+    }
+    autoReadableAttemptedRef.current.add(selectedArticle.id);
+    void extractReadableContent();
+  }, [selectedArticle?.id, selectedArticle?.link, selectedArticle?.full_content, isExtractingReadable]);
 
   const handleReadFilterChange = (value: ReadFilter) => {
     setReadFilter(value);

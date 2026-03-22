@@ -27,6 +27,9 @@ export interface Article {
   title: string;
   link: string;
   summary?: string;
+  display_summary?: string;
+  display_summary_status?: string;
+  display_summary_updated_at?: string;
   full_content?: string;
   cover_url?: string;
   published_at?: string;

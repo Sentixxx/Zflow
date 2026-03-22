@@ -47,6 +47,9 @@ func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
 			feed = updated
 		}
 	}
+	if err := s.summaryUC.BackfillFeed(feed.ID, 50); err != nil {
+		s.logger.Warn("summary", "backfill", "failed", "display summary backfill failed after create feed", "feed_id", feed.ID, "error", err.Error())
+	}
 	s.tryRefreshFeedIcon(feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt, result.IconHints)
 
 	writeJSON(w, http.StatusCreated, feed)

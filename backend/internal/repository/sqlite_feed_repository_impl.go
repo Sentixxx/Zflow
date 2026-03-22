@@ -86,6 +86,9 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 			title TEXT NOT NULL,
 			link TEXT NOT NULL DEFAULT '',
 			summary TEXT NOT NULL DEFAULT '',
+			display_summary TEXT NOT NULL DEFAULT '',
+			display_summary_status TEXT NOT NULL DEFAULT '',
+			display_summary_updated_at TEXT NOT NULL DEFAULT '',
 			full_content TEXT NOT NULL DEFAULT '',
 			cover_url TEXT NOT NULL DEFAULT '',
 			published_at TEXT NOT NULL DEFAULT '',
@@ -112,6 +115,15 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 		}
 	}
 	if err := s.ensureColumn(ctx, "entries", "full_content", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "display_summary", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "display_summary_status", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "display_summary_updated_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "entries", "cover_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
@@ -537,7 +549,7 @@ func (s *SQLiteFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string
 }
 
 func (s *SQLiteFeedRepository) ListArticles() []model.Article {
-	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries ORDER BY id DESC`)
+	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries ORDER BY id DESC`)
 	if err != nil {
 		return []model.Article{}
 	}
@@ -548,7 +560,71 @@ func (s *SQLiteFeedRepository) ListArticles() []model.Article {
 		var article model.Article
 		var readFlag int
 		var favoriteFlag int
-		if err := rows.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.CoverURL, &article.PublishedAt, &readFlag, &favoriteFlag, &article.FavoritedAt, &article.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&article.ID,
+			&article.FeedID,
+			&article.Title,
+			&article.Link,
+			&article.Summary,
+			&article.DisplaySummary,
+			&article.DisplaySummaryStatus,
+			&article.DisplaySummaryAt,
+			&article.FullContent,
+			&article.CoverURL,
+			&article.PublishedAt,
+			&readFlag,
+			&favoriteFlag,
+			&article.FavoritedAt,
+			&article.CreatedAt,
+		); err != nil {
+			continue
+		}
+		article.IsRead = readFlag == 1
+		article.IsFavorite = favoriteFlag == 1
+		articles = append(articles, article)
+	}
+	return articles
+}
+
+func (s *SQLiteFeedRepository) ListArticlesMissingDisplaySummary(feedID int64, limit int) []model.Article {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.Query(
+		`SELECT id, feed_id, title, link, summary, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at
+		 FROM entries
+		 WHERE feed_id = ? AND display_summary = ''
+		 ORDER BY id DESC
+		 LIMIT ?`,
+		feedID, limit,
+	)
+	if err != nil {
+		return []model.Article{}
+	}
+	defer rows.Close()
+
+	articles := make([]model.Article, 0)
+	for rows.Next() {
+		var article model.Article
+		var readFlag int
+		var favoriteFlag int
+		if err := rows.Scan(
+			&article.ID,
+			&article.FeedID,
+			&article.Title,
+			&article.Link,
+			&article.Summary,
+			&article.DisplaySummary,
+			&article.DisplaySummaryStatus,
+			&article.DisplaySummaryAt,
+			&article.FullContent,
+			&article.CoverURL,
+			&article.PublishedAt,
+			&readFlag,
+			&favoriteFlag,
+			&article.FavoritedAt,
+			&article.CreatedAt,
+		); err != nil {
 			continue
 		}
 		article.IsRead = readFlag == 1
@@ -568,11 +644,27 @@ func (s *SQLiteFeedRepository) DeleteArticle(id int64) (bool, error) {
 }
 
 func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
-	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries WHERE id = ?`, id)
+	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries WHERE id = ?`, id)
 	var article model.Article
 	var readFlag int
 	var favoriteFlag int
-	if err := row.Scan(&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.FullContent, &article.CoverURL, &article.PublishedAt, &readFlag, &favoriteFlag, &article.FavoritedAt, &article.CreatedAt); err != nil {
+	if err := row.Scan(
+		&article.ID,
+		&article.FeedID,
+		&article.Title,
+		&article.Link,
+		&article.Summary,
+		&article.DisplaySummary,
+		&article.DisplaySummaryStatus,
+		&article.DisplaySummaryAt,
+		&article.FullContent,
+		&article.CoverURL,
+		&article.PublishedAt,
+		&readFlag,
+		&favoriteFlag,
+		&article.FavoritedAt,
+		&article.CreatedAt,
+	); err != nil {
 		return model.Article{}, false
 	}
 	article.IsRead = readFlag == 1
@@ -582,6 +674,19 @@ func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
 
 func (s *SQLiteFeedRepository) UpdateArticleFullContent(id int64, content string) error {
 	_, err := s.db.Exec(`UPDATE entries SET full_content = ?, updated_at = ? WHERE id = ?`, strings.TrimSpace(content), time.Now().UTC().Format(time.RFC3339), id)
+	return err
+}
+
+func (s *SQLiteFeedRepository) UpdateArticleDisplaySummary(id int64, summary string, status string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.Exec(
+		`UPDATE entries SET display_summary = ?, display_summary_status = ?, display_summary_updated_at = ?, updated_at = ? WHERE id = ?`,
+		strings.TrimSpace(summary),
+		strings.TrimSpace(status),
+		now,
+		now,
+		id,
+	)
 	return err
 }
 

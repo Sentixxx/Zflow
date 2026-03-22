@@ -40,13 +40,18 @@ export function useArticleActions({
   aiTargetLang,
   setTranslationParagraphsByArticleID,
 }: UseArticleActionsParams) {
+  const syncSelectedArticle = (updated: Article) => {
+    setSelectedArticle((current) => (current?.id === updated.id ? updated : current));
+  };
+
   const markUnread = async () => {
     if (!selectedArticle) {
       return;
     }
+    const articleID = selectedArticle.id;
     try {
-      const updated = await client.setArticleRead(selectedArticle.id, false);
-      setSelectedArticle(updated);
+      const updated = await client.setArticleRead(articleID, false);
+      syncSelectedArticle(updated);
       setArticles((current) => current.map((entry) => (entry.id === updated.id ? { ...entry, is_read: updated.is_read } : entry)));
       setMessage("文章已标记为未读");
     } catch (e) {
@@ -58,9 +63,11 @@ export function useArticleActions({
     if (!selectedArticle) {
       return;
     }
+    const articleID = selectedArticle.id;
+    const nextFavorite = !selectedArticle.is_favorite;
     try {
-      const updated = await client.setArticleFavorite(selectedArticle.id, !selectedArticle.is_favorite);
-      setSelectedArticle(updated);
+      const updated = await client.setArticleFavorite(articleID, nextFavorite);
+      syncSelectedArticle(updated);
       setArticles((current) =>
         current.map((entry) =>
           entry.id === updated.id ? { ...entry, is_favorite: updated.is_favorite, favorited_at: updated.favorited_at } : entry,
@@ -76,12 +83,13 @@ export function useArticleActions({
     if (!selectedArticle || isExtractingReadable) {
       return;
     }
+    const articleID = selectedArticle.id;
     setIsExtractingReadable(true);
     setMessage("正在使用 Readability 抓取原文...");
     try {
-      const updated = await client.extractArticleReadable(selectedArticle.id);
-      setSelectedArticle(updated);
-      setArticles((current) => current.map((entry) => (entry.id === updated.id ? { ...entry, full_content: updated.full_content } : entry)));
+      const updated = await client.extractArticleReadable(articleID);
+      syncSelectedArticle(updated);
+      setArticles((current) => current.map((entry) => (entry.id === updated.id ? { ...entry, ...updated } : entry)));
       setMessage("原文抓取完成");
     } catch (e) {
       setMessage((e as Error).message, true);
@@ -94,11 +102,12 @@ export function useArticleActions({
     if (!selectedArticle || isRefreshingArticleCache) {
       return;
     }
+    const articleID = selectedArticle.id;
     setIsRefreshingArticleCache(true);
     setMessage("正在刷新文章缓存...");
     try {
-      const updated = await client.refreshArticleCache(selectedArticle.id);
-      setSelectedArticle(updated);
+      const updated = await client.refreshArticleCache(articleID);
+      syncSelectedArticle(updated);
       setArticles((current) => current.map((entry) => (entry.id === updated.id ? { ...entry, ...updated } : entry)));
       setTranslationParagraphsByArticleID((current) => ({ ...current, [updated.id]: [] }));
       setMessage("文章缓存已刷新");

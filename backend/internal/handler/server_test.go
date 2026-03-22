@@ -117,6 +117,19 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 	if rrDetail.Code != http.StatusOK {
 		t.Fatalf("GET /api/v1/articles/:id status = %d, want %d", rrDetail.Code, http.StatusOK)
 	}
+	var createdDetail struct {
+		DisplaySummary       string `json:"display_summary"`
+		DisplaySummaryStatus string `json:"display_summary_status"`
+	}
+	if err := json.Unmarshal(rrDetail.Body.Bytes(), &createdDetail); err != nil {
+		t.Fatalf("unmarshal created detail response error = %v", err)
+	}
+	if !strings.Contains(createdDetail.DisplaySummary, "desc") {
+		t.Fatalf("display_summary = %q, want generated summary from raw rss summary", createdDetail.DisplaySummary)
+	}
+	if createdDetail.DisplaySummaryStatus == "" {
+		t.Fatalf("display_summary_status is empty, want generated status")
+	}
 
 	readBody, _ := json.Marshal(map[string]bool{"read": true})
 	reqRead := httptest.NewRequest(http.MethodPatch, "/api/v1/articles/"+strconv.FormatInt(articleID, 10)+"/read", bytes.NewReader(readBody))
@@ -296,7 +309,9 @@ func TestArticleReadabilityExtraction(t *testing.T) {
 	}
 
 	var detailResp struct {
-		FullContent string `json:"full_content"`
+		FullContent          string `json:"full_content"`
+		DisplaySummary       string `json:"display_summary"`
+		DisplaySummaryStatus string `json:"display_summary_status"`
 	}
 	if err := json.Unmarshal(rrReadable.Body.Bytes(), &detailResp); err != nil {
 		t.Fatalf("unmarshal readability response error = %v", err)
@@ -306,6 +321,12 @@ func TestArticleReadabilityExtraction(t *testing.T) {
 	}
 	if !strings.Contains(detailResp.FullContent, "Readability 抽取测试段落") {
 		t.Fatalf("full_content = %q, want contains readability text", detailResp.FullContent)
+	}
+	if !strings.Contains(detailResp.DisplaySummary, "Readability 抽取测试段落") {
+		t.Fatalf("display_summary = %q, want contains readability text", detailResp.DisplaySummary)
+	}
+	if detailResp.DisplaySummaryStatus != "fallback" {
+		t.Fatalf("display_summary_status = %q, want fallback", detailResp.DisplaySummaryStatus)
 	}
 }
 
@@ -443,13 +464,17 @@ func TestArticleRefreshCache(t *testing.T) {
 		t.Fatalf("POST /api/v1/articles/:id/refresh-cache status = %d, want %d, body=%s", rrRefresh.Code, http.StatusOK, rrRefresh.Body.String())
 	}
 	var detailResp struct {
-		FullContent string `json:"full_content"`
+		FullContent    string `json:"full_content"`
+		DisplaySummary string `json:"display_summary"`
 	}
 	if err := json.Unmarshal(rrRefresh.Body.Bytes(), &detailResp); err != nil {
 		t.Fatalf("unmarshal refresh-cache response error = %v", err)
 	}
 	if !strings.Contains(detailResp.FullContent, "Cache refresh readability text") {
 		t.Fatalf("full_content = %q, want contains refreshed readability text", detailResp.FullContent)
+	}
+	if !strings.Contains(detailResp.DisplaySummary, "Cache refresh readability text") {
+		t.Fatalf("display_summary = %q, want refreshed summary from readable content", detailResp.DisplaySummary)
 	}
 }
 
