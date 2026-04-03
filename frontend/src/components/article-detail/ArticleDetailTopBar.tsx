@@ -13,6 +13,7 @@ type ArticleDetailTopBarProps = {
   hasReadableContent: boolean;
   sourceSiteURL: string;
   contextText?: string;
+  recommendationText?: string;
   onMarkUnread: () => void;
   onToggleFavorite: () => void;
   onOpenSourceSite: () => void;
@@ -33,6 +34,7 @@ export function ArticleDetailTopBar({
   hasReadableContent,
   sourceSiteURL,
   contextText,
+  recommendationText,
   onMarkUnread,
   onToggleFavorite,
   onOpenSourceSite,
@@ -44,6 +46,7 @@ export function ArticleDetailTopBar({
       <div className="detail-panel-title-wrap">
         <h2 className="detail-panel-title">{title}</h2>
         {contextText && <p className="detail-panel-context">{contextText}</p>}
+        {recommendationText && <p className="detail-panel-context detail-panel-recommendation">{recommendationText}</p>}
       </div>
       <ArticleDetailToolbar
         canMarkUnread={canMarkUnread}

@@ -693,18 +693,6 @@ button:active {
   text-overflow: ellipsis;
 }
 
-.list-context-reset {
-  flex: 0 0 auto;
-  min-height: 32px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--theme-primary-line);
-  background: color-mix(in srgb, var(--theme-primary-soft) 72%, var(--btn-bg) 28%);
-  color: var(--theme-primary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .list-icon-btn {
   width: 42px;
   height: 42px;
@@ -797,6 +785,113 @@ button:active {
 .list-icon-btn.sort-latest,
 .list-icon-btn.sort-oldest {
   font-weight: 600;
+}
+
+.list-sort-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+}
+
+.list-sort-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  border: 1px solid var(--btn-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, white 78%, var(--btn-bg) 22%);
+  padding: 0 12px 0 14px;
+  color: var(--ink-strong);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+.list-sort-trigger:hover,
+.list-sort-menu.is-open .list-sort-trigger {
+  border-color: color-mix(in srgb, var(--theme-primary-line) 72%, var(--btn-line) 28%);
+  background: color-mix(in srgb, white 66%, var(--theme-primary-soft) 34%);
+}
+
+.list-sort-trigger:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--theme-primary-line) 80%, var(--btn-line) 20%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary-soft) 70%, transparent 30%);
+}
+
+.list-sort-caption {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.list-sort-current {
+  color: var(--ink-strong);
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 104px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.list-sort-chevron {
+  margin-left: -8px;
+  font-size: 11px;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(1px);
+}
+
+.list-sort-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  min-width: 176px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--btn-line) 82%, #d6dbe4 18%);
+  border-radius: 16px;
+  background: color-mix(in srgb, white 96%, var(--panel) 4%);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12), 0 3px 12px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+.list-sort-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.list-sort-option:hover {
+  background: color-mix(in srgb, var(--theme-primary-soft) 54%, transparent);
+  color: var(--ink-strong);
+}
+
+.list-sort-option.is-active {
+  background: color-mix(in srgb, var(--theme-primary-soft) 78%, white 22%);
+  color: var(--theme-primary);
+  font-weight: 600;
+}
+
+.list-sort-option-mark {
+  font-size: 12px;
 }
 
 .item {
@@ -1096,6 +1191,10 @@ button:active {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.detail-panel-recommendation {
+  color: var(--ink);
 }
 
 .detail-toolbar {
@@ -1716,6 +1815,19 @@ button:active {
   height: 14px;
 }
 
+.article-meta-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.article-score-summary {
+  color: var(--theme-primary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .pill {
   display: inline-block;
   margin-left: 8px;
@@ -2213,6 +2325,16 @@ a {
     gap: 10px;
   }
 
+  .list-sort-trigger {
+    min-height: 46px;
+    padding: 0 14px 0 15px;
+  }
+
+  .list-sort-current {
+    min-width: 112px;
+    font-size: 14px;
+  }
+
   .list-context-bar {
     align-items: flex-start;
     flex-direction: column;
@@ -2223,11 +2345,6 @@ a {
   .list-context-text {
     white-space: normal;
     overflow: visible;
-  }
-
-  .list-context-reset {
-    width: 100%;
-    min-height: 38px;
   }
 
   .list-icon-btn {
@@ -2422,6 +2539,22 @@ a {
   .list-icon-btn {
     width: 44px;
     height: 44px;
+  }
+
+  .list-sort-trigger {
+    min-height: 44px;
+    padding: 0 13px 0 14px;
+  }
+
+  .list-sort-current {
+    min-width: 98px;
+    font-size: 13px;
+  }
+
+  .list-sort-popover {
+    left: 0;
+    right: auto;
+    min-width: 168px;
   }
 
   .item {

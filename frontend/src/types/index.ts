@@ -1,1 +1,1 @@
-export type { Article, Feed, Folder } from "./domain";
+export type { Article, Feed, Folder, RecommendationScores } from "./domain";

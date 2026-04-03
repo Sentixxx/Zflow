@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
+	"github.com/Sentixxx/Zflow/backend/internal/service"
 )
 
 func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
@@ -30,6 +31,7 @@ func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := s.fetchAndParse(req.URL, "", "")
+	result.Items = service.AttachRecommendationScoresToSeeds(result.Items)
 	feed, err := s.store.AddInFolder(req.URL, result.Title, result.Items, result.Error, req.FolderID, result.ETag, result.LastModified)
 	if err == repository.ErrFeedExists {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "feed already exists"})

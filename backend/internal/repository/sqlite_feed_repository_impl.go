@@ -18,12 +18,14 @@ var ErrFeedExists = errors.New("feed already exists")
 var ErrFolderNameEmpty = errors.New("folder name is required")
 
 type ArticleSeed struct {
-	Title       string
-	Link        string
-	Summary     string
-	FullContent string
-	CoverURL    string
-	PublishedAt string
+	Title                string
+	Link                 string
+	Summary              string
+	FullContent          string
+	CoverURL             string
+	PublishedAt          string
+	RecommendationScores *model.RecommendationScores
+	ArticleFeatures      *model.ArticleFeatures
 }
 
 type SQLiteFeedRepository struct {
@@ -98,13 +100,33 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 			is_read INTEGER NOT NULL DEFAULT 0,
 			is_favorite INTEGER NOT NULL DEFAULT 0,
 			favorited_at TEXT NOT NULL DEFAULT '',
+			quality_score INTEGER NOT NULL DEFAULT 0,
+			relevance_score INTEGER NOT NULL DEFAULT 0,
+			novelty_score INTEGER NOT NULL DEFAULT 0,
+			composite_score INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
 			FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
 		);`,
+		`CREATE TABLE IF NOT EXISTS article_features (
+			article_id INTEGER PRIMARY KEY,
+			gate_status TEXT NOT NULL DEFAULT '',
+			quality_score INTEGER NOT NULL DEFAULT 0,
+			relevance_score INTEGER NOT NULL DEFAULT 0,
+			depth_score INTEGER NOT NULL DEFAULT 0,
+			freshness_score INTEGER NOT NULL DEFAULT 0,
+			novelty_score INTEGER NOT NULL DEFAULT 0,
+			composite_score INTEGER NOT NULL DEFAULT 0,
+			content_fingerprint TEXT NOT NULL DEFAULT '',
+			feature_version INTEGER NOT NULL DEFAULT 0,
+			scored_at TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY(article_id) REFERENCES entries(id) ON DELETE CASCADE
+		);`,
 		`CREATE INDEX IF NOT EXISTS idx_feeds_folder_id ON feeds(folder_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_entries_feed_id ON entries(feed_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_entries_created_at ON entries(created_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_article_features_scored_at ON article_features(scored_at);`,
 		`CREATE TABLE IF NOT EXISTS app_settings (
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL DEFAULT '',
@@ -145,6 +167,18 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "entries", "favorited_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "quality_score", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "relevance_score", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "novelty_score", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "composite_score", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "feeds", "custom_script", "TEXT NOT NULL DEFAULT ''"); err != nil {
@@ -561,7 +595,15 @@ func (s *SQLiteFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string
 }
 
 func (s *SQLiteFeedRepository) ListArticles() []model.Article {
-	rows, err := s.db.Query(`SELECT id, feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries ORDER BY id DESC`)
+	rows, err := s.db.Query(`
+		SELECT
+			e.id, e.feed_id, e.title, e.link, e.summary, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
+			e.display_summary, e.display_summary_status, e.display_summary_updated_at, e.full_content, e.cover_url, e.published_at,
+			e.is_read, e.is_favorite, e.favorited_at, e.quality_score, e.relevance_score, e.novelty_score, e.composite_score, e.created_at,
+			af.gate_status, COALESCE(af.quality_score, 0), COALESCE(af.relevance_score, 0), COALESCE(af.depth_score, 0), COALESCE(af.freshness_score, 0), COALESCE(af.novelty_score, 0), COALESCE(af.composite_score, 0), COALESCE(af.content_fingerprint, ''), COALESCE(af.feature_version, 0), COALESCE(af.scored_at, '')
+		FROM entries e
+		LEFT JOIN article_features af ON af.article_id = e.id
+		ORDER BY e.id DESC`)
 	if err != nil {
 		return []model.Article{}
 	}
@@ -572,30 +614,30 @@ func (s *SQLiteFeedRepository) ListArticles() []model.Article {
 		var article model.Article
 		var readFlag int
 		var favoriteFlag int
+		var scores model.RecommendationScores
+		var gateStatus sql.NullString
+		var features model.ArticleFeatures
+		var featureVersion sql.NullInt64
+		var scoredAt sql.NullString
 		if err := rows.Scan(
-			&article.ID,
-			&article.FeedID,
-			&article.Title,
-			&article.Link,
-			&article.Summary,
-			&article.AISummary,
-			&article.AISummaryStatus,
-			&article.AISummaryAt,
-			&article.DisplaySummary,
-			&article.DisplaySummaryStatus,
-			&article.DisplaySummaryAt,
-			&article.FullContent,
-			&article.CoverURL,
-			&article.PublishedAt,
-			&readFlag,
-			&favoriteFlag,
-			&article.FavoritedAt,
-			&article.CreatedAt,
+			&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
+			&article.DisplaySummary, &article.DisplaySummaryStatus, &article.DisplaySummaryAt, &article.FullContent, &article.CoverURL, &article.PublishedAt,
+			&readFlag, &favoriteFlag, &article.FavoritedAt, &scores.Quality, &scores.Relevance, &scores.Novelty, &scores.Composite, &article.CreatedAt,
+			&gateStatus, &features.Quality, &features.Relevance, &features.Depth, &features.Freshness, &features.Novelty, &features.Composite, &features.ContentFingerprint, &featureVersion, &scoredAt,
 		); err != nil {
 			continue
 		}
 		article.IsRead = readFlag == 1
 		article.IsFavorite = favoriteFlag == 1
+		article.RecommendationScores = &scores
+		if gateStatus.Valid {
+			features.GateStatus = model.ArticleGateStatus(gateStatus.String)
+			features.FeatureVersion = int(featureVersion.Int64)
+			if scoredAt.Valid {
+				features.ScoredAt = scoredAt.String
+			}
+			article.ArticleFeatures = &features
+		}
 		articles = append(articles, article)
 	}
 	return articles
@@ -662,34 +704,42 @@ func (s *SQLiteFeedRepository) DeleteArticle(id int64) (bool, error) {
 }
 
 func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
-	row := s.db.QueryRow(`SELECT id, feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at FROM entries WHERE id = ?`, id)
+	row := s.db.QueryRow(`
+		SELECT
+			e.id, e.feed_id, e.title, e.link, e.summary, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
+			e.display_summary, e.display_summary_status, e.display_summary_updated_at, e.full_content, e.cover_url, e.published_at,
+			e.is_read, e.is_favorite, e.favorited_at, e.quality_score, e.relevance_score, e.novelty_score, e.composite_score, e.created_at,
+			af.gate_status, COALESCE(af.quality_score, 0), COALESCE(af.relevance_score, 0), COALESCE(af.depth_score, 0), COALESCE(af.freshness_score, 0), COALESCE(af.novelty_score, 0), COALESCE(af.composite_score, 0), COALESCE(af.content_fingerprint, ''), COALESCE(af.feature_version, 0), COALESCE(af.scored_at, '')
+		FROM entries e
+		LEFT JOIN article_features af ON af.article_id = e.id
+		WHERE e.id = ?`, id)
 	var article model.Article
 	var readFlag int
 	var favoriteFlag int
+	var scores model.RecommendationScores
+	var gateStatus sql.NullString
+	var features model.ArticleFeatures
+	var featureVersion sql.NullInt64
+	var scoredAt sql.NullString
 	if err := row.Scan(
-		&article.ID,
-		&article.FeedID,
-		&article.Title,
-		&article.Link,
-		&article.Summary,
-		&article.AISummary,
-		&article.AISummaryStatus,
-		&article.AISummaryAt,
-		&article.DisplaySummary,
-		&article.DisplaySummaryStatus,
-		&article.DisplaySummaryAt,
-		&article.FullContent,
-		&article.CoverURL,
-		&article.PublishedAt,
-		&readFlag,
-		&favoriteFlag,
-		&article.FavoritedAt,
-		&article.CreatedAt,
+		&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
+		&article.DisplaySummary, &article.DisplaySummaryStatus, &article.DisplaySummaryAt, &article.FullContent, &article.CoverURL, &article.PublishedAt,
+		&readFlag, &favoriteFlag, &article.FavoritedAt, &scores.Quality, &scores.Relevance, &scores.Novelty, &scores.Composite, &article.CreatedAt,
+		&gateStatus, &features.Quality, &features.Relevance, &features.Depth, &features.Freshness, &features.Novelty, &features.Composite, &features.ContentFingerprint, &featureVersion, &scoredAt,
 	); err != nil {
 		return model.Article{}, false
 	}
 	article.IsRead = readFlag == 1
 	article.IsFavorite = favoriteFlag == 1
+	article.RecommendationScores = &scores
+	if gateStatus.Valid {
+		features.GateStatus = model.ArticleGateStatus(gateStatus.String)
+		features.FeatureVersion = int(featureVersion.Int64)
+		if scoredAt.Valid {
+			features.ScoredAt = scoredAt.String
+		}
+		article.ArticleFeatures = &features
+	}
 	return article, true
 }
 
@@ -717,6 +767,19 @@ func (s *SQLiteFeedRepository) UpdateArticleSummaryState(id int64, aiSummary str
 	return err
 }
 
+func (s *SQLiteFeedRepository) UpdateArticleScores(id int64, scores model.RecommendationScores) error {
+	_, err := s.db.Exec(
+		`UPDATE entries SET quality_score = ?, relevance_score = ?, novelty_score = ?, composite_score = ?, updated_at = ? WHERE id = ?`,
+		scores.Quality,
+		scores.Relevance,
+		scores.Novelty,
+		scores.Composite,
+		time.Now().UTC().Format(time.RFC3339),
+		id,
+	)
+	return err
+}
+
 func (s *SQLiteFeedRepository) UpdateArticleDisplaySummary(id int64, summary string, status string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.Exec(
@@ -726,6 +789,56 @@ func (s *SQLiteFeedRepository) UpdateArticleDisplaySummary(id int64, summary str
 		now,
 		now,
 		id,
+	)
+	return err
+}
+
+func (s *SQLiteFeedRepository) UpdateArticleScores(id int64, scores model.RecommendationScores) error {
+	_, err := s.db.Exec(
+		`UPDATE entries SET quality_score = ?, relevance_score = ?, novelty_score = ?, composite_score = ?, updated_at = ? WHERE id = ?`,
+		scores.Quality,
+		scores.Relevance,
+		scores.Novelty,
+		scores.Composite,
+		time.Now().UTC().Format(time.RFC3339),
+		id,
+	)
+	return err
+}
+
+func (s *SQLiteFeedRepository) UpdateArticleFeatures(id int64, features model.ArticleFeatures) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	scoredAt := strings.TrimSpace(features.ScoredAt)
+	if scoredAt == "" {
+		scoredAt = now
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO article_features(article_id, gate_status, quality_score, relevance_score, depth_score, freshness_score, novelty_score, composite_score, content_fingerprint, feature_version, scored_at, updated_at)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(article_id) DO UPDATE SET
+		 gate_status = excluded.gate_status,
+		 quality_score = excluded.quality_score,
+		 relevance_score = excluded.relevance_score,
+		 depth_score = excluded.depth_score,
+		 freshness_score = excluded.freshness_score,
+		 novelty_score = excluded.novelty_score,
+		 composite_score = excluded.composite_score,
+		 content_fingerprint = excluded.content_fingerprint,
+		 feature_version = excluded.feature_version,
+		 scored_at = excluded.scored_at,
+		 updated_at = excluded.updated_at`,
+		id,
+		string(features.GateStatus),
+		features.Quality,
+		features.Relevance,
+		features.Depth,
+		features.Freshness,
+		features.Novelty,
+		features.Composite,
+		features.ContentFingerprint,
+		features.FeatureVersion,
+		scoredAt,
+		now,
 	)
 	return err
 }
@@ -889,17 +1002,68 @@ func (s *SQLiteFeedRepository) insertEntriesTx(tx *sql.Tx, feedID int64, items [
 		}
 		existingKeys[key] = struct{}{}
 
-		if _, err := tx.Exec(
-			`INSERT INTO entries(feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at, updated_at)
-			 VALUES(?, ?, ?, ?, '', '', '', '', '', '', ?, ?, ?, 0, 0, '', ?, ?)`,
-			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, cleaned.FullContent, cleaned.CoverURL, cleaned.PublishedAt, now, now,
-		); err != nil {
+		scores := cleaned.RecommendationScores
+		if scores == nil {
+			scores = &model.RecommendationScores{}
+		}
+
+		res, err := tx.Exec(
+			`INSERT INTO entries(feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, quality_score, relevance_score, novelty_score, composite_score, created_at, updated_at)
+			 VALUES(?, ?, ?, ?, '', '', '', '', '', '', ?, ?, ?, 0, 0, '', ?, ?, ?, ?, ?, ?)`,
+			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, cleaned.FullContent, cleaned.CoverURL, cleaned.PublishedAt, scores.Quality, scores.Relevance, scores.Novelty, scores.Composite, now, now,
+		)
+		if err != nil {
 			return insertedCount, err
+		}
+		if cleaned.ArticleFeatures != nil {
+			articleID, err := res.LastInsertId()
+			if err != nil {
+				return insertedCount, err
+			}
+			if err := upsertArticleFeaturesTx(tx, articleID, *cleaned.ArticleFeatures, now); err != nil {
+				return insertedCount, err
+			}
 		}
 		insertedCount++
 	}
 
 	return insertedCount, nil
+}
+
+func upsertArticleFeaturesTx(tx *sql.Tx, articleID int64, features model.ArticleFeatures, now string) error {
+	scoredAt := strings.TrimSpace(features.ScoredAt)
+	if scoredAt == "" {
+		scoredAt = now
+	}
+	_, err := tx.Exec(
+		`INSERT INTO article_features(article_id, gate_status, quality_score, relevance_score, depth_score, freshness_score, novelty_score, composite_score, content_fingerprint, feature_version, scored_at, updated_at)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(article_id) DO UPDATE SET
+		 gate_status = excluded.gate_status,
+		 quality_score = excluded.quality_score,
+		 relevance_score = excluded.relevance_score,
+		 depth_score = excluded.depth_score,
+		 freshness_score = excluded.freshness_score,
+		 novelty_score = excluded.novelty_score,
+		 composite_score = excluded.composite_score,
+		 content_fingerprint = excluded.content_fingerprint,
+		 feature_version = excluded.feature_version,
+		 scored_at = excluded.scored_at,
+		 updated_at = excluded.updated_at`,
+		articleID,
+		string(features.GateStatus),
+		features.Quality,
+		features.Relevance,
+		features.Depth,
+		features.Freshness,
+		features.Novelty,
+		features.Composite,
+		features.ContentFingerprint,
+		features.FeatureVersion,
+		scoredAt,
+		now,
+	)
+	return err
 }
 
 func (s *SQLiteFeedRepository) loadDedupKeysTx(tx *sql.Tx) (map[string]struct{}, error) {

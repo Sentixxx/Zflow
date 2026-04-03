@@ -1,5 +1,5 @@
 import type { Article, Feed } from "@/types";
-import { formatArticleTime } from "@/lib/article-list";
+import { formatArticleTime, formatRecommendationSummary } from "@/lib/article-list";
 import { RssFallbackIcon } from "@/components/ui/RssFallbackIcon";
 
 type ArticleListProps = {
@@ -64,7 +64,10 @@ export function ArticleList({ articles, selectedArticleID, feedByID, feedNameByI
                 {article.is_read ? "已读" : "未读"}
               </span>
             </div>
-            <div className="meta">{formatArticleTime(article.published_at || article.created_at)}</div>
+            <div className="meta article-meta-line">
+              <span>{formatArticleTime(article.published_at || article.created_at)}</span>
+              <span className="article-score-summary">{formatRecommendationSummary(article)}</span>
+            </div>
           </button>
         );
       })}

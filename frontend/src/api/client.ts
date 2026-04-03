@@ -1,5 +1,7 @@
 import type { Article, Feed, Folder } from "@/types";
 import { createLogger } from "@/lib/logger";
+import type { SortMode } from "@/lib/article-list";
+import { buildArticleListQuery } from "./article-query";
 
 const apiLogger = createLogger("api");
 
@@ -87,20 +89,15 @@ export class ApiClient {
     await this.request(`/api/v1/folders/${id}`, { method: "DELETE" });
   }
 
-  async listArticles(page?: number, limit?: number): Promise<Article[]> {
-    const search = new URLSearchParams();
-    if (typeof page === "number") search.set("page", String(page));
-    if (typeof limit === "number") search.set("limit", String(limit));
-    const suffix = search.toString();
+  async listArticles(page?: number, limit?: number, sort?: SortMode): Promise<Article[]> {
+    const suffix = buildArticleListQuery({ page, limit, sort });
     const data = await this.request<{ articles?: Article[] }>(`/api/v1/articles${suffix ? `?${suffix}` : ""}`);
     return data.articles ?? [];
   }
 
-  async listArticlesPage(page: number, limit: number): Promise<{ articles: Article[]; hasMore: boolean }> {
-    const search = new URLSearchParams();
-    search.set("page", String(page));
-    search.set("limit", String(limit));
-    const data = await this.request<{ articles?: Article[]; has_more?: boolean }>(`/api/v1/articles?${search.toString()}`);
+  async listArticlesPage(page: number, limit: number, sort?: SortMode): Promise<{ articles: Article[]; hasMore: boolean }> {
+    const search = buildArticleListQuery({ page, limit, sort });
+    const data = await this.request<{ articles?: Article[]; has_more?: boolean }>(`/api/v1/articles?${search}`);
     return {
       articles: data.articles ?? [],
       hasMore: Boolean(data.has_more),

@@ -21,6 +21,13 @@ export interface Folder {
   updated_at: string;
 }
 
+export interface RecommendationScores {
+  quality: number;
+  relevance: number;
+  novelty: number;
+  composite: number;
+}
+
 export interface Article {
   id: number;
   feed_id: number;
@@ -49,4 +56,5 @@ export interface Article {
     final_sentence_closed?: boolean;
     used_ai?: boolean;
   };
+  recommendation_scores?: RecommendationScores;
 }

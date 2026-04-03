@@ -286,6 +286,7 @@ func (s *Server) refreshFeedByID(feedID int64) error {
 			result.Items = items
 		}
 	}
+	result.Items = service.AttachRecommendationScoresToSeeds(result.Items)
 	s.tryRefreshFeedIcon(feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt, result.IconHints)
 	if err := s.store.UpdateFeedAfterRefresh(feedID, result.Title, result.Items, "", result.ETag, result.LastModified); err != nil {
 		return err

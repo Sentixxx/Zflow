@@ -1,5 +1,7 @@
 import type { Article } from "@/types";
 import { useRef } from "react";
+import { formatRecommendationSummary } from "@/lib/article-list";
+import { useRef } from "react";
 import { ArticleDetailTopBar } from "./ArticleDetailTopBar";
 import { ArticleFloatingActions } from "./ArticleFloatingActions";
 
@@ -99,6 +101,7 @@ export function ArticleDetailContent({
         hasReadableContent={hasUsableFullContent}
         sourceSiteURL={sourceSiteURL}
         contextText={detailProgressText}
+        recommendationText={article ? `推荐分：${formatRecommendationSummary(article)}` : undefined}
         onMarkUnread={onMarkUnread}
         onToggleFavorite={onToggleFavorite}
         onOpenSourceSite={onOpenSourceSite}

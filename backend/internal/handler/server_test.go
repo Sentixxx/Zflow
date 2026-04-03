@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
 	"github.com/Sentixxx/Zflow/backend/internal/service"
+	_ "modernc.org/sqlite"
 )
 
 func TestCreateFeedAndList(t *testing.T) {
@@ -102,6 +104,9 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 		Articles []struct {
 			ID     int64 `json:"id"`
 			IsRead bool  `json:"is_read"`
+			Scores struct {
+				Composite int `json:"composite"`
+			} `json:"recommendation_scores"`
 		} `json:"articles"`
 	}
 	if err := json.Unmarshal(rrList.Body.Bytes(), &listResp); err != nil {
@@ -109,6 +114,9 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 	}
 	if len(listResp.Articles) != 1 {
 		t.Fatalf("articles len = %d, want 1", len(listResp.Articles))
+	}
+	if listResp.Articles[0].Scores.Composite <= 0 {
+		t.Fatalf("composite score = %d, want > 0", listResp.Articles[0].Scores.Composite)
 	}
 
 	articleID := listResp.Articles[0].ID
@@ -154,6 +162,147 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 	}
 	if !detailResp.IsRead {
 		t.Fatalf("is_read = false, want true")
+	}
+}
+
+func TestArticleListSortByRecommend(t *testing.T) {
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+		{
+			Title:       "Tiny note",
+			Link:        "https://example.com/1",
+			Summary:     "short",
+			PublishedAt: "2026-02-20T00:00:00Z",
+		},
+		{
+			Title:       "Detailed engineering update on distributed systems rollout",
+			Link:        "https://example.com/2",
+			Summary:     "Detailed engineering update on distributed systems rollout with context and metrics.",
+			FullContent: strings.Repeat("Detailed engineering update on distributed systems rollout with metrics and context. ", 40),
+			CoverURL:    "https://example.com/cover.jpg",
+			PublishedAt: "2026-02-26T00:00:00Z",
+		},
+	}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/articles?sort=recommend", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles?sort=recommend status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Articles []struct {
+			Title  string `json:"title"`
+			Scores struct {
+				Composite int `json:"composite"`
+			} `json:"recommendation_scores"`
+		} `json:"articles"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response error = %v", err)
+	}
+	if len(resp.Articles) != 2 {
+		t.Fatalf("articles len = %d, want 2", len(resp.Articles))
+	}
+	if resp.Articles[0].Title != "Detailed engineering update on distributed systems rollout" {
+		t.Fatalf("top article = %q, want detailed article first", resp.Articles[0].Title)
+	}
+	if resp.Articles[0].Scores.Composite <= resp.Articles[1].Scores.Composite {
+		t.Fatalf("composite order = %d <= %d, want descending", resp.Articles[0].Scores.Composite, resp.Articles[1].Scores.Composite)
+	}
+}
+
+func TestArticleListRejectInvalidSort(t *testing.T) {
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/articles?sort=garbage", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("GET /api/v1/articles?sort=garbage status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestArticleDetailBackfillsLegacyScores(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "feeds.db")
+	repo, err := repository.NewSQLiteFeedRepository(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+		{
+			Title:       "Distributed systems migration notes",
+			Link:        "https://example.com/1",
+			Summary:     "Migration notes with rollout stages, impact scope, and fallback strategy.",
+			FullContent: strings.Repeat("Distributed systems migration notes rollout stages impact scope fallback strategy. ", 18),
+			PublishedAt: "2026-02-26T00:00:00Z",
+		},
+	}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+
+	articles := repo.ListArticles()
+	if len(articles) != 1 {
+		t.Fatalf("ListArticles len = %d, want 1", len(articles))
+	}
+
+	legacyDB, err := sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	defer legacyDB.Close()
+
+	if _, err := legacyDB.Exec(`DELETE FROM article_features WHERE article_id = ?`, articles[0].ID); err != nil {
+		t.Fatalf("DELETE article_features error = %v", err)
+	}
+	if _, err := legacyDB.Exec(`UPDATE entries SET quality_score = 0, relevance_score = 0, novelty_score = 0, composite_score = 0 WHERE id = ?`, articles[0].ID); err != nil {
+		t.Fatalf("UPDATE entries reset scores error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/articles/"+strconv.FormatInt(articles[0].ID, 10), nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles/:id status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var detail struct {
+		Scores struct {
+			Composite int `json:"composite"`
+		} `json:"recommendation_scores"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("unmarshal detail response error = %v", err)
+	}
+	if detail.Scores.Composite <= 0 {
+		t.Fatalf("detail composite = %d, want > 0", detail.Scores.Composite)
+	}
+
+	stored, ok := repo.GetArticle(articles[0].ID)
+	if !ok {
+		t.Fatalf("GetArticle() ok = false, want true")
+	}
+	if stored.RecommendationScores == nil || stored.RecommendationScores.Composite <= 0 {
+		t.Fatalf("stored recommendation_scores = %+v, want backfilled scores", stored.RecommendationScores)
+	}
+	if stored.ArticleFeatures == nil || stored.ArticleFeatures.FeatureVersion <= 0 {
+		t.Fatalf("stored article_features = %+v, want persisted feature row", stored.ArticleFeatures)
 	}
 }
 

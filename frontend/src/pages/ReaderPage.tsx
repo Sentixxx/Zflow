@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiClient } from "@/api";
 import type { Article, Feed, Folder } from "@/types";
-import { filterAndSortArticles } from "@/lib/article-list";
+import { SORT_MODE_LABELS, filterAndSortArticles } from "@/lib/article-list";
 import type { ReadFilter, SortMode } from "@/lib/article-list";
 import { sanitizeRichHTML } from "@/lib/sanitize";
 import { buildFeedIconURLByHost } from "@/lib/feed-utils";
+import { resolveInitialAPIBase } from "@/lib/api-base";
 import {
   TopBar,
   RefreshFailureBanner,
@@ -28,7 +29,6 @@ import { useSettingsActions } from "@/hooks/useSettingsActions";
 import { useSidebarFeedActions } from "@/hooks/useSidebarFeedActions";
 import { useReaderLayout } from "@/hooks/useReaderLayout";
 
-const DEFAULT_API_BASE = "http://localhost:8080";
 const PREFETCH_BATCH_SIZE = 20;
 const VISIBLE_STEP_SIZE = 10;
 const LOAD_MORE_COOLDOWN_MS = 80;
@@ -48,7 +48,7 @@ function toValidURL(raw: string | undefined): string {
 }
 
 export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
-  const [apiBase, setApiBase] = useState<string>(localStorage.getItem("zflow_api_base") || DEFAULT_API_BASE);
+  const [apiBase, setApiBase] = useState<string>(() => resolveInitialAPIBase(localStorage.getItem("zflow_api_base"), window.location.hostname));
   const [networkProxyURL, setNetworkProxyURL] = useState<string>("");
   const [aiProtocol, setAIProtocol] = useState<"openai" | "anthropic">("openai");
   const [aiAPIKey, setAIAPIKey] = useState<string>("");
@@ -93,7 +93,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const bounceTimerRef = useRef<number | null>(null);
   const autoReadableAttemptedRef = useRef<Set<number>>(new Set());
   const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
-  const { feedsQuery, foldersQuery, articlesInfiniteQuery } = useReaderQueries(apiBase);
+  const { feedsQuery, foldersQuery, articlesInfiniteQuery } = useReaderQueries(apiBase, sortMode);
   const sanitizedSummaryHTML = useMemo(
     () => sanitizeRichHTML(selectedArticle?.display_summary || selectedArticle?.summary),
     [selectedArticle?.display_summary, selectedArticle?.summary],
@@ -111,7 +111,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   };
 
   const { feeds, folders, loadFeeds, loadFolders } = useFeeds(client, feedsQuery, foldersQuery, setMessage);
-  const { articles, setArticles, loadArticles, fetchNextArticlePage, hasNextArticlePage } = useEntries(client, articlesInfiniteQuery, setMessage);
+  const { articles, setArticles, loadArticles, fetchNextArticlePage, hasNextArticlePage } = useEntries(client, articlesInfiniteQuery, setMessage, sortMode);
 
   const folderNameByID = useMemo(() => {
     const map = new Map<number, string>();
@@ -201,7 +201,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   };
   const filteredAndSortedArticles = useMemo(() => {
     const filteredBySource = filterArticlesByScope(articles, selectedFeedID, selectedFolderID);
-    return filterAndSortArticles(filteredBySource, readFilter, sortMode, new Set(stickyUnreadIDs));
+    return filterAndSortArticles(filteredBySource, readFilter, sortMode, new Set(stickyUnreadIDs), true);
   }, [articles, readFilter, sortMode, selectedFeedID, selectedFolderID, feeds, childFoldersByParent, stickyUnreadIDs, sidebarMode]);
   const effectiveBufferedCount = Math.min(bufferedCount, filteredAndSortedArticles.length);
   const pagedArticles = useMemo(
@@ -241,7 +241,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
       scopeLabel = `分类：${folderNameByID.get(selectedFolderID) || `#${selectedFolderID}`}`;
     }
     const readLabel = readFilter === "unread" ? "仅未读" : "含已读";
-    const sortLabel = sortMode === "latest" ? "最新优先" : "最早优先";
+    const sortLabel = SORT_MODE_LABELS[sortMode];
     return `${scopeLabel} · ${readLabel} · ${sortLabel}`;
   }, [sidebarMode, selectedFeedID, selectedFolderID, feedNameByID, folderNameByID, readFilter, sortMode]);
   const selectedArticleOpenURL = useMemo(() => {
@@ -472,23 +472,6 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   };
   const toggleReadFilter = () => {
     handleReadFilterChange(readFilter === "unread" ? "all" : "unread");
-  };
-  const toggleSortMode = () => {
-    handleSortModeChange(sortMode === "latest" ? "oldest" : "latest");
-  };
-  const resetListContext = () => {
-    setSidebarMode("subscriptions");
-    setSelectedFeedID(null);
-    setSelectedFolderID(null);
-    setReadFilter("all");
-    setSortMode("latest");
-    setBufferedCount(PREFETCH_BATCH_SIZE);
-    setVisibleCount(VISIBLE_STEP_SIZE);
-    rebuildStickyUnreadIDs(articles, null, null, "all");
-    if (isNarrow) {
-      setMobilePane("list");
-    }
-    setMessage("已回到默认视图");
   };
 
   const toggleSettings = () => {
@@ -862,14 +845,11 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
         <section className={`panel list-panel ${isNarrow && mobilePane !== "list" ? "mobile-hidden" : "mobile-active"}`}>
           <div className="list-header">
             <h2>{articleListTitle}</h2>
-            <ArticleListToolbar readFilter={readFilter} sortMode={sortMode} onToggleReadFilter={toggleReadFilter} onToggleSortMode={toggleSortMode} />
+            <ArticleListToolbar readFilter={readFilter} sortMode={sortMode} onToggleReadFilter={toggleReadFilter} onSortModeChange={handleSortModeChange} />
           </div>
           {hasListContextOverrides && (
             <div className="list-context-bar">
               <span className="list-context-text">{listContextSummary}</span>
-              <button className="list-context-reset" onClick={resetListContext}>
-                回到默认视图
-              </button>
             </div>
           )}
           <div className={`list article-list ${listBounce ? "bounce" : ""}`} onScroll={onArticleListScroll}>

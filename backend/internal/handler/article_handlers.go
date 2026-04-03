@@ -26,6 +26,11 @@ func (s *Server) handleArticles(w http.ResponseWriter, r *http.Request) {
 	}
 	limit := 0
 	page := 1
+	sortMode, err := service.NormalizeArticleSortMode(r.URL.Query().Get("sort"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid sort"})
+		return
+	}
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < 1 {
@@ -46,7 +51,7 @@ func (s *Server) handleArticles(w http.ResponseWriter, r *http.Request) {
 		page = parsed
 	}
 
-	articles, hasMore := s.articleUC.List(page, limit)
+	articles, hasMore := s.articleUC.List(page, limit, sortMode)
 	writeJSON(w, http.StatusOK, map[string]any{"articles": articles, "has_more": hasMore})
 }
 

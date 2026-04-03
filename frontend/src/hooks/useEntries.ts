@@ -3,6 +3,7 @@ import type { Article } from "@/types";
 import type { ApiClient } from "@/api";
 import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
 import type { MessageSetter } from "@/hooks/useFeeds";
+import type { SortMode } from "@/lib/article-list";
 
 type ArticlesPage = {
   articles: Article[];
@@ -13,6 +14,7 @@ export function useEntries(
   client: ApiClient,
   articlesInfiniteQuery: UseInfiniteQueryResult<InfiniteData<ArticlesPage, unknown>, Error>,
   setMessage: MessageSetter,
+  sortMode: SortMode = "latest",
 ) {
   const [articles, setArticles] = useState<Article[]>([]);
 
@@ -24,17 +26,14 @@ export function useEntries(
   }, [articlesInfiniteQuery.data]);
 
   useEffect(() => {
-    if (articles.length > 0) {
-      return;
-    }
-    if (mergedFromQuery.length > 0) {
+    if (articlesInfiniteQuery.data) {
       setArticles(mergedFromQuery);
     }
-  }, [mergedFromQuery, articles.length]);
+  }, [mergedFromQuery, articlesInfiniteQuery.data]);
 
   const loadArticles = async (options?: { silentStatus?: boolean }): Promise<Article[] | null> => {
     try {
-      const data = await client.listArticles();
+      const data = await client.listArticles(undefined, undefined, sortMode);
       setArticles(data);
       if (!options?.silentStatus) {
         setMessage("文章列表已刷新");

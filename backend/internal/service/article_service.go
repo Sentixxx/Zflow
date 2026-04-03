@@ -8,7 +8,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/Sentixxx/Zflow/backend/internal/model"
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
@@ -20,7 +23,21 @@ var (
 	ErrArticleLinkEmpty     = errors.New("article link is empty")
 	ErrReadabilityFetchFail = errors.New("readability fetch failed")
 	ErrSaveArticleContent   = errors.New("failed to save article content")
+	ErrInvalidArticleSort   = errors.New("invalid article sort")
 )
+
+type ArticleSortMode string
+
+const (
+	ArticleSortLatest    ArticleSortMode = "latest"
+	ArticleSortOldest    ArticleSortMode = "oldest"
+	ArticleSortRecommend ArticleSortMode = "recommend"
+	ArticleSortQuality   ArticleSortMode = "quality"
+	ArticleSortRelevance ArticleSortMode = "relevance"
+	ArticleSortNovelty   ArticleSortMode = "novelty"
+)
+
+var articleTokenPattern = regexp.MustCompile(`[[:alnum:]]{2,}`)
 
 type ArticleService struct {
 	store             repository.FeedRepository
@@ -34,8 +51,30 @@ func NewArticleService(store repository.FeedRepository, readabilityClient func()
 	}
 }
 
-func (u *ArticleService) List(page int, limit int) ([]model.Article, bool) {
+func NormalizeArticleSortMode(raw string) (ArticleSortMode, error) {
+	switch ArticleSortMode(strings.TrimSpace(raw)) {
+	case "", ArticleSortLatest:
+		return ArticleSortLatest, nil
+	case ArticleSortOldest:
+		return ArticleSortOldest, nil
+	case ArticleSortRecommend:
+		return ArticleSortRecommend, nil
+	case ArticleSortQuality:
+		return ArticleSortQuality, nil
+	case ArticleSortRelevance:
+		return ArticleSortRelevance, nil
+	case ArticleSortNovelty:
+		return ArticleSortNovelty, nil
+	default:
+		return "", ErrInvalidArticleSort
+	}
+}
+
+func (u *ArticleService) List(page int, limit int, sortMode ArticleSortMode) ([]model.Article, bool) {
 	all := u.store.ListArticles()
+	all = u.hydrateAndBackfillArticles(all)
+	sortArticles(all, sortMode)
+
 	if limit <= 0 {
 		return all, false
 	}
@@ -60,7 +99,11 @@ func (u *ArticleService) List(page int, limit int) ([]model.Article, bool) {
 }
 
 func (u *ArticleService) Get(id int64) (model.Article, bool) {
-	return u.store.GetArticle(id)
+	article, ok := u.store.GetArticle(id)
+	if !ok {
+		return model.Article{}, false
+	}
+	return u.hydrateAndBackfillArticle(article), true
 }
 
 func (u *ArticleService) Delete(id int64) (bool, error) {
@@ -68,11 +111,19 @@ func (u *ArticleService) Delete(id int64) (bool, error) {
 }
 
 func (u *ArticleService) MarkRead(id int64, read bool) (model.Article, bool, error) {
-	return u.store.MarkArticleRead(id, read)
+	article, ok, err := u.store.MarkArticleRead(id, read)
+	if !ok || err != nil {
+		return article, ok, err
+	}
+	return u.hydrateAndBackfillArticle(article), ok, nil
 }
 
 func (u *ArticleService) MarkFavorite(id int64, favorite bool) (model.Article, bool, error) {
-	return u.store.MarkArticleFavorite(id, favorite)
+	article, ok, err := u.store.MarkArticleFavorite(id, favorite)
+	if !ok || err != nil {
+		return article, ok, err
+	}
+	return u.hydrateAndBackfillArticle(article), ok, nil
 }
 
 func (u *ArticleService) ExtractReadable(ctx context.Context, articleID int64) (model.Article, error) {
@@ -90,11 +141,19 @@ func (u *ArticleService) ExtractReadable(ctx context.Context, articleID int64) (
 	if err := u.store.UpdateArticleFullContent(articleID, content); err != nil {
 		return model.Article{}, fmt.Errorf("%w: %v", ErrSaveArticleContent, err)
 	}
+	article.FullContent = content
+	features := RecomputeArticleFeatures(article)
+	if err := u.store.UpdateArticleFeatures(articleID, features); err != nil {
+		return model.Article{}, fmt.Errorf("%w: %v", ErrSaveArticleContent, err)
+	}
+	if err := u.store.UpdateArticleScores(articleID, recommendationScoresFromFeatures(features)); err != nil {
+		return model.Article{}, fmt.Errorf("%w: %v", ErrSaveArticleContent, err)
+	}
 	updated, ok := u.store.GetArticle(articleID)
 	if !ok {
 		return model.Article{}, ErrArticleNotFound
 	}
-	return updated, nil
+	return u.hydrateAndBackfillArticle(updated), nil
 }
 
 func (u *ArticleService) RefreshCache(ctx context.Context, articleID int64) (model.Article, error) {
@@ -110,12 +169,249 @@ func (u *ArticleService) RefreshCache(ctx context.Context, articleID int64) (mod
 		if err := u.store.UpdateArticleFullContent(articleID, content); err != nil {
 			return model.Article{}, fmt.Errorf("%w: %v", ErrSaveArticleContent, err)
 		}
+		article.FullContent = content
+		features := RecomputeArticleFeatures(article)
+		if err := u.store.UpdateArticleFeatures(articleID, features); err != nil {
+			return model.Article{}, fmt.Errorf("%w: %v", ErrSaveArticleContent, err)
+		}
+		if err := u.store.UpdateArticleScores(articleID, recommendationScoresFromFeatures(features)); err != nil {
+			return model.Article{}, fmt.Errorf("%w: %v", ErrSaveArticleContent, err)
+		}
 	}
 	updated, ok := u.store.GetArticle(articleID)
 	if !ok {
 		return model.Article{}, ErrArticleNotFound
 	}
-	return updated, nil
+	return u.hydrateAndBackfillArticle(updated), nil
+}
+
+func attachRecommendationScores(article model.Article) model.Article {
+	if article.ArticleFeatures != nil && article.ArticleFeatures.FeatureVersion >= articleFeatureVersion {
+		if article.RecommendationScores == nil || !hasMeaningfulScores(*article.RecommendationScores) {
+			scores := recommendationScoresFromFeatures(*article.ArticleFeatures)
+			article.RecommendationScores = &scores
+		}
+		return article
+	}
+	features := ArticleFeaturesForArticle(article)
+	article.ArticleFeatures = &features
+	scores := recommendationScoresFromFeatures(features)
+	article.RecommendationScores = &scores
+	return article
+}
+
+func (u *ArticleService) hydrateAndBackfillArticles(articles []model.Article) []model.Article {
+	if len(articles) == 0 {
+		return articles
+	}
+	scoredFeatures := scoreArticles(articles)
+	for i := range articles {
+		needsBackfill := articles[i].ArticleFeatures == nil || articles[i].ArticleFeatures.FeatureVersion < articleFeatureVersion ||
+			articles[i].RecommendationScores == nil || !hasMeaningfulScores(*articles[i].RecommendationScores)
+		if !needsBackfill {
+			articles[i] = attachRecommendationScores(articles[i])
+			continue
+		}
+		feature := scoredFeatures[i]
+		articles[i].ArticleFeatures = &feature
+		scores := recommendationScoresFromFeatures(feature)
+		articles[i].RecommendationScores = &scores
+		u.persistArticleScoring(articles[i].ID, feature, scores)
+	}
+	return articles
+}
+
+func (u *ArticleService) hydrateAndBackfillArticle(article model.Article) model.Article {
+	needsBackfill := article.ArticleFeatures == nil || article.ArticleFeatures.FeatureVersion < articleFeatureVersion ||
+		article.RecommendationScores == nil || !hasMeaningfulScores(*article.RecommendationScores)
+	if !needsBackfill {
+		return attachRecommendationScores(article)
+	}
+	feature := ArticleFeaturesForArticle(article)
+	article.ArticleFeatures = &feature
+	scores := recommendationScoresFromFeatures(feature)
+	article.RecommendationScores = &scores
+	u.persistArticleScoring(article.ID, feature, scores)
+	return article
+}
+
+func (u *ArticleService) persistArticleScoring(articleID int64, features model.ArticleFeatures, scores model.RecommendationScores) {
+	if articleID <= 0 {
+		return
+	}
+	_ = u.store.UpdateArticleFeatures(articleID, features)
+	_ = u.store.UpdateArticleScores(articleID, scores)
+}
+
+func sortArticles(articles []model.Article, sortMode ArticleSortMode) {
+	mode := sortMode
+	if mode == "" {
+		mode = ArticleSortLatest
+	}
+
+	slices.SortStableFunc(articles, func(a, b model.Article) int {
+		aTime, _ := articleTimestamp(a)
+		bTime, _ := articleTimestamp(b)
+		aScore := scoreForSort(a, mode)
+		bScore := scoreForSort(b, mode)
+
+		switch mode {
+		case ArticleSortOldest:
+			if cmp := compareTimes(aTime, bTime); cmp != 0 {
+				return cmp
+			}
+		case ArticleSortRecommend, ArticleSortQuality, ArticleSortRelevance, ArticleSortNovelty:
+			if aScore != bScore {
+				return compareIntsDesc(aScore, bScore)
+			}
+			if cmp := compareTimesDesc(aTime, bTime); cmp != 0 {
+				return cmp
+			}
+		default:
+			if cmp := compareTimesDesc(aTime, bTime); cmp != 0 {
+				return cmp
+			}
+		}
+
+		return compareInt64Desc(a.ID, b.ID)
+	})
+}
+
+func scoreForSort(article model.Article, sortMode ArticleSortMode) int {
+	scores := RecommendationScoresForArticle(article)
+	switch sortMode {
+	case ArticleSortQuality:
+		return scores.Quality
+	case ArticleSortRelevance:
+		return scores.Relevance
+	case ArticleSortNovelty:
+		return scores.Novelty
+	case ArticleSortRecommend:
+		return scores.Composite
+	default:
+		return 0
+	}
+}
+
+func hasMeaningfulScores(scores model.RecommendationScores) bool {
+	return scores.Quality > 0 || scores.Relevance > 0 || scores.Novelty > 0 || scores.Composite > 0
+}
+
+func uniqueTokens(text string) []string {
+	raw := articleTokenPattern.FindAllString(strings.ToLower(text), -1)
+	if len(raw) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, token := range raw {
+		if _, ok := seen[token]; ok {
+			continue
+		}
+		seen[token] = struct{}{}
+		out = append(out, token)
+	}
+	return out
+}
+
+func articleTimestamp(article model.Article) (time.Time, bool) {
+	for _, raw := range []string{strings.TrimSpace(article.PublishedAt), strings.TrimSpace(article.CreatedAt)} {
+		if raw == "" {
+			continue
+		}
+		if ts, ok := parseArticleTime(raw); ok {
+			return ts, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func parseArticleTime(raw string) (time.Time, bool) {
+	formats := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		time.RFC1123Z,
+		time.RFC1123,
+		time.RFC822Z,
+		time.RFC822,
+		time.RFC850,
+	}
+	for _, layout := range formats {
+		ts, err := time.Parse(layout, raw)
+		if err == nil {
+			return ts.UTC(), true
+		}
+	}
+	return time.Time{}, false
+}
+
+func articleAgeHours(article model.Article) float64 {
+	ts, ok := articleTimestamp(article)
+	if !ok {
+		return 24 * 365
+	}
+	delta := time.Since(ts)
+	if delta < 0 {
+		return 0
+	}
+	return delta.Hours()
+}
+
+func normalizeByCap(value int, cap int) float64 {
+	if cap <= 0 || value <= 0 {
+		return 0
+	}
+	if value > cap {
+		value = cap
+	}
+	return float64(value) / float64(cap)
+}
+
+func clampScore(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
+}
+
+func compareTimes(a, b time.Time) int {
+	switch {
+	case a.Before(b):
+		return -1
+	case a.After(b):
+		return 1
+	default:
+		return 0
+	}
+}
+
+func compareTimesDesc(a, b time.Time) int {
+	return compareTimes(b, a)
+}
+
+func compareIntsDesc(a, b int) int {
+	switch {
+	case a > b:
+		return -1
+	case a < b:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func compareInt64Desc(a, b int64) int {
+	switch {
+	case a > b:
+		return -1
+	case a < b:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func (u *ArticleService) fetchReadableContent(ctx context.Context, rawURL string) (string, error) {

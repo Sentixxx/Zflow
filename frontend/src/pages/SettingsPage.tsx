@@ -10,12 +10,11 @@ import { useFeeds } from "@/hooks/useFeeds";
 import { useEntries } from "@/hooks/useEntries";
 import { useSettingsActions } from "@/hooks/useSettingsActions";
 import { refreshFeedsBatch } from "@/services/feed-refresh-service";
-
-const DEFAULT_API_BASE = "http://localhost:8080";
+import { resolveInitialAPIBase } from "@/lib/api-base";
 
 export function SettingsPage() {
   const [, setLocation] = useLocation();
-  const [apiBase, setApiBase] = useState<string>(localStorage.getItem("zflow_api_base") || DEFAULT_API_BASE);
+  const [apiBase, setApiBase] = useState<string>(() => resolveInitialAPIBase(localStorage.getItem("zflow_api_base"), window.location.hostname));
   const [networkProxyURL, setNetworkProxyURL] = useState<string>("");
   const [aiProtocol, setAIProtocol] = useState<"openai" | "anthropic">("openai");
   const [aiAPIKey, setAIAPIKey] = useState<string>("");
