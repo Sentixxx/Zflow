@@ -211,3 +211,5 @@ task185 [x] 场景:用户观看翻译流或分页时列表状态更稳健 | Give
 task186 [x] 场景:用户在阅读页与设置页共享一致的订阅与设置状态 | Given:阅读页与设置页同时依赖 feeds/folders/articles 与 AI 设置 | When:页面加载或手动刷新 | Then:共享 bootstrap hook 统一加载与刷新 + settings 状态抽离 + feeds 查询不再双写 | 验证:npm run test + npm run build
 task187 [x] 场景:用户切换分类筛选时列表计算不再重复遍历文件夹树 | Given:存在多级分类且文章量较大 | When:切换分类或收藏筛选 | Then:子孙集合缓存并复用 + 过滤函数稳定且不重复创建 | 验证:npm run test -- src/lib/folder-tree.test.ts
 task188 [x] 场景:用户滚动长文章列表时 DOM 数量不再线性增长 | Given:文章数量较多且列表滚动频繁 | When:滚动文章列表 | Then:文章列表使用虚拟化渲染并保持首屏可用 | 验证:npm run test -- src/components/article-list/ArticleList.test.tsx + npm run build
+task189 [x] 场景:用户点击 Readability 按钮时不会因详情数据缺少 link 而被禁用 | Given:文章详情已选中且 link 字段可能为空或尚未回填 | When:用户点击正文抓取按钮 | Then:按钮可点击并触发 Readability 请求，缺失 link 的限制交由后端返回错误 | 验证:npm run test + npm run build
+task190 [x] 场景:用户打开文章详情时 Readability 能在后台自动抓取正文 | Given:文章详情已选中且 full_content 为空但后端仍可获取原文链接 | When:打开文章详情页 | Then:无需手动刷新即可触发 Readability 抓取并在完成后展示正文 | 验证:npm run test + npm run build

@@ -6,6 +6,7 @@ import { sanitizeRichHTML } from "@/lib/sanitize";
 import { buildFeedIconURLByHost } from "@/lib/feed-utils";
 import { resolveInitialAPIBase } from "@/lib/api-base";
 import { buildDescendantFolderIDs } from "@/lib/folder-tree";
+import { canRequestReadability, shouldAutoFetchReadability } from "@/lib/readability";
 import {
   TopBar,
   RefreshFailureBanner,
@@ -277,6 +278,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     }
     return new URL(byFeedURL).origin;
   }, [selectedArticle, feedByID]);
+  const canExtractReadable = canRequestReadability(selectedArticle);
   const currentTranslationParagraphs = useMemo(() => {
     if (!selectedArticle) {
       return [];
@@ -402,7 +404,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     const looksLikePDFGarbage =
       /^%PDF-\d/i.test(normalizedFullContent) || (normalizedFullContent.includes("xref") && normalizedFullContent.includes("endobj"));
     const hasUsableFullContent = Boolean(normalizedFullContent) && !looksLikePDFGarbage;
-    if (hasUsableFullContent || !selectedArticle.link || isExtractingReadable) {
+    if (!shouldAutoFetchReadability({ article: selectedArticle, hasUsableFullContent, isExtractingReadable })) {
       return;
     }
     if (autoReadableAttemptedRef.current.has(selectedArticle.id)) {
@@ -853,7 +855,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
             canToggleFavorite={Boolean(selectedArticle)}
             isFavorite={Boolean(selectedArticle?.is_favorite)}
             canOpenSourceSite={Boolean(selectedArticleOpenURL)}
-            canExtractReadable={Boolean(selectedArticle?.link)}
+            canExtractReadable={canExtractReadable}
             isExtractingReadable={isExtractingReadable}
             canRefreshArticleCache={Boolean(selectedArticle)}
             isRefreshingArticleCache={isRefreshingArticleCache}
