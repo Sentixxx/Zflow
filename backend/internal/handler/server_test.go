@@ -394,6 +394,28 @@ func TestArticleListSupportsFeedAndFolderScope(t *testing.T) {
 	if !reflect.DeepEqual(gotFeedIDs, wantFeedIDs) {
 		t.Fatalf("folder scope feed ids = %v, want %v", gotFeedIDs, wantFeedIDs)
 	}
+
+	emptyFolder, err := repo.CreateFolder("Empty", nil)
+	if err != nil {
+		t.Fatalf("CreateFolder(empty) error = %v", err)
+	}
+	reqEmptyFolder := httptest.NewRequest(http.MethodGet, "/api/v1/articles?folder_id="+strconv.FormatInt(emptyFolder.ID, 10), nil)
+	rrEmptyFolder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrEmptyFolder, reqEmptyFolder)
+	if rrEmptyFolder.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles?folder_id(empty) status = %d, want %d", rrEmptyFolder.Code, http.StatusOK)
+	}
+	var emptyFolderResp struct {
+		Articles []struct {
+			ID int64 `json:"id"`
+		} `json:"articles"`
+	}
+	if err := json.Unmarshal(rrEmptyFolder.Body.Bytes(), &emptyFolderResp); err != nil {
+		t.Fatalf("unmarshal empty folder scope response error = %v", err)
+	}
+	if len(emptyFolderResp.Articles) != 0 {
+		t.Fatalf("empty folder scope articles len = %d, want 0", len(emptyFolderResp.Articles))
+	}
 }
 
 func TestArticleDetailDoesNotBackfillLegacyScores(t *testing.T) {
@@ -483,8 +505,8 @@ func TestCORSPreflightAndHeaders(t *testing.T) {
 	if rrPreflight.Code != http.StatusNoContent {
 		t.Fatalf("OPTIONS /api/v1/articles status = %d, want %d", rrPreflight.Code, http.StatusNoContent)
 	}
-	if rrPreflight.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Fatalf("Access-Control-Allow-Origin = %q, want *", rrPreflight.Header().Get("Access-Control-Allow-Origin"))
+	if rrPreflight.Header().Get("Access-Control-Allow-Origin") != "http://localhost:5173" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want localhost origin", rrPreflight.Header().Get("Access-Control-Allow-Origin"))
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -495,8 +517,37 @@ func TestCORSPreflightAndHeaders(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("GET /healthz status = %d, want %d", rr.Code, http.StatusOK)
 	}
-	if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Fatalf("Access-Control-Allow-Origin = %q, want *", rr.Header().Get("Access-Control-Allow-Origin"))
+	if rr.Header().Get("Access-Control-Allow-Origin") != "http://localhost:5173" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want localhost origin", rr.Header().Get("Access-Control-Allow-Origin"))
+	}
+
+	reqBlocked := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	reqBlocked.Header.Set("Origin", "https://evil.example.com")
+	rrBlocked := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrBlocked, reqBlocked)
+	if rrBlocked.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Fatalf("blocked origin unexpectedly allowed: %q", rrBlocked.Header().Get("Access-Control-Allow-Origin"))
+	}
+}
+
+func TestCORSAllowsConfiguredOrigins(t *testing.T) {
+	t.Setenv("ZFLOW_ALLOWED_ORIGINS", "https://app.example.com, https://admin.example.com")
+
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("Origin", "https://app.example.com")
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /healthz status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if rr.Header().Get("Access-Control-Allow-Origin") != "https://app.example.com" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want configured origin", rr.Header().Get("Access-Control-Allow-Origin"))
 	}
 }
 
@@ -526,6 +577,9 @@ func TestAISettingsGetAndPatch(t *testing.T) {
 	if rrPatch.Code != http.StatusOK {
 		t.Fatalf("PATCH /api/v1/settings/ai status = %d, want %d, body=%s", rrPatch.Code, http.StatusOK, rrPatch.Body.String())
 	}
+	if strings.Contains(rrPatch.Body.String(), "test-ai-key") {
+		t.Fatalf("PATCH /api/v1/settings/ai leaked plaintext api key: %s", rrPatch.Body.String())
+	}
 
 	rrGet2 := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rrGet2, reqGet)
@@ -533,16 +587,18 @@ func TestAISettingsGetAndPatch(t *testing.T) {
 		t.Fatalf("GET /api/v1/settings/ai status(after patch) = %d, want %d", rrGet2.Code, http.StatusOK)
 	}
 	var resp struct {
-		Protocol   string `json:"protocol"`
-		APIKey     string `json:"api_key"`
-		BaseURL    string `json:"base_url"`
-		Model      string `json:"model"`
-		TargetLang string `json:"target_lang"`
+		Protocol         string `json:"protocol"`
+		APIKey           string `json:"api_key"`
+		APIKeyMasked     string `json:"api_key_masked"`
+		APIKeyConfigured bool   `json:"api_key_configured"`
+		BaseURL          string `json:"base_url"`
+		Model            string `json:"model"`
+		TargetLang       string `json:"target_lang"`
 	}
 	if err := json.Unmarshal(rrGet2.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal ai settings response error = %v", err)
 	}
-	if resp.Protocol != "openai" || resp.APIKey != "test-ai-key" || resp.BaseURL != "https://example-ai.local/v1" || resp.Model != "test-model" || resp.TargetLang != "ja" {
+	if resp.Protocol != "openai" || resp.APIKey != "" || resp.APIKeyMasked == "" || !resp.APIKeyConfigured || resp.BaseURL != "https://example-ai.local/v1" || resp.Model != "test-model" || resp.TargetLang != "ja" {
 		t.Fatalf("ai settings response mismatch: %+v", resp)
 	}
 }

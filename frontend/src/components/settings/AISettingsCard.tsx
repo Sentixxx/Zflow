@@ -1,6 +1,8 @@
 type AISettingsCardProps = {
   aiProtocol: "openai" | "anthropic";
   aiAPIKey: string;
+  aiAPIKeyMasked: string;
+  aiAPIKeyConfigured: boolean;
   aiBaseURL: string;
   aiModel: string;
   aiTargetLang: string;
@@ -15,6 +17,8 @@ type AISettingsCardProps = {
 export function AISettingsCard({
   aiProtocol,
   aiAPIKey,
+  aiAPIKeyMasked,
+  aiAPIKeyConfigured,
   aiBaseURL,
   aiModel,
   aiTargetLang,
@@ -34,7 +38,16 @@ export function AISettingsCard({
         <option value="anthropic">Anthropic SDK</option>
       </select>
       <label htmlFor="aiApiKey">API Key</label>
-      <input id="aiApiKey" type="password" value={aiAPIKey} placeholder="sk-..." onChange={(e) => onAIAPIKeyChange(e.target.value)} />
+      <input
+        id="aiApiKey"
+        type="password"
+        value={aiAPIKey}
+        placeholder={aiAPIKeyConfigured && aiAPIKeyMasked ? aiAPIKeyMasked : "sk-..."}
+        onChange={(e) => onAIAPIKeyChange(e.target.value)}
+      />
+      <p className="settings-help-text">
+        {aiAPIKeyConfigured ? "GET 响应不会返回明文 API key；留空表示保持当前已保存的 key。" : "API key 只会在保存时上传，页面刷新后不会回显明文。"}
+      </p>
       <label htmlFor="aiBaseURL">Base URL</label>
       <input
         id="aiBaseURL"

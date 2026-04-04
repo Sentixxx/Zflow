@@ -71,48 +71,26 @@ func NormalizeArticleSortMode(raw string) (ArticleSortMode, error) {
 }
 
 func (u *ArticleService) List(page int, limit int, sortMode ArticleSortMode, feedID *int64, folderID *int64) ([]model.Article, bool) {
-	all := u.store.ListArticles()
-	all = attachStoredRecommendationScoresToArticles(all)
-	all = u.filterArticlesByScope(all, feedID, folderID)
-	sortArticles(all, sortMode)
-
-	if limit <= 0 {
-		return all, false
-	}
-	if page < 1 {
-		page = 1
-	}
-
-	start := (page - 1) * limit
-	if start >= len(all) {
-		return []model.Article{}, false
-	}
-	endExclusive := start + limit + 1
-	if endExclusive > len(all) {
-		endExclusive = len(all)
-	}
-	window := all[start:endExclusive]
-	hasMore := len(window) > limit
-	if hasMore {
-		window = window[:limit]
-	}
-	return window, hasMore
+	scopeFeedIDs, scoped := u.resolveArticleScopeFeedIDs(feedID, folderID)
+	articles, hasMore := u.store.ListArticleListItems(repository.ArticleListQuery{
+		Page:    page,
+		Limit:   limit,
+		Sort:    string(sortMode),
+		Scoped:  scoped,
+		FeedIDs: scopeFeedIDs,
+	})
+	return attachStoredRecommendationScoresToArticles(articles), hasMore
 }
 
-func (u *ArticleService) filterArticlesByScope(articles []model.Article, feedID *int64, folderID *int64) []model.Article {
+func (u *ArticleService) resolveArticleScopeFeedIDs(feedID *int64, folderID *int64) ([]int64, bool) {
 	if feedID != nil {
-		filtered := make([]model.Article, 0, len(articles))
-		for _, article := range articles {
-			if article.FeedID == *feedID {
-				filtered = append(filtered, article)
-			}
-		}
-		return filtered
+		return []int64{*feedID}, true
 	}
 	if folderID == nil {
-		return articles
+		return nil, false
 	}
 
+	folders := u.store.ListFolders()
 	descendants := make(map[int64]struct{})
 	stack := []int64{*folderID}
 	for len(stack) > 0 {
@@ -122,29 +100,23 @@ func (u *ArticleService) filterArticlesByScope(articles []model.Article, feedID 
 			continue
 		}
 		descendants[current] = struct{}{}
-		for _, folder := range u.store.ListFolders() {
+		for _, folder := range folders {
 			if folder.ParentID != nil && *folder.ParentID == current {
 				stack = append(stack, folder.ID)
 			}
 		}
 	}
 
-	feedIDs := make(map[int64]struct{})
+	feedIDs := make([]int64, 0)
 	for _, feed := range u.store.List() {
 		if feed.FolderID == nil {
 			continue
 		}
 		if _, ok := descendants[*feed.FolderID]; ok {
-			feedIDs[feed.ID] = struct{}{}
+			feedIDs = append(feedIDs, feed.ID)
 		}
 	}
-	filtered := make([]model.Article, 0, len(articles))
-	for _, article := range articles {
-		if _, ok := feedIDs[article.FeedID]; ok {
-			filtered = append(filtered, article)
-		}
-	}
-	return filtered
+	return feedIDs, true
 }
 
 func (u *ArticleService) Get(id int64) (model.Article, bool) {

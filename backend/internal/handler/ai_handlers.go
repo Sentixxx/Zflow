@@ -25,7 +25,7 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load ai settings"})
 			return
 		}
-		writeJSON(w, http.StatusOK, cfg)
+		writeJSON(w, http.StatusOK, maskAISettings(cfg))
 	case http.MethodPatch:
 		defer r.Body.Close()
 		raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
@@ -45,9 +45,21 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		current, err := s.loadAISettings()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load ai settings"})
+			return
+		}
+
+		apiKey := strings.TrimSpace(req.APIKey)
+		maskedCurrent := maskAPIKey(current.APIKey)
+		if apiKey == "" || (maskedCurrent != "" && apiKey == maskedCurrent) {
+			apiKey = current.APIKey
+		}
+
 		cfg := aiSettings{
 			Protocol:   protocol,
-			APIKey:     strings.TrimSpace(req.APIKey),
+			APIKey:     apiKey,
 			BaseURL:    strings.TrimSpace(req.BaseURL),
 			Model:      strings.TrimSpace(req.Model),
 			TargetLang: strings.TrimSpace(req.TargetLang),
@@ -84,9 +96,33 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, cfg)
+		writeJSON(w, http.StatusOK, maskAISettings(cfg))
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func maskAPIKey(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	if len(trimmed) <= 4 {
+		return "****"
+	}
+	return "****" + trimmed[len(trimmed)-4:]
+}
+
+func maskAISettings(cfg aiSettings) map[string]any {
+	masked := maskAPIKey(cfg.APIKey)
+	return map[string]any{
+		"protocol":           cfg.Protocol,
+		"api_key":            "",
+		"api_key_masked":     masked,
+		"api_key_configured": strings.TrimSpace(cfg.APIKey) != "",
+		"base_url":           cfg.BaseURL,
+		"model":              cfg.Model,
+		"target_lang":        cfg.TargetLang,
 	}
 }
 

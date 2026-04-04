@@ -29,6 +29,8 @@ type UseSettingsActionsParams = {
   networkProxyURL: string;
   aiProtocol: "openai" | "anthropic";
   aiAPIKey: string;
+  setAIAPIKeyMasked: Dispatch<SetStateAction<string>>;
+  setAIAPIKeyConfigured: Dispatch<SetStateAction<boolean>>;
   aiBaseURL: string;
   aiModel: string;
   aiTargetLang: string;
@@ -74,6 +76,8 @@ export function useSettingsActions({
   setNetworkProxyURL,
   setAIProtocol,
   setAIAPIKey,
+  setAIAPIKeyMasked,
+  setAIAPIKeyConfigured,
   setAIBaseURL,
   setAIModel,
   setAITargetLang,
@@ -166,6 +170,8 @@ export function useSettingsActions({
       const data = await client.getAISettings();
       setAIProtocol(data.protocol === "anthropic" ? "anthropic" : "openai");
       setAIAPIKey((data.api_key || "").trim());
+      setAIAPIKeyMasked((data.api_key_masked || "").trim());
+      setAIAPIKeyConfigured(Boolean(data.api_key_configured));
       setAIBaseURL((data.base_url || "").trim());
       setAIModel((data.model || "").trim());
       setAITargetLang((data.target_lang || "zh-CN").trim() || "zh-CN");
@@ -190,6 +196,8 @@ export function useSettingsActions({
       }
       setAIProtocol(savedProtocol);
       setAIAPIKey((data.api_key || "").trim());
+      setAIAPIKeyMasked((data.api_key_masked || "").trim());
+      setAIAPIKeyConfigured(Boolean(data.api_key_configured));
       setAIBaseURL((data.base_url || "").trim());
       setAIModel((data.model || "").trim());
       setAITargetLang((data.target_lang || "zh-CN").trim() || "zh-CN");

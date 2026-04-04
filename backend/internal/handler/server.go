@@ -28,13 +28,14 @@ import (
 )
 
 type Server struct {
-	store     repository.FeedRepository
-	client    *http.Client
-	clientMu  sync.RWMutex
-	iconDir   string
-	articleUC *service.ArticleService
-	summaryUC *service.ArticleSummaryService
-	logger    *logger.ModuleLogger
+	store          repository.FeedRepository
+	client         *http.Client
+	clientMu       sync.RWMutex
+	iconDir        string
+	allowedOrigins []string
+	articleUC      *service.ArticleService
+	summaryUC      *service.ArticleSummaryService
+	logger         *logger.ModuleLogger
 }
 
 const (
@@ -123,9 +124,10 @@ func NewServer(feedStore repository.FeedRepository, dataDir string) *Server {
 	iconDir := filepath.Join(dataDir, "feed-icons")
 	_ = os.MkdirAll(iconDir, 0o755)
 	server := &Server{
-		store:   feedStore,
-		iconDir: iconDir,
-		logger:  logger.NewModuleFromEnv("handler"),
+		store:          feedStore,
+		iconDir:        iconDir,
+		allowedOrigins: loadAllowedOriginsFromEnv(),
+		logger:         logger.NewModuleFromEnv("handler"),
 	}
 	proxyURL, ok, err := feedStore.GetSetting(settingKeyNetworkProxy)
 	if err != nil {
@@ -181,7 +183,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (s *Server) WrapHTTPHandler(next http.Handler) http.Handler {
-	return corsMiddleware(s.requestLogMiddleware(next))
+	return s.corsMiddleware(s.requestLogMiddleware(next))
 }
 
 func (s *Server) Handler() http.Handler {
@@ -975,9 +977,48 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+func loadAllowedOriginsFromEnv() []string {
+	raw := strings.TrimSpace(os.Getenv("ZFLOW_ALLOWED_ORIGINS"))
+	if raw == "" {
+		return []string{
+			"http://localhost:3000",
+			"http://127.0.0.1:3000",
+			"http://localhost:4173",
+			"http://127.0.0.1:4173",
+			"http://localhost:5173",
+			"http://127.0.0.1:5173",
+		}
+	}
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		origin := strings.TrimSpace(part)
+		if origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+	return origins
+}
+
+func (s *Server) allowOrigin(origin string) string {
+	trimmed := strings.TrimSpace(origin)
+	if trimmed == "" {
+		return ""
+	}
+	for _, allowed := range s.allowedOrigins {
+		if allowed == "*" || strings.EqualFold(strings.TrimSpace(allowed), trimmed) {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if allowed := s.allowOrigin(r.Header.Get("Origin")); allowed != "" {
+			w.Header().Set("Access-Control-Allow-Origin", allowed)
+			w.Header().Set("Vary", "Origin")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
 

@@ -1,5 +1,9 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change573 日期:2026-04-04 | 文件:.claude/tmp_plan_review_fixes_2026-04-04.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:review 修复追踪 | 说明:补充 backend review 修复计划并新增完成 task180，明确本轮聚焦安全边界、列表查询下推与低风险性能清理 | 关联:task180
+change574 日期:2026-04-04 | 文件:backend/internal/handler/ai_handlers.go,backend/internal/handler/server.go,backend/internal/handler/server_test.go,backend/internal/repository/feed_repository.go,backend/internal/repository/sqlite_feed_repository_impl.go,backend/internal/service/article_service.go,backend/internal/service/article_summary_service.go,backend/internal/service/article_scoring.go,frontend/src/api/client.ts,frontend/src/components/settings/AISettingsCard.tsx,frontend/src/components/settings/SettingsView.tsx,frontend/src/hooks/useSettingsActions.ts,frontend/src/pages/ReaderPage.tsx,frontend/src/pages/SettingsPage.tsx | 操作:Modify | 影响:AI 设置安全、CORS 与文章列表性能 | 说明:GET AI 设置改为返回掩码与已配置状态并保持 PATCH 不泄露明文 key；CORS 改为环境变量可配置 allowlist；文章列表过滤排序分页下推到 SQLite 轻量查询，空 folder 作用域不再错误回退成全量，同时预编译摘要提取正则并删除自定义 min | 关联:task180
+change575 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 backend review 修复与整包测试/构建验证结果 | 关联:task180
+
 change570 日期:2026-04-04 | 文件:.claude/tmp_plan_ci_regression_2026-04-04.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:CI 回归追踪 | 说明:补充后台评分刷新改造后的 CI 回归计划与完成 task179，记录“handler 测试对齐纯读约束”的修复目标 | 关联:task179
 change571 日期:2026-04-04 | 文件:backend/internal/handler/server_test.go | 操作:Modify | 影响:后端 CI 稳定性 | 说明:将 recommend 排序测试改为使用预评分种子，并把详情测试从“同步补写旧评分”调整为“纯读不补写”，使测试与后台评分刷新新架构一致 | 关联:task179
 change572 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 CI 回归修复与后端整包测试恢复通过的结果 | 关联:task179

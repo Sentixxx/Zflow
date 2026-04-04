@@ -32,6 +32,16 @@ const (
 	aiSummaryWindowBands   = 3
 )
 
+var (
+	summaryMarkdownImagePattern     = regexp.MustCompile(`(?is)!\[[^\]]*\]\([^)]+\)`)
+	summaryHTMLFigurePattern        = regexp.MustCompile(`(?is)<figure\b[^>]*>.*?</figure>`)
+	summaryHTMLImagePattern         = regexp.MustCompile(`(?is)<img\b[^>]*>`)
+	summaryHTMLBlockBreakPattern    = regexp.MustCompile(`(?is)</(p|div|li|h[1-6]|blockquote|section|article|pre|tr|ul|ol)>|<br\s*/?>`)
+	summaryHTMLTagPattern           = regexp.MustCompile(`(?s)<[^>]*>`)
+	summaryParagraphCollapsePattern = regexp.MustCompile(`\n{3,}`)
+	summaryParagraphSplitPattern    = regexp.MustCompile(`\n\s*\n+`)
+)
+
 type SummaryAIConfig struct {
 	Protocol string
 	APIKey   string
@@ -325,21 +335,19 @@ func extractSummarySourceBlocks(raw string) []string {
 		return nil
 	}
 
-	text = regexp.MustCompile(`(?is)!\[[^\]]*\]\([^)]+\)`).ReplaceAllString(text, " ")
+	text = summaryMarkdownImagePattern.ReplaceAllString(text, " ")
 	if strings.Contains(text, "<") && strings.Contains(text, ">") {
-		text = regexp.MustCompile(`(?is)<figure\b[^>]*>.*?</figure>`).ReplaceAllString(text, "\n\n")
-		text = regexp.MustCompile(`(?is)<img\b[^>]*>`).ReplaceAllString(text, " ")
-		blockBreaks := regexp.MustCompile(`(?is)</(p|div|li|h[1-6]|blockquote|section|article|pre|tr|ul|ol)>|<br\s*/?>`)
-		text = blockBreaks.ReplaceAllString(text, "\n\n")
-		tags := regexp.MustCompile(`(?s)<[^>]*>`)
-		text = tags.ReplaceAllString(text, " ")
+		text = summaryHTMLFigurePattern.ReplaceAllString(text, "\n\n")
+		text = summaryHTMLImagePattern.ReplaceAllString(text, " ")
+		text = summaryHTMLBlockBreakPattern.ReplaceAllString(text, "\n\n")
+		text = summaryHTMLTagPattern.ReplaceAllString(text, " ")
 		text = html.UnescapeString(text)
 	}
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
-	text = regexp.MustCompile(`\n{3,}`).ReplaceAllString(text, "\n\n")
+	text = summaryParagraphCollapsePattern.ReplaceAllString(text, "\n\n")
 
-	rawBlocks := regexp.MustCompile(`\n\s*\n+`).Split(text, -1)
+	rawBlocks := summaryParagraphSplitPattern.Split(text, -1)
 	blocks := make([]string, 0, len(rawBlocks))
 	for _, block := range rawBlocks {
 		normalized := strings.Join(strings.Fields(strings.TrimSpace(block)), " ")

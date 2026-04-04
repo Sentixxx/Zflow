@@ -297,8 +297,24 @@ export class ApiClient {
     });
   }
 
-  async getAISettings(): Promise<{ protocol?: "openai" | "anthropic"; api_key?: string; base_url?: string; model?: string; target_lang?: string }> {
-    return this.request<{ protocol?: "openai" | "anthropic"; api_key?: string; base_url?: string; model?: string; target_lang?: string }>("/api/v1/settings/ai");
+  async getAISettings(): Promise<{
+    protocol?: "openai" | "anthropic";
+    api_key?: string;
+    api_key_masked?: string;
+    api_key_configured?: boolean;
+    base_url?: string;
+    model?: string;
+    target_lang?: string;
+  }> {
+    return this.request<{
+      protocol?: "openai" | "anthropic";
+      api_key?: string;
+      api_key_masked?: string;
+      api_key_configured?: boolean;
+      base_url?: string;
+      model?: string;
+      target_lang?: string;
+    }>("/api/v1/settings/ai");
   }
 
   async getDataSettings(): Promise<{ retention_days?: number }> {
@@ -321,11 +337,21 @@ export class ApiClient {
   async updateAISettings(payload: { protocol: "openai" | "anthropic"; api_key: string; base_url: string; model: string; target_lang: string }): Promise<{
     protocol?: "openai" | "anthropic";
     api_key?: string;
+    api_key_masked?: string;
+    api_key_configured?: boolean;
     base_url?: string;
     model?: string;
     target_lang?: string;
   }> {
-    return this.request<{ protocol?: "openai" | "anthropic"; api_key?: string; base_url?: string; model?: string; target_lang?: string }>("/api/v1/settings/ai", {
+    return this.request<{
+      protocol?: "openai" | "anthropic";
+      api_key?: string;
+      api_key_masked?: string;
+      api_key_configured?: boolean;
+      base_url?: string;
+      model?: string;
+      target_lang?: string;
+    }>("/api/v1/settings/ai", {
       method: "PATCH",
       body: JSON.stringify(payload),
     });

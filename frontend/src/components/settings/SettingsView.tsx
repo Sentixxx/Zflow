@@ -39,6 +39,8 @@ export type SettingsViewProps = {
   onSaveNetworkSettings: () => void;
   aiProtocol: "openai" | "anthropic";
   aiAPIKey: string;
+  aiAPIKeyMasked: string;
+  aiAPIKeyConfigured: boolean;
   aiBaseURL: string;
   aiModel: string;
   aiTargetLang: string;
@@ -97,6 +99,8 @@ export function SettingsView(props: SettingsViewProps) {
     onSaveNetworkSettings,
     aiProtocol,
     aiAPIKey,
+    aiAPIKeyMasked,
+    aiAPIKeyConfigured,
     aiBaseURL,
     aiModel,
     aiTargetLang,
@@ -192,6 +196,8 @@ export function SettingsView(props: SettingsViewProps) {
           <AISettingsCard
             aiProtocol={aiProtocol}
             aiAPIKey={aiAPIKey}
+            aiAPIKeyMasked={aiAPIKeyMasked}
+            aiAPIKeyConfigured={aiAPIKeyConfigured}
             aiBaseURL={aiBaseURL}
             aiModel={aiModel}
             aiTargetLang={aiTargetLang}

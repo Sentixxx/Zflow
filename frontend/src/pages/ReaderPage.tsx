@@ -53,6 +53,8 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const [networkProxyURL, setNetworkProxyURL] = useState<string>("");
   const [aiProtocol, setAIProtocol] = useState<"openai" | "anthropic">("openai");
   const [aiAPIKey, setAIAPIKey] = useState<string>("");
+  const [aiAPIKeyMasked, setAIAPIKeyMasked] = useState<string>("");
+  const [aiAPIKeyConfigured, setAIAPIKeyConfigured] = useState<boolean>(false);
   const [aiBaseURL, setAIBaseURL] = useState<string>("");
   const [aiModel, setAIModel] = useState<string>("");
   const [aiTargetLang, setAITargetLang] = useState<string>("zh-CN");
@@ -312,6 +314,8 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     setNetworkProxyURL,
     setAIProtocol,
     setAIAPIKey,
+    setAIAPIKeyMasked,
+    setAIAPIKeyConfigured,
     setAIBaseURL,
     setAIModel,
     setAITargetLang,
@@ -1050,6 +1054,8 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
         onSaveNetworkSettings={saveNetworkSettings}
         aiProtocol={aiProtocol}
         aiAPIKey={aiAPIKey}
+        aiAPIKeyMasked={aiAPIKeyMasked}
+        aiAPIKeyConfigured={aiAPIKeyConfigured}
         aiBaseURL={aiBaseURL}
         aiModel={aiModel}
         aiTargetLang={aiTargetLang}

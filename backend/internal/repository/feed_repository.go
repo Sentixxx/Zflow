@@ -2,6 +2,14 @@ package repository
 
 import "github.com/Sentixxx/Zflow/backend/internal/model"
 
+type ArticleListQuery struct {
+	Page    int
+	Limit   int
+	Sort    string
+	Scoped  bool
+	FeedIDs []int64
+}
+
 type FeedRepository interface {
 	Close() error
 	List() []model.Feed
@@ -22,6 +30,7 @@ type FeedRepository interface {
 	GetSetting(key string) (string, bool, error)
 	SetSetting(key, value string) error
 	ListArticles() []model.Article
+	ListArticleListItems(query ArticleListQuery) ([]model.Article, bool)
 	ListArticlesNeedingScoreRefresh(featureVersion int, limit int) []model.Article
 	ListArticlesMissingDisplaySummary(feedID int64, limit int) []model.Article
 	DeleteArticle(id int64) (bool, error)

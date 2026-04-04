@@ -198,6 +198,8 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 }
 
 func (s *SQLiteFeedRepository) ensureColumn(ctx context.Context, table, column, ddl string) error {
+	// NOTE: SQLite PRAGMA/ALTER cannot parameterize table or column identifiers.
+	// These values are hardcoded literals owned by the repository, never user input.
 	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`PRAGMA table_info(%s)`, table))
 	if err != nil {
 		return err
@@ -219,6 +221,89 @@ func (s *SQLiteFeedRepository) ensureColumn(ctx context.Context, table, column, 
 	}
 	_, err = s.db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s`, table, column, ddl))
 	return err
+}
+
+func scanArticleListRow(scanner interface{ Scan(dest ...any) error }) (model.Article, error) {
+	var article model.Article
+	var readFlag int
+	var favoriteFlag int
+	var scores model.RecommendationScores
+	if err := scanner.Scan(
+		&article.ID,
+		&article.FeedID,
+		&article.Title,
+		&article.Link,
+		&article.CoverURL,
+		&article.PublishedAt,
+		&readFlag,
+		&favoriteFlag,
+		&article.FavoritedAt,
+		&scores.Quality,
+		&scores.Relevance,
+		&scores.Novelty,
+		&scores.Composite,
+		&article.CreatedAt,
+	); err != nil {
+		return model.Article{}, err
+	}
+	article.IsRead = readFlag == 1
+	article.IsFavorite = favoriteFlag == 1
+	article.RecommendationScores = &scores
+	return article, nil
+}
+
+func buildArticleListQuerySQL(query ArticleListQuery) (string, []any) {
+	whereParts := make([]string, 0, 1)
+	args := make([]any, 0, len(query.FeedIDs)+2)
+	if query.Scoped && len(query.FeedIDs) == 0 {
+		whereParts = append(whereParts, "1 = 0")
+	}
+	if len(query.FeedIDs) > 0 {
+		placeholders := make([]string, 0, len(query.FeedIDs))
+		for _, id := range query.FeedIDs {
+			placeholders = append(placeholders, "?")
+			args = append(args, id)
+		}
+		whereParts = append(whereParts, fmt.Sprintf("e.feed_id IN (%s)", strings.Join(placeholders, ",")))
+	}
+
+	queryText := `
+		SELECT
+			e.id, e.feed_id, e.title, e.link, e.cover_url, e.published_at,
+			e.is_read, e.is_favorite, e.favorited_at,
+			e.quality_score, e.relevance_score, e.novelty_score, e.composite_score,
+			e.created_at
+		FROM entries e`
+	if len(whereParts) > 0 {
+		queryText += "\nWHERE " + strings.Join(whereParts, " AND ")
+	}
+
+	orderExpr := "COALESCE(NULLIF(e.published_at, ''), e.created_at)"
+	switch query.Sort {
+	case "oldest":
+		queryText += "\nORDER BY " + orderExpr + " ASC, e.id ASC"
+	case "recommend":
+		queryText += "\nORDER BY e.composite_score DESC, " + orderExpr + " DESC, e.id DESC"
+	case "quality":
+		queryText += "\nORDER BY e.quality_score DESC, " + orderExpr + " DESC, e.id DESC"
+	case "relevance":
+		queryText += "\nORDER BY e.relevance_score DESC, " + orderExpr + " DESC, e.id DESC"
+	case "novelty":
+		queryText += "\nORDER BY e.novelty_score DESC, " + orderExpr + " DESC, e.id DESC"
+	default:
+		queryText += "\nORDER BY " + orderExpr + " DESC, e.id DESC"
+	}
+
+	if query.Limit > 0 {
+		queryText += "\nLIMIT ?"
+		args = append(args, query.Limit+1)
+		if query.Page > 1 {
+			queryText += " OFFSET ?"
+			args = append(args, (query.Page-1)*query.Limit)
+		}
+	}
+
+	return queryText, args
 }
 
 func (s *SQLiteFeedRepository) List() []model.Feed {
@@ -641,6 +726,35 @@ func (s *SQLiteFeedRepository) ListArticles() []model.Article {
 		articles = append(articles, article)
 	}
 	return articles
+}
+
+func (s *SQLiteFeedRepository) ListArticleListItems(query ArticleListQuery) ([]model.Article, bool) {
+	if query.Page < 1 {
+		query.Page = 1
+	}
+	sqlText, args := buildArticleListQuerySQL(query)
+	rows, err := s.db.Query(sqlText, args...)
+	if err != nil {
+		return []model.Article{}, false
+	}
+	defer rows.Close()
+
+	articles := make([]model.Article, 0)
+	for rows.Next() {
+		article, err := scanArticleListRow(rows)
+		if err != nil {
+			continue
+		}
+		articles = append(articles, article)
+	}
+	if query.Limit <= 0 {
+		return articles, false
+	}
+	hasMore := len(articles) > query.Limit
+	if hasMore {
+		articles = articles[:query.Limit]
+	}
+	return articles, hasMore
 }
 
 func (s *SQLiteFeedRepository) ListArticlesNeedingScoreRefresh(featureVersion int, limit int) []model.Article {

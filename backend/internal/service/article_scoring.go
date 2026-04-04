@@ -379,10 +379,3 @@ func tokensToSet(tokens []string) map[string]struct{} {
 	}
 	return out
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
