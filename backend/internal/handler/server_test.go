@@ -551,6 +551,26 @@ func TestCORSAllowsConfiguredOrigins(t *testing.T) {
 	}
 }
 
+func TestCORSAllowsSameHostLanOrigin(t *testing.T) {
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	req := httptest.NewRequest(http.MethodGet, "http://192.168.1.9:8080/healthz", nil)
+	req.Host = "192.168.1.9:8080"
+	req.Header.Set("Origin", "http://192.168.1.9:5173")
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /healthz status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if rr.Header().Get("Access-Control-Allow-Origin") != "http://192.168.1.9:5173" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want same-host LAN origin", rr.Header().Get("Access-Control-Allow-Origin"))
+	}
+}
+
 func TestAISettingsGetAndPatch(t *testing.T) {
 	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {

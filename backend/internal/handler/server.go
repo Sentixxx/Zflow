@@ -347,7 +347,7 @@ func loadAllowedOriginsFromEnv() []string {
 	return origins
 }
 
-func (s *Server) allowOrigin(origin string) string {
+func (s *Server) allowOrigin(origin string, r *http.Request) string {
 	trimmed := strings.TrimSpace(origin)
 	if trimmed == "" {
 		return ""
@@ -357,12 +357,15 @@ func (s *Server) allowOrigin(origin string) string {
 			return trimmed
 		}
 	}
+	if sameOriginHost(trimmed, requestHost(r)) {
+		return trimmed
+	}
 	return ""
 }
 
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if allowed := s.allowOrigin(r.Header.Get("Origin")); allowed != "" {
+		if allowed := s.allowOrigin(r.Header.Get("Origin"), r); allowed != "" {
 			w.Header().Set("Access-Control-Allow-Origin", allowed)
 			w.Header().Set("Vary", "Origin")
 		}
@@ -375,6 +378,35 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func requestHost(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	host := strings.TrimSpace(r.Host)
+	if host == "" && r.URL != nil {
+		host = strings.TrimSpace(r.URL.Host)
+	}
+	if host == "" {
+		return ""
+	}
+	parsedHost, _, err := net.SplitHostPort(host)
+	if err == nil {
+		return strings.ToLower(strings.TrimSpace(parsedHost))
+	}
+	return strings.ToLower(strings.TrimSpace(host))
+}
+
+func sameOriginHost(origin string, host string) bool {
+	if strings.TrimSpace(origin) == "" || strings.TrimSpace(host) == "" {
+		return false
+	}
+	u, err := url.Parse(origin)
+	if err != nil || strings.TrimSpace(u.Hostname()) == "" {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(u.Hostname()), strings.TrimSpace(host))
 }
 
 type statusRecorder struct {
