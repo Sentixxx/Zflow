@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiClient } from "@/api";
 import type { Article, Feed, Folder } from "@/types";
 import { SORT_MODE_LABELS, filterAndSortArticles } from "@/lib/article-list";
@@ -6,6 +6,7 @@ import type { ReadFilter, SortMode } from "@/lib/article-list";
 import { sanitizeRichHTML } from "@/lib/sanitize";
 import { buildFeedIconURLByHost } from "@/lib/feed-utils";
 import { resolveInitialAPIBase } from "@/lib/api-base";
+import { buildDescendantFolderIDs } from "@/lib/folder-tree";
 import {
   TopBar,
   RefreshFailureBanner,
@@ -164,35 +165,29 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     return map;
   }, [feeds]);
   const uncategorizedFeeds = useMemo(() => feeds.filter((feed) => feed.folder_id == null), [feeds]);
-  const collectDescendantFolderIDs = (rootID: number): Set<number> => {
-    const visited = new Set<number>();
-    const stack: number[] = [rootID];
-    while (stack.length > 0) {
-      const current = stack.pop();
-      if (current == null || visited.has(current)) {
-        continue;
+  const descendantFolderIDs = useMemo(() => buildDescendantFolderIDs(folders), [folders]);
+  const filterArticlesByScope = useCallback(
+    (items: Article[], feedID: number | null, folderID: number | null): Article[] => {
+      if (sidebarMode === "favorites") {
+        return items.filter((article) => article.is_favorite);
       }
-      visited.add(current);
-      const children = childFoldersByParent.get(current) || [];
-      children.forEach((child) => stack.push(child.id));
-    }
-    return visited;
-  };
-
-  const filterArticlesByScope = (items: Article[], feedID: number | null, folderID: number | null): Article[] => {
-    if (sidebarMode === "favorites") {
-      return items.filter((article) => article.is_favorite);
-    }
-    if (feedID != null) {
-      return items.filter((article) => article.feed_id === feedID);
-    }
-    if (folderID != null) {
-      const folderIDs = collectDescendantFolderIDs(folderID);
-      const feedIDs = new Set(feeds.filter((feed) => feed.folder_id != null && folderIDs.has(feed.folder_id)).map((feed) => feed.id));
-      return items.filter((article) => feedIDs.has(article.feed_id));
-    }
-    return items;
-  };
+      if (feedID != null) {
+        return items.filter((article) => article.feed_id === feedID);
+      }
+      if (folderID != null) {
+        const allowed = descendantFolderIDs.get(folderID);
+        if (!allowed || allowed.size === 0) {
+          return [];
+        }
+        return items.filter((article) => {
+          const feedFolderID = feedByID.get(article.feed_id)?.folder_id;
+          return feedFolderID != null && allowed.has(feedFolderID);
+        });
+      }
+      return items;
+    },
+    [sidebarMode, descendantFolderIDs, feedByID],
+  );
   const favoriteArticles = useMemo(
     () => [...articles.filter((article) => article.is_favorite)].sort((a, b) => (Date.parse(b.published_at || b.created_at) || 0) - (Date.parse(a.published_at || a.created_at) || 0)),
     [articles],
@@ -210,7 +205,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const filteredAndSortedArticles = useMemo(() => {
     const filteredBySource = filterArticlesByScope(articles, selectedFeedID, selectedFolderID);
     return filterAndSortArticles(filteredBySource, readFilter, sortMode, new Set(stickyUnreadIDs), true);
-  }, [articles, readFilter, sortMode, selectedFeedID, selectedFolderID, feeds, childFoldersByParent, stickyUnreadIDs, sidebarMode]);
+  }, [articles, readFilter, sortMode, selectedFeedID, selectedFolderID, stickyUnreadIDs, filterArticlesByScope]);
   const effectiveBufferedCount = Math.min(bufferedCount, filteredAndSortedArticles.length);
   const pagedArticles = useMemo(
     () => filteredAndSortedArticles.slice(0, Math.min(visibleCount, effectiveBufferedCount)),
