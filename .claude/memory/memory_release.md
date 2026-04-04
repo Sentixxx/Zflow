@@ -7,6 +7,7 @@
 - 组装 commit message 时优先使用多段 `-m` 或 `-F` 文件，避免转义错误。
 - 每次提交默认追加 `Co-Authored-By`，作者名需按“当前助手身份”动态填写。
 - `Co-Authored-By` 模板：`Co-Authored-By: <CURRENT_ASSISTANT_NAME> <noreply@assistant.local>`。
+- 若当前助手为 Codex，则使用：`Co-Authored-By: codex <noreply@openai.com>`（https://github.com/codex）。
 
 ## Push Rules
 - 改写历史后，推送统一使用 `git push --force-with-lease`。

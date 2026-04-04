@@ -9,6 +9,7 @@
   - 行为变化与影响面（结果是什么）。
 - 每次提交默认在正文末尾追加 `Co-Authored-By`，并按当前助手身份动态填写。
 - 推荐模板：`Co-Authored-By: <CURRENT_ASSISTANT_NAME> <noreply@assistant.local>`。
+- 若当前助手为 Codex，则使用：`Co-Authored-By: codex <noreply@openai.com>`（https://github.com/codex）。
 
 ## Example
 ```
