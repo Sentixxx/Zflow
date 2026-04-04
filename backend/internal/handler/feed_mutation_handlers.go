@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -31,12 +30,12 @@ func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), feedRefreshTimeout)
-	defer cancel()
-
-	result := s.fetchAndParse(ctx, req.URL, "", "")
-	result.Items = service.AttachRecommendationScoresToSeeds(result.Items)
-	feed, err := s.store.AddInFolder(req.URL, result.Title, result.Items, result.Error, req.FolderID, result.ETag, result.LastModified)
+	feed, err := s.feedRefreshUC.CreateFeed(r.Context(), service.FeedCreateInput{
+		URL:        req.URL,
+		FolderID:   req.FolderID,
+		Script:     req.Script,
+		ScriptLang: req.ScriptLang,
+	})
 	if err == repository.ErrFeedExists {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "feed already exists"})
 		return
@@ -45,18 +44,6 @@ func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save feed"})
 		return
 	}
-
-	if script := strings.TrimSpace(req.Script); script != "" {
-		lang := normalizeScriptLang(req.ScriptLang)
-		updated, ok, err := s.store.UpdateFeedScript(feed.ID, script, lang)
-		if err == nil && ok {
-			feed = updated
-		}
-	}
-	if err := s.summaryUC.BackfillFeed(feed.ID, 50); err != nil {
-		s.logger.Warn("summary", "backfill", "failed", "display summary backfill failed after create feed", "feed_id", feed.ID, "error", err.Error())
-	}
-	s.tryRefreshFeedIcon(ctx, feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt, result.IconHints)
 
 	writeJSON(w, http.StatusCreated, feed)
 }
@@ -99,8 +86,8 @@ func (s *Server) updateFeedScript(w http.ResponseWriter, r *http.Request, id int
 		return
 	}
 
-	lang := normalizeScriptLang(req.ScriptLang)
-	if !isSupportedScriptLang(lang) {
+	lang := service.NormalizeFeedScriptLang(req.ScriptLang)
+	if !service.IsSupportedFeedScriptLang(lang) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported script language"})
 		return
 	}

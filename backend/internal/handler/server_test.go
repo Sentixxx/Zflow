@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -22,31 +21,6 @@ import (
 
 func scoreHandlerTestSeeds(items []repository.ArticleSeed) []repository.ArticleSeed {
 	return service.AttachRecommendationScoresToSeeds(items)
-}
-
-func TestFetchAndParseHonorsCancelledContext(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
-	if err != nil {
-		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
-	}
-	server := NewServer(repo, t.TempDir())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	result := server.fetchAndParse(ctx, "https://example.com/feed.xml", "", "")
-	if !strings.Contains(result.Error, "context canceled") {
-		t.Fatalf("fetchAndParse error = %q, want context canceled", result.Error)
-	}
-}
-
-func TestRunScriptRejectsOversizedStdout(t *testing.T) {
-	_, err := runScript(context.Background(), "python", "import sys; sys.stdout.write('a' * (1024 * 1024 + 1))", nil)
-	if err == nil {
-		t.Fatal("runScript() error = nil, want output too large")
-	}
-	if !strings.Contains(err.Error(), "output too large") && !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("runScript() error = %v, want output too large", err)
-	}
 }
 
 func TestCreateFeedAndList(t *testing.T) {

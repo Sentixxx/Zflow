@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/Sentixxx/Zflow/backend/internal/service"
 )
 
 type profileFolderRecord struct {
@@ -79,7 +81,7 @@ func (s *Server) handleExportProfile(w http.ResponseWriter, r *http.Request) {
 			Title:            f.Title,
 			FolderID:         f.FolderID,
 			CustomScript:     f.CustomScript,
-			CustomScriptLang: normalizeScriptLang(f.CustomScriptLang),
+			CustomScriptLang: service.NormalizeFeedScriptLang(f.CustomScriptLang),
 		})
 	}
 	payload := profileExportPayload{
@@ -162,7 +164,7 @@ func (s *Server) handleImportProfile(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if strings.TrimSpace(fr.CustomScript) != "" {
-				_, _, _ = s.store.UpdateFeedScript(created.ID, fr.CustomScript, normalizeScriptLang(fr.CustomScriptLang))
+				_, _, _ = s.store.UpdateFeedScript(created.ID, fr.CustomScript, service.NormalizeFeedScriptLang(fr.CustomScriptLang))
 			}
 			importedFeeds++
 			continue
@@ -172,7 +174,7 @@ func (s *Server) handleImportProfile(w http.ResponseWriter, r *http.Request) {
 			_, _, _ = s.store.UpdateFeedTitle(existing.ID, fr.Title)
 		}
 		_, _, _ = s.store.UpdateFeedFolder(existing.ID, newFolderID)
-		_, _, _ = s.store.UpdateFeedScript(existing.ID, fr.CustomScript, normalizeScriptLang(fr.CustomScriptLang))
+		_, _, _ = s.store.UpdateFeedScript(existing.ID, fr.CustomScript, service.NormalizeFeedScriptLang(fr.CustomScriptLang))
 		updatedFeeds++
 	}
 

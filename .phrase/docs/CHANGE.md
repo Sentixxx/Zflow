@@ -494,6 +494,10 @@
 - change508 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service_test.go | 操作:Modify | 影响:摘要回归测试 | 说明:补充图片噪音过滤、清除后回退 RSS 摘要与新摘要状态语义测试 | 关联:task165
 - change509 日期:2026-03-22 | 文件:backend/internal/handler/server_test.go | 操作:Modify | 影响:开发调试接口测试 | 说明:新增单篇/批量清除 AI 摘要接口回归测试 | 关联:task165
 - change510 日期:2026-03-22 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task165 | 说明:新增并完成 AI 摘要存储分层与开发调试清除任务 | 关联:task165
+- change579 日期:2026-04-04 | 文件:.claude/tmp_plan_feed_refresh_service_refactor_2026-04-04.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:feed refresh service 重构追踪 | 说明:补充将 feed 抓取、脚本、icon 与批量刷新编排从 handler 下沉到 service 的计划，并新增完成 task182 | 关联:task182
+- change580 日期:2026-04-04 | 文件:backend/internal/service/feed_refresh_service.go,backend/internal/service/feed_refresh_service_test.go | 操作:Add | 影响:FeedRefreshService | 说明:新增 FeedRefreshService 承接 create/refresh/refresh-all 链路，并补充抓取取消、脚本限流、脚本失败回退与批量刷新清理测试 | 关联:task182
+- change581 日期:2026-04-04 | 文件:backend/internal/handler/server.go,backend/internal/handler/feed_mutation_handlers.go,backend/internal/handler/feed_folder_handlers.go,backend/internal/handler/data_handlers.go,backend/internal/handler/server_test.go,backend/cmd/server/main.go | 操作:Modify | 影响:handler/service/scheduler 分层边界 | 说明:handler 改为调用 FeedRefreshService，scheduler/main 改依赖 service，原 feed 编排实现从 server.go 移出并保持现有 API 行为 | 关联:task182
+- change582 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 feed refresh service 重构与后端整包测试验证结果 | 关联:task182
 - change084 日期:2026-02-25 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task028 | 说明:新增并完成订阅删除与分类折叠交互任务 | 关联:task028
 - change075 日期:2026-02-25 | 文件:frontend/src/api.ts | 操作:Modify | 影响:订阅刷新API | 说明:新增refreshFeed接口以触发单订阅远端抓取 | 关联:task027
 - change076 日期:2026-02-25 | 文件:frontend/src/App.tsx | 操作:Modify | 影响:刷新交互 | 说明:将刷新订阅按钮改为真实远端抓取并新增设置内远端抓取入口 | 关联:task027
