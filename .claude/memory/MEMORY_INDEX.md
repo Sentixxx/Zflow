@@ -11,6 +11,6 @@
 
 ## Stage Mappings
 - `init`（立项/PRFAQ）: `memory_init.md`
-- `coding`（实现/重构/修复/评审）: `memory_coding.md`
+- `coding`（实现/重构/修复/评审）: `memory_coding.md` + `memory_autocommit.md`
 - `docs`（文档/文案）: `memory_docs.md`
-- `release`（提交/推送/发布）: `memory_release.md`
+- `release`（提交/推送/发布）: `memory_release.md` + `memory_autocommit.md`
