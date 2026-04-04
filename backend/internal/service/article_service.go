@@ -72,7 +72,7 @@ func NormalizeArticleSortMode(raw string) (ArticleSortMode, error) {
 
 func (u *ArticleService) List(page int, limit int, sortMode ArticleSortMode, feedID *int64, folderID *int64) ([]model.Article, bool) {
 	all := u.store.ListArticles()
-	all = u.hydrateAndBackfillArticles(all)
+	all = attachStoredRecommendationScoresToArticles(all)
 	all = u.filterArticlesByScope(all, feedID, folderID)
 	sortArticles(all, sortMode)
 
@@ -152,7 +152,7 @@ func (u *ArticleService) Get(id int64) (model.Article, bool) {
 	if !ok {
 		return model.Article{}, false
 	}
-	return u.hydrateAndBackfillArticle(article), true
+	return attachStoredRecommendationScores(article), true
 }
 
 func (u *ArticleService) Delete(id int64) (bool, error) {
@@ -164,7 +164,7 @@ func (u *ArticleService) MarkRead(id int64, read bool) (model.Article, bool, err
 	if !ok || err != nil {
 		return article, ok, err
 	}
-	return u.hydrateAndBackfillArticle(article), ok, nil
+	return attachStoredRecommendationScores(article), ok, nil
 }
 
 func (u *ArticleService) MarkFavorite(id int64, favorite bool) (model.Article, bool, error) {
@@ -172,7 +172,7 @@ func (u *ArticleService) MarkFavorite(id int64, favorite bool) (model.Article, b
 	if !ok || err != nil {
 		return article, ok, err
 	}
-	return u.hydrateAndBackfillArticle(article), ok, nil
+	return attachStoredRecommendationScores(article), ok, nil
 }
 
 func (u *ArticleService) ExtractReadable(ctx context.Context, articleID int64) (model.Article, error) {
@@ -202,7 +202,7 @@ func (u *ArticleService) ExtractReadable(ctx context.Context, articleID int64) (
 	if !ok {
 		return model.Article{}, ErrArticleNotFound
 	}
-	return u.hydrateAndBackfillArticle(updated), nil
+	return attachStoredRecommendationScores(updated), nil
 }
 
 func (u *ArticleService) RefreshCache(ctx context.Context, articleID int64) (model.Article, error) {
@@ -231,10 +231,10 @@ func (u *ArticleService) RefreshCache(ctx context.Context, articleID int64) (mod
 	if !ok {
 		return model.Article{}, ErrArticleNotFound
 	}
-	return u.hydrateAndBackfillArticle(updated), nil
+	return attachStoredRecommendationScores(updated), nil
 }
 
-func attachRecommendationScores(article model.Article) model.Article {
+func attachStoredRecommendationScores(article model.Article) model.Article {
 	if article.ArticleFeatures != nil && article.ArticleFeatures.FeatureVersion >= articleFeatureVersion {
 		if article.RecommendationScores == nil || !hasMeaningfulScores(*article.RecommendationScores) {
 			scores := recommendationScoresFromFeatures(*article.ArticleFeatures)
@@ -242,46 +242,14 @@ func attachRecommendationScores(article model.Article) model.Article {
 		}
 		return article
 	}
-	features := ArticleFeaturesForArticle(article)
-	article.ArticleFeatures = &features
-	scores := recommendationScoresFromFeatures(features)
-	article.RecommendationScores = &scores
 	return article
 }
 
-func (u *ArticleService) hydrateAndBackfillArticles(articles []model.Article) []model.Article {
-	if len(articles) == 0 {
-		return articles
-	}
-	scoredFeatures := scoreArticles(articles)
+func attachStoredRecommendationScoresToArticles(articles []model.Article) []model.Article {
 	for i := range articles {
-		needsBackfill := articles[i].ArticleFeatures == nil || articles[i].ArticleFeatures.FeatureVersion < articleFeatureVersion ||
-			articles[i].RecommendationScores == nil || !hasMeaningfulScores(*articles[i].RecommendationScores)
-		if !needsBackfill {
-			articles[i] = attachRecommendationScores(articles[i])
-			continue
-		}
-		feature := scoredFeatures[i]
-		articles[i].ArticleFeatures = &feature
-		scores := recommendationScoresFromFeatures(feature)
-		articles[i].RecommendationScores = &scores
-		u.persistArticleScoring(articles[i].ID, feature, scores)
+		articles[i] = attachStoredRecommendationScores(articles[i])
 	}
 	return articles
-}
-
-func (u *ArticleService) hydrateAndBackfillArticle(article model.Article) model.Article {
-	needsBackfill := article.ArticleFeatures == nil || article.ArticleFeatures.FeatureVersion < articleFeatureVersion ||
-		article.RecommendationScores == nil || !hasMeaningfulScores(*article.RecommendationScores)
-	if !needsBackfill {
-		return attachRecommendationScores(article)
-	}
-	feature := ArticleFeaturesForArticle(article)
-	article.ArticleFeatures = &feature
-	scores := recommendationScoresFromFeatures(feature)
-	article.RecommendationScores = &scores
-	u.persistArticleScoring(article.ID, feature, scores)
-	return article
 }
 
 func (u *ArticleService) persistArticleScoring(articleID int64, features model.ArticleFeatures, scores model.RecommendationScores) {
@@ -290,6 +258,32 @@ func (u *ArticleService) persistArticleScoring(articleID int64, features model.A
 	}
 	_ = u.store.UpdateArticleFeatures(articleID, features)
 	_ = u.store.UpdateArticleScores(articleID, scores)
+}
+
+func (u *ArticleService) RefreshStaleScores(ctx context.Context, limit int) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	articles := u.store.ListArticlesNeedingScoreRefresh(articleFeatureVersion, limit)
+	if len(articles) == 0 {
+		return 0, nil
+	}
+	features := scoreArticles(articles)
+	refreshed := 0
+	for i := range articles {
+		if err := ctx.Err(); err != nil {
+			return refreshed, err
+		}
+		scores := recommendationScoresFromFeatures(features[i])
+		if err := u.store.UpdateArticleFeatures(articles[i].ID, features[i]); err != nil {
+			return refreshed, err
+		}
+		if err := u.store.UpdateArticleScores(articles[i].ID, scores); err != nil {
+			return refreshed, err
+		}
+		refreshed++
+	}
+	return refreshed, nil
 }
 
 func sortArticles(articles []model.Article, sortMode ArticleSortMode) {
@@ -327,7 +321,12 @@ func sortArticles(articles []model.Article, sortMode ArticleSortMode) {
 }
 
 func scoreForSort(article model.Article, sortMode ArticleSortMode) int {
-	scores := RecommendationScoresForArticle(article)
+	scores := model.RecommendationScores{}
+	if article.ArticleFeatures != nil && article.ArticleFeatures.FeatureVersion >= articleFeatureVersion {
+		scores = recommendationScoresFromFeatures(*article.ArticleFeatures)
+	} else if article.RecommendationScores != nil {
+		scores = *article.RecommendationScores
+	}
 	switch sortMode {
 	case ArticleSortQuality:
 		return scores.Quality

@@ -643,6 +643,63 @@ func (s *SQLiteFeedRepository) ListArticles() []model.Article {
 	return articles
 }
 
+func (s *SQLiteFeedRepository) ListArticlesNeedingScoreRefresh(featureVersion int, limit int) []model.Article {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`
+		SELECT
+			e.id, e.feed_id, e.title, e.link, e.summary, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
+			e.display_summary, e.display_summary_status, e.display_summary_updated_at, e.full_content, e.cover_url, e.published_at,
+			e.is_read, e.is_favorite, e.favorited_at, e.quality_score, e.relevance_score, e.novelty_score, e.composite_score, e.created_at,
+			af.gate_status, COALESCE(af.quality_score, 0), COALESCE(af.relevance_score, 0), COALESCE(af.depth_score, 0), COALESCE(af.freshness_score, 0), COALESCE(af.novelty_score, 0), COALESCE(af.composite_score, 0), COALESCE(af.content_fingerprint, ''), COALESCE(af.feature_version, 0), COALESCE(af.scored_at, '')
+		FROM entries e
+		LEFT JOIN article_features af ON af.article_id = e.id
+		WHERE af.article_id IS NULL OR COALESCE(af.feature_version, 0) < ?
+		ORDER BY e.id ASC
+		LIMIT ?`,
+		featureVersion,
+		limit,
+	)
+	if err != nil {
+		return []model.Article{}
+	}
+	defer rows.Close()
+
+	articles := make([]model.Article, 0)
+	for rows.Next() {
+		var article model.Article
+		var readFlag int
+		var favoriteFlag int
+		var scores model.RecommendationScores
+		var gateStatus sql.NullString
+		var features model.ArticleFeatures
+		var featureVersion sql.NullInt64
+		var scoredAt sql.NullString
+		if err := rows.Scan(
+			&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
+			&article.DisplaySummary, &article.DisplaySummaryStatus, &article.DisplaySummaryAt, &article.FullContent, &article.CoverURL, &article.PublishedAt,
+			&readFlag, &favoriteFlag, &article.FavoritedAt, &scores.Quality, &scores.Relevance, &scores.Novelty, &scores.Composite, &article.CreatedAt,
+			&gateStatus, &features.Quality, &features.Relevance, &features.Depth, &features.Freshness, &features.Novelty, &features.Composite, &features.ContentFingerprint, &featureVersion, &scoredAt,
+		); err != nil {
+			continue
+		}
+		article.IsRead = readFlag == 1
+		article.IsFavorite = favoriteFlag == 1
+		article.RecommendationScores = &scores
+		if gateStatus.Valid {
+			features.GateStatus = model.ArticleGateStatus(gateStatus.String)
+			features.FeatureVersion = int(featureVersion.Int64)
+			if scoredAt.Valid {
+				features.ScoredAt = scoredAt.String
+			}
+			article.ArticleFeatures = &features
+		}
+		articles = append(articles, article)
+	}
+	return articles
+}
+
 func (s *SQLiteFeedRepository) ListArticlesMissingDisplaySummary(feedID int64, limit int) []model.Article {
 	if limit <= 0 {
 		limit = 100

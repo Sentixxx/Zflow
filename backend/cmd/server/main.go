@@ -35,6 +35,8 @@ func main() {
 	srv := handler.NewServer(feedStore, cfg.DataDir)
 	refreshScheduler := scheduler.NewFeedRefreshScheduler(srv, cfg.RefreshInterval)
 	go refreshScheduler.Start(rootCtx)
+	scoreRefreshScheduler := scheduler.NewArticleScoreRefreshScheduler(srv.ArticleService(), time.Minute, 50)
+	go scoreRefreshScheduler.Start(rootCtx)
 
 	httpServer := &http.Server{
 		Addr:    cfg.Addr,

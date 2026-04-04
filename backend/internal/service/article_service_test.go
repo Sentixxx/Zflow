@@ -39,14 +39,18 @@ func createArticleServiceFixtureWithPath(t *testing.T) (*ArticleService, reposit
 	return articleService, svc, dbPath
 }
 
+func scoreTestSeeds(items []repository.ArticleSeed) []repository.ArticleSeed {
+	return AttachRecommendationScoresToSeeds(items)
+}
+
 func TestArticleServiceListPagination(t *testing.T) {
 	uc, svc := createArticleServiceFixture(t)
 
-	_, err := svc.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+	_, err := svc.AddInFolder("https://example.com/feed", "Feed", scoreTestSeeds([]repository.ArticleSeed{
 		{Title: "A1", Link: "https://example.com/1", Summary: "S1"},
 		{Title: "A2", Link: "https://example.com/2", Summary: "S2"},
 		{Title: "A3", Link: "https://example.com/3", Summary: "S3"},
-	}, "", nil, "", "")
+	}), "", nil, "", "")
 	if err != nil {
 		t.Fatalf("AddInFolder() error = %v", err)
 	}
@@ -68,7 +72,7 @@ func TestArticleServiceListPagination(t *testing.T) {
 func TestArticleServiceListSortByRecommend(t *testing.T) {
 	uc, svc := createArticleServiceFixture(t)
 
-	_, err := svc.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+	_, err := svc.AddInFolder("https://example.com/feed", "Feed", scoreTestSeeds([]repository.ArticleSeed{
 		{
 			Title:       "Tiny note",
 			Link:        "https://example.com/1",
@@ -83,7 +87,7 @@ func TestArticleServiceListSortByRecommend(t *testing.T) {
 			CoverURL:    "https://example.com/cover.jpg",
 			PublishedAt: time.Now().UTC().Format(time.RFC3339),
 		},
-	}, "", nil, "", "")
+	}), "", nil, "", "")
 	if err != nil {
 		t.Fatalf("AddInFolder() error = %v", err)
 	}
@@ -111,9 +115,9 @@ func TestArticleServiceExtractReadablePersistsScores(t *testing.T) {
 	defer articleHTML.Close()
 
 	uc, svc := createArticleServiceFixture(t)
-	_, err := svc.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+	_, err := svc.AddInFolder("https://example.com/feed", "Feed", scoreTestSeeds([]repository.ArticleSeed{
 		{Title: "A1", Link: articleHTML.URL, Summary: "brief summary"},
-	}, "", nil, "", "")
+	}), "", nil, "", "")
 	if err != nil {
 		t.Fatalf("AddInFolder() error = %v", err)
 	}
@@ -225,10 +229,10 @@ func TestAttachRecommendationScoresToSeedsPenalizesNearDuplicateNovelty(t *testi
 	}
 }
 
-func TestArticleServiceGetBackfillsLegacyScoresAndFeatures(t *testing.T) {
+func TestArticleServiceGetDoesNotBackfillLegacyScoresAndFeatures(t *testing.T) {
 	uc, svc, dbPath := createArticleServiceFixtureWithPath(t)
 
-	_, err := svc.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+	_, err := svc.AddInFolder("https://example.com/feed", "Feed", scoreTestSeeds([]repository.ArticleSeed{
 		{
 			Title:       "Distributed systems migration notes",
 			Link:        "https://example.com/1",
@@ -236,7 +240,7 @@ func TestArticleServiceGetBackfillsLegacyScoresAndFeatures(t *testing.T) {
 			FullContent: strings.Repeat("Distributed systems migration notes rollout stages impact scope fallback strategy. ", 18),
 			PublishedAt: time.Now().UTC().Format(time.RFC3339),
 		},
-	}, "", nil, "", "")
+	}), "", nil, "", "")
 	if err != nil {
 		t.Fatalf("AddInFolder() error = %v", err)
 	}
@@ -262,11 +266,64 @@ func TestArticleServiceGetBackfillsLegacyScoresAndFeatures(t *testing.T) {
 	if !ok {
 		t.Fatalf("Get() ok = false, want true")
 	}
-	if loaded.RecommendationScores == nil || loaded.RecommendationScores.Composite <= 0 {
-		t.Fatalf("loaded recommendation_scores = %+v, want persisted fallback scores", loaded.RecommendationScores)
+	if loaded.RecommendationScores == nil || loaded.RecommendationScores.Composite != 0 {
+		t.Fatalf("loaded recommendation_scores = %+v, want stored zero scores without sync backfill", loaded.RecommendationScores)
 	}
-	if loaded.ArticleFeatures == nil || loaded.ArticleFeatures.GateStatus == "" {
-		t.Fatalf("loaded article_features = %+v, want backfilled features", loaded.ArticleFeatures)
+	if loaded.ArticleFeatures != nil {
+		t.Fatalf("loaded article_features = %+v, want nil without sync backfill", loaded.ArticleFeatures)
+	}
+
+	stored, ok := svc.GetArticle(articles[0].ID)
+	if !ok {
+		t.Fatalf("GetArticle() ok = false, want true")
+	}
+	if stored.RecommendationScores == nil || stored.RecommendationScores.Composite != 0 {
+		t.Fatalf("stored recommendation_scores = %+v, want unchanged zero scores", stored.RecommendationScores)
+	}
+	if stored.ArticleFeatures != nil {
+		t.Fatalf("stored article_features = %+v, want no persisted feature row after pure read", stored.ArticleFeatures)
+	}
+}
+
+func TestArticleServiceRefreshStaleScoresBackfillsLegacyScoresAndFeatures(t *testing.T) {
+	uc, svc, dbPath := createArticleServiceFixtureWithPath(t)
+
+	_, err := svc.AddInFolder("https://example.com/feed", "Feed", scoreTestSeeds([]repository.ArticleSeed{
+		{
+			Title:       "Distributed systems migration notes",
+			Link:        "https://example.com/1",
+			Summary:     "Migration notes with rollout stages, impact scope, and fallback strategy.",
+			FullContent: strings.Repeat("Distributed systems migration notes rollout stages impact scope fallback strategy. ", 18),
+			PublishedAt: time.Now().UTC().Format(time.RFC3339),
+		},
+	}), "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+	articles := svc.ListArticles()
+	if len(articles) != 1 {
+		t.Fatalf("ListArticles len = %d, want 1", len(articles))
+	}
+
+	legacyDB, err := sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	defer legacyDB.Close()
+
+	if _, err := legacyDB.Exec(`DELETE FROM article_features WHERE article_id = ?`, articles[0].ID); err != nil {
+		t.Fatalf("DELETE article_features error = %v", err)
+	}
+	if _, err := legacyDB.Exec(`UPDATE entries SET quality_score = 0, relevance_score = 0, novelty_score = 0, composite_score = 0 WHERE id = ?`, articles[0].ID); err != nil {
+		t.Fatalf("UPDATE entries reset scores error = %v", err)
+	}
+
+	refreshed, err := uc.RefreshStaleScores(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("RefreshStaleScores() error = %v", err)
+	}
+	if refreshed != 1 {
+		t.Fatalf("refreshed = %d, want 1", refreshed)
 	}
 
 	stored, ok := svc.GetArticle(articles[0].ID)
@@ -289,9 +346,9 @@ func TestArticleServiceExtractReadable(t *testing.T) {
 	defer articleHTML.Close()
 
 	uc, svc := createArticleServiceFixture(t)
-	_, err := svc.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+	_, err := svc.AddInFolder("https://example.com/feed", "Feed", scoreTestSeeds([]repository.ArticleSeed{
 		{Title: "A1", Link: articleHTML.URL, Summary: "S1"},
-	}, "", nil, "", "")
+	}), "", nil, "", "")
 	if err != nil {
 		t.Fatalf("AddInFolder() error = %v", err)
 	}
@@ -317,9 +374,9 @@ func TestArticleServiceExtractReadableRejectPDF(t *testing.T) {
 	defer pdfServer.Close()
 
 	uc, svc := createArticleServiceFixture(t)
-	_, err := svc.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+	_, err := svc.AddInFolder("https://example.com/feed", "Feed", scoreTestSeeds([]repository.ArticleSeed{
 		{Title: "A1", Link: pdfServer.URL, Summary: "S1"},
-	}, "", nil, "", "")
+	}), "", nil, "", "")
 	if err != nil {
 		t.Fatalf("AddInFolder() error = %v", err)
 	}
@@ -356,9 +413,9 @@ func TestArticleServiceExtractReadableSlowBody(t *testing.T) {
 	articleService := NewArticleService(repo, func() *http.Client {
 		return &http.Client{Timeout: 5 * time.Second}
 	})
-	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", scoreTestSeeds([]repository.ArticleSeed{
 		{Title: "A1", Link: articleHTML.URL, Summary: "S1"},
-	}, "", nil, "", "")
+	}), "", nil, "", "")
 	if err != nil {
 		t.Fatalf("AddInFolder() error = %v", err)
 	}

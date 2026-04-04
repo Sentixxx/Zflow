@@ -22,6 +22,7 @@ type FeedRepository interface {
 	GetSetting(key string) (string, bool, error)
 	SetSetting(key, value string) error
 	ListArticles() []model.Article
+	ListArticlesNeedingScoreRefresh(featureVersion int, limit int) []model.Article
 	ListArticlesMissingDisplaySummary(feedID int64, limit int) []model.Article
 	DeleteArticle(id int64) (bool, error)
 	GetArticle(id int64) (model.Article, bool)

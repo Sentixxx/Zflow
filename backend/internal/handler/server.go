@@ -190,6 +190,10 @@ func (s *Server) Handler() http.Handler {
 	return s.WrapHTTPHandler(mux)
 }
 
+func (s *Server) ArticleService() *service.ArticleService {
+	return s.articleUC
+}
+
 type fetchResult struct {
 	Title        string
 	Items        []repository.ArticleSeed

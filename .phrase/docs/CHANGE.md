@@ -1,6 +1,9 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change567 日期:2026-04-04 | 文件:.claude/tmp_plan_background_score_refresh_2026-04-04.md,.phrase/phases/phase-rss-llm-reader-20260225/spec_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/plan_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:评分补写策略 | 说明:将历史评分缺失/旧版本补写从列表首读同步执行改为后台周期刷新，并新增完成 task178 追踪“列表纯读 + 后台补写”约束 | 关联:task178
+- change568 日期:2026-04-04 | 文件:backend/internal/repository/feed_repository.go,backend/internal/repository/sqlite_feed_repository_impl.go,backend/internal/service/article_service.go,backend/internal/service/article_service_test.go,backend/internal/scheduler/article_score_refresh.go,backend/internal/handler/server.go,backend/cmd/server/main.go | 操作:Modify | 影响:文章列表延迟与评分后台刷新 | 说明:新增按批查询缺失或旧版本评分文章的仓储接口，列表/详情改为只读取已落库分数，后台 scheduler 周期刷新 stale article_features；新实例 curl 实测文章列表延迟从约 5.06s 降到 0.016s、feed 作用域约 0.010s、recommend 排序约 0.020s | 关联:task178
+- change569 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录后台评分刷新替换列表同步补写后的验证结果与接口耗时改善 | 关联:task178
 - change564 日期:2026-04-04 | 文件:.claude/tmp_plan_first_paint_pagination_2026-04-04.md,.phrase/phases/phase-rss-llm-reader-20260225/spec_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/plan_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:首屏文章分页加载策略 | 说明:补充“首屏第一页 + 后台续拉”的阅读页分页策略约束，并新增完成 task177 追踪首次打开页面的分页体验优化 | 关联:task177
 - change565 日期:2026-04-04 | 文件:frontend/src/hooks/article-pages.ts,frontend/src/hooks/article-pages.test.ts,frontend/src/hooks/useReaderQueries.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:阅读页首屏加载体验 | 说明:新增后台续拉判定 helper，将文章主查询从整池全量拉取改回真实分页第一页，并在首屏渲染后自动后台续拉剩余页，降低首次打开阅读页的等待成本且保持现有本地筛选与滚动分页链路 | 关联:task177
 - change566 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录阅读页首屏分页加载与后台续拉优化的验证结果 | 关联:task177
