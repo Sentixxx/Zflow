@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Article } from "@/types";
-import { canRequestReadability } from "./readability";
+import { canRequestReadability, shouldAutoFetchReadability } from "./readability";
 
 function article(input: Partial<Article> & Pick<Article, "id">): Article {
   return {
@@ -27,5 +27,17 @@ describe("canRequestReadability", () => {
 
   it("disables readability when article is missing", () => {
     expect(canRequestReadability(null)).toBe(false);
+  });
+});
+
+describe("shouldAutoFetchReadability", () => {
+  it("auto fetches when article has no readable content even if link is empty", () => {
+    const target = article({ id: 2, link: "", full_content: "" });
+    expect(shouldAutoFetchReadability({ article: target, hasUsableFullContent: false, isExtractingReadable: false })).toBe(true);
+  });
+
+  it("skips auto fetch while readability is in progress", () => {
+    const target = article({ id: 3, link: "", full_content: "" });
+    expect(shouldAutoFetchReadability({ article: target, hasUsableFullContent: false, isExtractingReadable: true })).toBe(false);
   });
 });

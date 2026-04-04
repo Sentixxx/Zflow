@@ -6,7 +6,7 @@ import type { ReadFilter, SortMode } from "@/lib/article-list";
 import { sanitizeRichHTML } from "@/lib/sanitize";
 import { buildFeedIconURLByHost } from "@/lib/feed-utils";
 import { resolveInitialAPIBase } from "@/lib/api-base";
-import { canRequestReadability } from "@/lib/readability";
+import { canRequestReadability, shouldAutoFetchReadability } from "@/lib/readability";
 import {
   TopBar,
   RefreshFailureBanner,
@@ -460,7 +460,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     const looksLikePDFGarbage =
       /^%PDF-\d/i.test(normalizedFullContent) || (normalizedFullContent.includes("xref") && normalizedFullContent.includes("endobj"));
     const hasUsableFullContent = Boolean(normalizedFullContent) && !looksLikePDFGarbage;
-    if (hasUsableFullContent || !selectedArticle.link || isExtractingReadable) {
+    if (!shouldAutoFetchReadability({ article: selectedArticle, hasUsableFullContent, isExtractingReadable })) {
       return;
     }
     if (autoReadableAttemptedRef.current.has(selectedArticle.id)) {
