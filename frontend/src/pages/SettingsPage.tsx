@@ -1,57 +1,69 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { ApiClient } from "@/api";
-import type { Feed } from "@/types";
 import { SettingsView } from "@/components";
-import type { ScriptLang, SettingsTab } from "@/components";
-import type { RefreshFailure } from "@/components";
-import { useReaderQueries } from "@/hooks/useReaderQueries";
-import { useFeeds } from "@/hooks/useFeeds";
-import { useEntries } from "@/hooks/useEntries";
+import type { SettingsTab } from "@/components";
+import { useReaderBootstrap } from "@/hooks/useReaderBootstrap";
+import { useSettingsState } from "@/hooks/useSettingsState";
 import { useSettingsActions } from "@/hooks/useSettingsActions";
-import { refreshFeedsBatch } from "@/services/feed-refresh-service";
 import { resolveInitialAPIBase } from "@/lib/api-base";
 
 export function SettingsPage() {
   const [, setLocation] = useLocation();
   const [apiBase, setApiBase] = useState<string>(() => resolveInitialAPIBase(localStorage.getItem("zflow_api_base"), window.location.hostname));
-  const [networkProxyURL, setNetworkProxyURL] = useState<string>("");
-  const [aiProtocol, setAIProtocol] = useState<"openai" | "anthropic">("openai");
-  const [aiAPIKey, setAIAPIKey] = useState<string>("");
-  const [aiAPIKeyMasked, setAIAPIKeyMasked] = useState<string>("");
-  const [aiAPIKeyConfigured, setAIAPIKeyConfigured] = useState<boolean>(false);
-  const [aiBaseURL, setAIBaseURL] = useState<string>("");
-  const [aiModel, setAIModel] = useState<string>("");
-  const [aiTargetLang, setAITargetLang] = useState<string>("zh-CN");
-  const [articleRetentionDays, setArticleRetentionDays] = useState<string>("90");
-  const [feedURL, setFeedURL] = useState("");
-  const [newFeedFolderID, setNewFeedFolderID] = useState<number | null>(null);
-  const [scriptFeedID, setScriptFeedID] = useState<number | null>(null);
-  const [scriptContent, setScriptContent] = useState<string>("");
-  const [scriptLang, setScriptLang] = useState<ScriptLang>("shell");
-  const [scriptDirty, setScriptDirty] = useState<boolean>(false);
+  const settingsState = useSettingsState();
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("subscription");
-  const [isRefreshingArticles, setIsRefreshingArticles] = useState<boolean>(false);
-  const [isRefreshingFeeds, setIsRefreshingFeeds] = useState<boolean>(false);
-  const [refreshFailures, setRefreshFailures] = useState<RefreshFailure[]>([]);
-  const [status, setStatus] = useState("准备就绪");
-  const [error, setError] = useState("");
+  const {
+    networkProxyURL,
+    aiProtocol,
+    aiAPIKey,
+    aiAPIKeyMasked,
+    aiAPIKeyConfigured,
+    aiBaseURL,
+    aiModel,
+    aiTargetLang,
+    articleRetentionDays,
+    scriptFeedID,
+    scriptContent,
+    scriptLang,
+    scriptDirty,
+    setNetworkProxyURL,
+    setAIProtocol,
+    setAIAPIKey,
+    setAIAPIKeyMasked,
+    setAIAPIKeyConfigured,
+    setAIBaseURL,
+    setAIModel,
+    setAITargetLang,
+    setArticleRetentionDays,
+    setScriptFeedID,
+    setScriptContent,
+    setScriptLang,
+    setScriptDirty,
+  } = settingsState;
 
-  const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
-  const { feedsQuery, foldersQuery, articlesQueryKey, articlesInfiniteQuery } = useReaderQueries(apiBase);
-
-  const setMessage = (message: string, isError = false) => {
-    if (isError) {
-      setError(message);
-      setStatus("");
-      return;
-    }
-    setError("");
-    setStatus(message);
-  };
-
-  const { feeds, folders, loadFeeds, loadFolders } = useFeeds(client, feedsQuery, foldersQuery, setMessage);
-  const { loadArticles } = useEntries(client, articlesInfiniteQuery, articlesQueryKey, setMessage);
+  const {
+    client,
+    feeds,
+    folders,
+    loadFeeds,
+    loadFolders,
+    loadArticles,
+    feedURL,
+    setFeedURL,
+    newFeedFolderID,
+    setNewFeedFolderID,
+    isRefreshingFeeds,
+    isRefreshingArticles,
+    refreshFailures,
+    refreshFeedsFromNetwork,
+    handleRefreshArticles,
+    handleRefreshFeeds,
+    addFeed,
+    createRootFolder,
+    setMessage,
+    status,
+    error,
+  } = useReaderBootstrap(apiBase);
 
   const {
     handleSaveAPIBase,
@@ -109,82 +121,6 @@ export function SettingsPage() {
     onSelectedArticleUpdated: undefined,
     setMessage,
   });
-
-  const refreshFeedsFromNetwork = async () => {
-    if (isRefreshingFeeds) {
-      return;
-    }
-    setIsRefreshingFeeds(true);
-    setRefreshFailures([]);
-    try {
-      setMessage("正在远端抓取订阅源...");
-      const currentFeeds = await client.listFeeds();
-      if (currentFeeds.length === 0) {
-        setMessage("暂无订阅源可刷新");
-        return;
-      }
-      const { successCount, failedCount, failures } = await refreshFeedsBatch(currentFeeds, (feedID) => client.refreshFeed(feedID));
-      setRefreshFailures(failures);
-      await Promise.all([loadFeeds({ silentStatus: true }), loadArticles({ silentStatus: true })]);
-      if (failedCount > 0) {
-        setMessage(`订阅源刷新完成：成功 ${successCount}，失败 ${failedCount}`);
-      } else {
-        setRefreshFailures([]);
-        setMessage(`订阅源刷新完成：成功 ${successCount}`);
-      }
-    } catch (e) {
-      setMessage((e as Error).message, true);
-    } finally {
-      setIsRefreshingFeeds(false);
-    }
-  };
-
-  const handleRefreshArticles = async () => {
-    if (isRefreshingArticles) {
-      return;
-    }
-    setIsRefreshingArticles(true);
-    try {
-      await loadArticles();
-    } finally {
-      setIsRefreshingArticles(false);
-    }
-  };
-
-  const handleRefreshFeeds = async () => {
-    await loadFeeds();
-  };
-
-  const addFeed = async () => {
-    const url = feedURL.trim();
-    if (!url) {
-      setMessage("请输入 RSS/Atom URL", true);
-      return;
-    }
-    try {
-      setMessage("正在添加订阅并抓取...");
-      await client.createFeed(url, newFeedFolderID);
-      setFeedURL("");
-      await Promise.all([loadFeeds(), loadFolders(), loadArticles()]);
-      setMessage("订阅添加成功");
-    } catch (e) {
-      setMessage((e as Error).message, true);
-    }
-  };
-
-  const createRootFolder = async () => {
-    const name = window.prompt("分类名称", "新分类");
-    if (!name || !name.trim()) {
-      return;
-    }
-    try {
-      await client.createFolder(name.trim());
-      await Promise.all([loadFolders(), loadFeeds()]);
-      setMessage("分类已创建");
-    } catch (e) {
-      setMessage((e as Error).message, true);
-    }
-  };
 
   useEffect(() => {
     const bootstrap = async () => {

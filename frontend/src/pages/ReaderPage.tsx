@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiClient } from "@/api";
 import type { Article, Feed, Folder } from "@/types";
 import { SORT_MODE_LABELS, filterAndSortArticles } from "@/lib/article-list";
 import type { ReadFilter, SortMode } from "@/lib/article-list";
@@ -16,20 +15,17 @@ import {
   SidebarTree,
   SettingsModal,
 } from "@/components";
-import type { RefreshFailure } from "@/components";
-import type { ScriptLang, SettingsTab } from "@/components";
+import type { SettingsTab } from "@/components";
 import { useReaderStore } from "@/stores/useReaderStore";
 import { useArticleRoute } from "@/hooks/useArticleRoute";
-import { useReaderQueries } from "@/hooks/useReaderQueries";
-import { refreshFeedsBatch } from "@/services/feed-refresh-service";
-import { useFeeds } from "@/hooks/useFeeds";
-import { useEntries } from "@/hooks/useEntries";
+import { useReaderBootstrap } from "@/hooks/useReaderBootstrap";
 import { useArticleActions } from "@/hooks/useArticleActions";
 import type { TranslationParagraph } from "@/hooks/useArticleActions";
 import { useSettingsActions } from "@/hooks/useSettingsActions";
 import { useSidebarFeedActions } from "@/hooks/useSidebarFeedActions";
 import { useReaderLayout } from "@/hooks/useReaderLayout";
 import { shouldHydrateArticlePool } from "@/hooks/article-pages";
+import { useSettingsState } from "@/hooks/useSettingsState";
 
 const PREFETCH_BATCH_SIZE = 20;
 const VISIBLE_STEP_SIZE = 10;
@@ -51,26 +47,12 @@ function toValidURL(raw: string | undefined): string {
 
 export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const [apiBase, setApiBase] = useState<string>(() => resolveInitialAPIBase(localStorage.getItem("zflow_api_base"), window.location.hostname));
-  const [networkProxyURL, setNetworkProxyURL] = useState<string>("");
-  const [aiProtocol, setAIProtocol] = useState<"openai" | "anthropic">("openai");
-  const [aiAPIKey, setAIAPIKey] = useState<string>("");
-  const [aiAPIKeyMasked, setAIAPIKeyMasked] = useState<string>("");
-  const [aiAPIKeyConfigured, setAIAPIKeyConfigured] = useState<boolean>(false);
-  const [aiBaseURL, setAIBaseURL] = useState<string>("");
-  const [aiModel, setAIModel] = useState<string>("");
-  const [aiTargetLang, setAITargetLang] = useState<string>("zh-CN");
-  const [articleRetentionDays, setArticleRetentionDays] = useState<string>("90");
-  const [feedURL, setFeedURL] = useState("");
+  const settingsState = useSettingsState();
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const selectedFeedID = useReaderStore((state) => state.selectedFeedID);
   const setSelectedFeedID = useReaderStore((state) => state.setSelectedFeedID);
   const selectedFolderID = useReaderStore((state) => state.selectedFolderID);
   const setSelectedFolderID = useReaderStore((state) => state.setSelectedFolderID);
-  const [newFeedFolderID, setNewFeedFolderID] = useState<number | null>(null);
-  const [scriptFeedID, setScriptFeedID] = useState<number | null>(null);
-  const [scriptContent, setScriptContent] = useState<string>("");
-  const [scriptLang, setScriptLang] = useState<ScriptLang>("shell");
-  const [scriptDirty, setScriptDirty] = useState<boolean>(false);
   const readFilter = useReaderStore((state) => state.readFilter);
   const setReadFilter = useReaderStore((state) => state.setReadFilter);
   const sortMode = useReaderStore((state) => state.sortMode);
@@ -83,44 +65,76 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("subscription");
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>("subscriptions");
   const [listBounce, setListBounce] = useState<boolean>(false);
-  const [isRefreshingArticles, setIsRefreshingArticles] = useState<boolean>(false);
-  const [isRefreshingFeeds, setIsRefreshingFeeds] = useState<boolean>(false);
   const [isExtractingReadable, setIsExtractingReadable] = useState<boolean>(false);
   const [isRefreshingArticleCache, setIsRefreshingArticleCache] = useState<boolean>(false);
   const [isTranslatingArticle, setIsTranslatingArticle] = useState<boolean>(false);
   const [translationParagraphsByArticleID, setTranslationParagraphsByArticleID] = useState<Record<number, TranslationParagraph[]>>({});
-  const [refreshFailures, setRefreshFailures] = useState<RefreshFailure[]>([]);
-  const [status, setStatus] = useState("准备就绪");
-  const [error, setError] = useState("");
   const [mobilePane, setMobilePane] = useState<MobilePane>("list");
   const lastLoadAtRef = useRef<number>(0);
   const bounceTimerRef = useRef<number | null>(null);
   const autoReadableAttemptedRef = useRef<Set<number>>(new Set());
-  const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
-  const { feedsQuery, foldersQuery, articlesQueryKey, articlesInfiniteQuery } = useReaderQueries(apiBase, sortMode);
+  const {
+    networkProxyURL,
+    aiProtocol,
+    aiAPIKey,
+    aiAPIKeyMasked,
+    aiAPIKeyConfigured,
+    aiBaseURL,
+    aiModel,
+    aiTargetLang,
+    articleRetentionDays,
+    scriptFeedID,
+    scriptContent,
+    scriptLang,
+    scriptDirty,
+    setNetworkProxyURL,
+    setAIProtocol,
+    setAIAPIKey,
+    setAIAPIKeyMasked,
+    setAIAPIKeyConfigured,
+    setAIBaseURL,
+    setAIModel,
+    setAITargetLang,
+    setArticleRetentionDays,
+    setScriptFeedID,
+    setScriptContent,
+    setScriptLang,
+    setScriptDirty,
+  } = settingsState;
+  const {
+    client,
+    feeds,
+    folders,
+    loadFeeds,
+    loadFolders,
+    articles,
+    setArticles,
+    loadArticles,
+    fetchNextArticlePage,
+    hasNextArticlePage,
+    feedURL,
+    setFeedURL,
+    newFeedFolderID,
+    setNewFeedFolderID,
+    isRefreshingFeeds,
+    isRefreshingArticles,
+    refreshFailures,
+    setRefreshFailures,
+    refreshFeedsFromNetwork,
+    handleRefreshArticles,
+    handleRefreshFeeds,
+    addFeed,
+    setMessage,
+    status,
+    error,
+    articlesInfiniteQuery,
+  } = useReaderBootstrap(apiBase, sortMode);
   const sanitizedSummaryHTML = useMemo(
     () => sanitizeRichHTML(selectedArticle?.display_summary || selectedArticle?.summary),
     [selectedArticle?.display_summary, selectedArticle?.summary],
   );
   const sanitizedFullContentHTML = useMemo(() => sanitizeRichHTML(selectedArticle?.full_content), [selectedArticle?.full_content]);
 
-  const setMessage = (message: string, isError = false) => {
-    if (isError) {
-      setError(message);
-      setStatus("");
-      return;
-    }
-    setError("");
-    setStatus(message);
-  };
-
-  const { feeds, folders, loadFeeds, loadFolders } = useFeeds(client, feedsQuery, foldersQuery, setMessage);
-  const { articles, setArticles, loadArticles, fetchNextArticlePage, hasNextArticlePage } = useEntries(
-    client,
-    articlesInfiniteQuery,
-    articlesQueryKey,
-    setMessage,
-  );
 
   const folderNameByID = useMemo(() => {
     const map = new Map<number, string>();
@@ -326,72 +340,6 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     setMessage,
   });
 
-  const refreshFeedsFromNetwork = async () => {
-    if (isRefreshingFeeds) {
-      return;
-    }
-    setIsRefreshingFeeds(true);
-    setRefreshFailures([]);
-    try {
-      setMessage("正在远端抓取订阅源...");
-      const currentFeeds = await client.listFeeds();
-      if (currentFeeds.length === 0) {
-        setMessage("暂无订阅源可刷新");
-        return;
-      }
-      const { successCount, failedCount, failures } = await refreshFeedsBatch(currentFeeds, (feedID) => client.refreshFeed(feedID));
-      setRefreshFailures(failures);
-      await Promise.all([loadFeeds({ silentStatus: true }), loadArticles({ silentStatus: true })]);
-      if (failedCount > 0) {
-        setMessage(`订阅源刷新完成：成功 ${successCount}，失败 ${failedCount}`);
-      } else {
-        setRefreshFailures([]);
-        setMessage(`订阅源刷新完成：成功 ${successCount}`);
-      }
-    } catch (e) {
-      setMessage((e as Error).message, true);
-    } finally {
-      setIsRefreshingFeeds(false);
-    }
-  };
-
-  const handleRefreshArticles = async () => {
-    if (isRefreshingArticles) {
-      return;
-    }
-    setIsRefreshingArticles(true);
-    setMessage("正在刷新文章...");
-    try {
-      const data = await loadArticles({ silentStatus: true });
-      if (data) {
-        setMessage("文章列表已刷新");
-      }
-    } finally {
-      setIsRefreshingArticles(false);
-    }
-  };
-
-  const handleRefreshFeeds = async () => {
-    await loadFeeds();
-  };
-
-  const addFeed = async () => {
-    const url = feedURL.trim();
-    if (!url) {
-      setMessage("请输入 RSS/Atom URL", true);
-      return;
-    }
-    try {
-      setMessage("正在添加订阅并抓取...");
-      await client.createFeed(url, newFeedFolderID);
-      setFeedURL("");
-      await Promise.all([loadFeeds(), loadFolders(), loadArticles()]);
-      setMessage("订阅添加成功");
-    } catch (e) {
-      setMessage((e as Error).message, true);
-    }
-  };
-
   const selectArticle = async (id: number) => {
     try {
       const article = await client.getArticle(id);
@@ -554,7 +502,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     createSubFolder,
     renameFolder,
     deleteFolder,
-    createRootFolder,
+    createRootFolder: createSidebarRootFolder,
     deleteFeed,
     startRenameFeed,
     renameFeed,
@@ -871,18 +819,18 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
               <span className="list-context-text">{listContextSummary}</span>
             </div>
           )}
-          <div className={`list article-list ${listBounce ? "bounce" : ""}`} onScroll={onArticleListScroll}>
-            <ArticleList
-              articles={pagedArticles}
-              selectedArticleID={selectedArticle?.id ?? null}
-              feedByID={feedByID}
-              feedNameByID={feedNameByID}
-              apiBase={apiBase}
-              onSelectArticle={(id) => {
-                void selectArticle(id);
-              }}
-            />
-          </div>
+          <ArticleList
+            articles={pagedArticles}
+            selectedArticleID={selectedArticle?.id ?? null}
+            feedByID={feedByID}
+            feedNameByID={feedNameByID}
+            apiBase={apiBase}
+            listBounce={listBounce}
+            onScroll={onArticleListScroll}
+            onSelectArticle={(id) => {
+              void selectArticle(id);
+            }}
+          />
           <div className="pager">
             <span className="meta">
               已显示 {pagedArticles.length} / {filteredAndSortedArticles.length} 条 · 预取20条，每次追加10条
