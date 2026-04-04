@@ -29,9 +29,6 @@ export function useFeeds(
   const loadFolders = async (options?: { silentStatus?: boolean }) => {
     try {
       const data = (await foldersQuery.refetch()).data ?? (await client.listFolders());
-      if (!options?.silentStatus) {
-        setMessage("分类列表已刷新");
-      }
       return data;
     } catch (e) {
       setMessage((e as Error).message, true);
