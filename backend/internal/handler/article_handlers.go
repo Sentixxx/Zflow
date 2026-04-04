@@ -11,6 +11,20 @@ import (
 	"github.com/Sentixxx/Zflow/backend/internal/service"
 )
 
+type articleListItem struct {
+	ID                   int64                         `json:"id"`
+	FeedID               int64                         `json:"feed_id"`
+	Title                string                        `json:"title"`
+	Link                 string                        `json:"link"`
+	CoverURL             string                        `json:"cover_url,omitempty"`
+	PublishedAt          string                        `json:"published_at,omitempty"`
+	IsRead               bool                          `json:"is_read"`
+	IsFavorite           bool                          `json:"is_favorite"`
+	FavoritedAt          string                        `json:"favorited_at,omitempty"`
+	CreatedAt            string                        `json:"created_at"`
+	RecommendationScores map[string]int                `json:"recommendation_scores,omitempty"`
+}
+
 type markReadRequest struct {
 	Read bool `json:"read"`
 }
@@ -26,10 +40,28 @@ func (s *Server) handleArticles(w http.ResponseWriter, r *http.Request) {
 	}
 	limit := 0
 	page := 1
+	var feedID *int64
+	var folderID *int64
 	sortMode, err := service.NormalizeArticleSortMode(r.URL.Query().Get("sort"))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid sort"})
 		return
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("feed_id")); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 1 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid feed_id"})
+			return
+		}
+		feedID = &parsed
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("folder_id")); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 1 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid folder_id"})
+			return
+		}
+		folderID = &parsed
 	}
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 		parsed, err := strconv.Atoi(raw)
@@ -51,8 +83,32 @@ func (s *Server) handleArticles(w http.ResponseWriter, r *http.Request) {
 		page = parsed
 	}
 
-	articles, hasMore := s.articleUC.List(page, limit, sortMode)
-	writeJSON(w, http.StatusOK, map[string]any{"articles": articles, "has_more": hasMore})
+	articles, hasMore := s.articleUC.List(page, limit, sortMode, feedID, folderID)
+	items := make([]articleListItem, 0, len(articles))
+	for _, article := range articles {
+		item := articleListItem{
+			ID:          article.ID,
+			FeedID:      article.FeedID,
+			Title:       article.Title,
+			Link:        article.Link,
+			CoverURL:    article.CoverURL,
+			PublishedAt: article.PublishedAt,
+			IsRead:      article.IsRead,
+			IsFavorite:  article.IsFavorite,
+			FavoritedAt: article.FavoritedAt,
+			CreatedAt:   article.CreatedAt,
+		}
+		if article.RecommendationScores != nil {
+			item.RecommendationScores = map[string]int{
+				"quality":   article.RecommendationScores.Quality,
+				"relevance": article.RecommendationScores.Relevance,
+				"novelty":   article.RecommendationScores.Novelty,
+				"composite": article.RecommendationScores.Composite,
+			}
+		}
+		items = append(items, item)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"articles": items, "has_more": hasMore})
 }
 
 func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {

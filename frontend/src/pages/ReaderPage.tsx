@@ -28,6 +28,7 @@ import type { TranslationParagraph } from "@/hooks/useArticleActions";
 import { useSettingsActions } from "@/hooks/useSettingsActions";
 import { useSidebarFeedActions } from "@/hooks/useSidebarFeedActions";
 import { useReaderLayout } from "@/hooks/useReaderLayout";
+import { shouldHydrateArticlePool } from "@/hooks/article-pages";
 
 const PREFETCH_BATCH_SIZE = 20;
 const VISIBLE_STEP_SIZE = 10;
@@ -93,7 +94,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const bounceTimerRef = useRef<number | null>(null);
   const autoReadableAttemptedRef = useRef<Set<number>>(new Set());
   const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
-  const { feedsQuery, foldersQuery, articlesInfiniteQuery } = useReaderQueries(apiBase, sortMode);
+  const { feedsQuery, foldersQuery, articlesQueryKey, articlesInfiniteQuery } = useReaderQueries(apiBase, sortMode);
   const sanitizedSummaryHTML = useMemo(
     () => sanitizeRichHTML(selectedArticle?.display_summary || selectedArticle?.summary),
     [selectedArticle?.display_summary, selectedArticle?.summary],
@@ -111,7 +112,12 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   };
 
   const { feeds, folders, loadFeeds, loadFolders } = useFeeds(client, feedsQuery, foldersQuery, setMessage);
-  const { articles, setArticles, loadArticles, fetchNextArticlePage, hasNextArticlePage } = useEntries(client, articlesInfiniteQuery, setMessage, sortMode);
+  const { articles, setArticles, loadArticles, fetchNextArticlePage, hasNextArticlePage } = useEntries(
+    client,
+    articlesInfiniteQuery,
+    articlesQueryKey,
+    setMessage,
+  );
 
   const folderNameByID = useMemo(() => {
     const map = new Map<number, string>();
@@ -497,16 +503,14 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     }
   };
 
-  const selectFeed = async (feedID: number | null) => {
-    const data = await loadArticles();
-    const source = data ?? articles;
+  const selectFeed = (feedID: number | null) => {
     const nextFeedID = feedID;
     setSidebarMode("subscriptions");
     setSelectedFeedID(nextFeedID);
     setSelectedFolderID(null);
     setBufferedCount(PREFETCH_BATCH_SIZE);
     setVisibleCount(VISIBLE_STEP_SIZE);
-    rebuildStickyUnreadIDs(source, nextFeedID, null, readFilter);
+    rebuildStickyUnreadIDs(articles, nextFeedID, null, readFilter);
     if (isNarrow) {
       setMobilePane("list");
     }
@@ -515,16 +519,14 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     }
   };
 
-  const selectFolder = async (folderID: number | null) => {
-    const data = await loadArticles();
-    const source = data ?? articles;
+  const selectFolder = (folderID: number | null) => {
     const nextFolderID = folderID;
     setSidebarMode("subscriptions");
     setSelectedFolderID(nextFolderID);
     setSelectedFeedID(null);
     setBufferedCount(PREFETCH_BATCH_SIZE);
     setVisibleCount(VISIBLE_STEP_SIZE);
-    rebuildStickyUnreadIDs(source, null, nextFolderID, readFilter);
+    rebuildStickyUnreadIDs(articles, null, nextFolderID, readFilter);
     if (isNarrow) {
       setMobilePane("list");
     }
@@ -688,6 +690,10 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     setVisibleCount((count) => Math.min(Math.max(VISIBLE_STEP_SIZE, count), filteredAndSortedArticles.length || VISIBLE_STEP_SIZE));
   }, [selectedFeedID, selectedFolderID, readFilter, sortMode, filteredAndSortedArticles.length]);
 
+  useEffect(() => {
+    rebuildStickyUnreadIDs(articles, selectedFeedID, selectedFolderID, readFilter);
+  }, [articles, selectedFeedID, selectedFolderID, readFilter]);
+
   useEffect(
     () => () => {
       if (bounceTimerRef.current != null) {
@@ -735,6 +741,22 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
       return nextBuffered;
     });
   };
+
+  useEffect(() => {
+    const loadedCount = articles.length;
+    if (!shouldHydrateArticlePool({
+      loadedCount,
+      hasNextPage: Boolean(hasNextArticlePage),
+      isFetching: articlesInfiniteQuery.isFetching,
+      isFetchingNextPage: articlesInfiniteQuery.isFetchingNextPage,
+    })) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void fetchNextArticlePage();
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [articles.length, hasNextArticlePage, articlesInfiniteQuery.isFetching, articlesInfiniteQuery.isFetchingNextPage, fetchNextArticlePage]);
 
   return (
     <div className="shell">
@@ -793,11 +815,9 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
               feedIconURLByHost={feedIconURLByHost}
               onSwitchSidebarMode={switchSidebarMode}
               onCreateRootFolder={createRootFolder}
-              onSelectFeed={(feedID) => {
-                void selectFeed(feedID);
-              }}
+              onSelectFeed={selectFeed}
               onSelectFolder={(folderID) => {
-                void selectFolder(folderID);
+                selectFolder(folderID);
               }}
               onSelectArticle={(articleID) => {
                 void selectArticle(articleID);

@@ -36,7 +36,7 @@ export function SettingsPage() {
   const [error, setError] = useState("");
 
   const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
-  const { feedsQuery, foldersQuery, articlesInfiniteQuery } = useReaderQueries(apiBase);
+  const { feedsQuery, foldersQuery, articlesQueryKey, articlesInfiniteQuery } = useReaderQueries(apiBase);
 
   const setMessage = (message: string, isError = false) => {
     if (isError) {
@@ -49,7 +49,7 @@ export function SettingsPage() {
   };
 
   const { feeds, folders, loadFeeds, loadFolders } = useFeeds(client, feedsQuery, foldersQuery, setMessage);
-  const { loadArticles } = useEntries(client, articlesInfiniteQuery, setMessage);
+  const { loadArticles } = useEntries(client, articlesInfiniteQuery, articlesQueryKey, setMessage);
 
   const {
     handleSaveAPIBase,

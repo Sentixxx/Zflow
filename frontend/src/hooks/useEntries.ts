@@ -1,40 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { Article } from "@/types";
 import type { ApiClient } from "@/api";
-import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import type { InfiniteData, QueryKey, UseInfiniteQueryResult } from "@tanstack/react-query";
 import type { MessageSetter } from "@/hooks/useFeeds";
-import type { SortMode } from "@/lib/article-list";
-
-type ArticlesPage = {
-  articles: Article[];
-  hasMore: boolean;
-};
+import { flattenArticlePages, replaceArticlePages, type ArticlesPage } from "./article-pages";
 
 export function useEntries(
-  client: ApiClient,
+  _client: ApiClient,
   articlesInfiniteQuery: UseInfiniteQueryResult<InfiniteData<ArticlesPage, unknown>, Error>,
+  articlesQueryKey: QueryKey,
   setMessage: MessageSetter,
-  sortMode: SortMode = "latest",
 ) {
-  const [articles, setArticles] = useState<Article[]>([]);
-
-  const mergedFromQuery = useMemo(() => {
-    if (!articlesInfiniteQuery.data) {
-      return [] as Article[];
-    }
-    return articlesInfiniteQuery.data.pages.flatMap((page) => page.articles);
-  }, [articlesInfiniteQuery.data]);
-
-  useEffect(() => {
-    if (articlesInfiniteQuery.data) {
-      setArticles(mergedFromQuery);
-    }
-  }, [mergedFromQuery, articlesInfiniteQuery.data]);
+  const queryClient = useQueryClient();
+  const articles = useMemo(() => flattenArticlePages(articlesInfiniteQuery.data), [articlesInfiniteQuery.data]);
 
   const loadArticles = async (options?: { silentStatus?: boolean }): Promise<Article[] | null> => {
     try {
-      const data = await client.listArticles(undefined, undefined, sortMode);
-      setArticles(data);
+      const result = await articlesInfiniteQuery.refetch();
+      const data = flattenArticlePages(result.data);
       if (!options?.silentStatus) {
         setMessage("文章列表已刷新");
       }
@@ -43,6 +27,16 @@ export function useEntries(
       setMessage((e as Error).message, true);
       return null;
     }
+  };
+
+  const setArticles = (updater: Article[] | ((current: Article[]) => Article[])) => {
+    queryClient.setQueryData<InfiniteData<ArticlesPage, unknown> | undefined>(articlesQueryKey, (current) => {
+      if (!current) {
+        return current;
+      }
+      const nextArticles = typeof updater === "function" ? updater(flattenArticlePages(current)) : updater;
+      return replaceArticlePages(current, nextArticles);
+    });
   };
 
   const fetchNextArticlePage = async () => {
@@ -54,15 +48,7 @@ export function useEntries(
   };
 
   const upsertArticle = (nextArticle: Article) => {
-    setArticles((current) => {
-      const idx = current.findIndex((entry) => entry.id === nextArticle.id);
-      if (idx < 0) {
-        return [nextArticle, ...current];
-      }
-      const copy = [...current];
-      copy[idx] = nextArticle;
-      return copy;
-    });
+    setArticles((current) => current.map((entry) => (entry.id === nextArticle.id ? nextArticle : entry)));
   };
 
   return {

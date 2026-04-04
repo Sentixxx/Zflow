@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -165,6 +167,80 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 	}
 }
 
+func TestArticleListOmitsHeavyFields(t *testing.T) {
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+		{
+			Title:       "Detailed article",
+			Link:        "https://example.com/1",
+			Summary:     "summary payload",
+			FullContent: "<p>full content payload</p>",
+			CoverURL:    "https://example.com/cover.jpg",
+			PublishedAt: "2026-04-01T00:00:00Z",
+		},
+	}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+	articles := repo.ListArticles()
+	if len(articles) != 1 {
+		t.Fatalf("repo articles len = %d, want 1", len(articles))
+	}
+	articleID := articles[0].ID
+
+	if err := repo.UpdateArticleSummaryState(articleID, "ai summary payload", "ready", "display summary payload", "ready"); err != nil {
+		t.Fatalf("UpdateArticleSummaryState() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/articles", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var listResp struct {
+		Articles []map[string]any `json:"articles"`
+	} 
+	if err := json.Unmarshal(rr.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("unmarshal list response error = %v", err)
+	}
+	if len(listResp.Articles) != 1 {
+		t.Fatalf("articles len = %d, want 1", len(listResp.Articles))
+	}
+	listArticle := listResp.Articles[0]
+	for _, field := range []string{"summary", "display_summary", "display_summary_status", "display_summary_updated_at", "full_content", "ai_summary", "ai_summary_status", "ai_summary_updated_at", "summary_debug"} {
+		if _, ok := listArticle[field]; ok {
+			t.Fatalf("list article unexpectedly contains heavy field %q", field)
+		}
+	}
+	if _, ok := listArticle["recommendation_scores"]; !ok {
+		t.Fatalf("list article missing recommendation_scores")
+	}
+
+	reqDetail := httptest.NewRequest(http.MethodGet, "/api/v1/articles/"+strconv.FormatInt(articleID, 10), nil)
+	rrDetail := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrDetail, reqDetail)
+	if rrDetail.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles/:id status = %d, want %d", rrDetail.Code, http.StatusOK)
+	}
+
+	var detailResp map[string]any
+	if err := json.Unmarshal(rrDetail.Body.Bytes(), &detailResp); err != nil {
+		t.Fatalf("unmarshal detail response error = %v", err)
+	}
+	for _, field := range []string{"summary", "display_summary", "display_summary_status", "full_content", "ai_summary", "ai_summary_status"} {
+		if _, ok := detailResp[field]; !ok {
+			t.Fatalf("detail article missing field %q", field)
+		}
+	}
+}
+
 func TestArticleListSortByRecommend(t *testing.T) {
 	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
@@ -233,6 +309,86 @@ func TestArticleListRejectInvalidSort(t *testing.T) {
 	server.Handler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("GET /api/v1/articles?sort=garbage status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestArticleListSupportsFeedAndFolderScope(t *testing.T) {
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	rootFolder, err := repo.CreateFolder("Root", nil)
+	if err != nil {
+		t.Fatalf("CreateFolder(root) error = %v", err)
+	}
+	childFolder, err := repo.CreateFolder("Child", &rootFolder.ID)
+	if err != nil {
+		t.Fatalf("CreateFolder(child) error = %v", err)
+	}
+
+	rootFeed, err := repo.AddInFolder("https://example.com/root.xml", "Root Feed", []repository.ArticleSeed{
+		{Title: "Root article", Link: "https://example.com/root", Summary: "root", PublishedAt: "2026-03-01T00:00:00Z"},
+	}, "", &rootFolder.ID, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder(root) error = %v", err)
+	}
+	childFeed, err := repo.AddInFolder("https://example.com/child.xml", "Child Feed", []repository.ArticleSeed{
+		{Title: "Child article", Link: "https://example.com/child", Summary: "child", PublishedAt: "2026-03-02T00:00:00Z"},
+	}, "", &childFolder.ID, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder(child) error = %v", err)
+	}
+	_, err = repo.AddInFolder("https://example.com/other.xml", "Other Feed", []repository.ArticleSeed{
+		{Title: "Other article", Link: "https://example.com/other", Summary: "other", PublishedAt: "2026-03-03T00:00:00Z"},
+	}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder(other) error = %v", err)
+	}
+
+	reqFeed := httptest.NewRequest(http.MethodGet, "/api/v1/articles?feed_id="+strconv.FormatInt(rootFeed.ID, 10), nil)
+	rrFeed := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrFeed, reqFeed)
+	if rrFeed.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles?feed_id status = %d, want %d", rrFeed.Code, http.StatusOK)
+	}
+	var feedResp struct {
+		Articles []struct {
+			FeedID int64  `json:"feed_id"`
+			Title  string `json:"title"`
+		} `json:"articles"`
+	}
+	if err := json.Unmarshal(rrFeed.Body.Bytes(), &feedResp); err != nil {
+		t.Fatalf("unmarshal feed scope response error = %v", err)
+	}
+	if len(feedResp.Articles) != 1 || feedResp.Articles[0].FeedID != rootFeed.ID || feedResp.Articles[0].Title != "Root article" {
+		t.Fatalf("feed scope articles = %+v, want only root feed article", feedResp.Articles)
+	}
+
+	reqFolder := httptest.NewRequest(http.MethodGet, "/api/v1/articles?folder_id="+strconv.FormatInt(rootFolder.ID, 10), nil)
+	rrFolder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrFolder, reqFolder)
+	if rrFolder.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles?folder_id status = %d, want %d", rrFolder.Code, http.StatusOK)
+	}
+	var folderResp struct {
+		Articles []struct {
+			FeedID int64  `json:"feed_id"`
+			Title  string `json:"title"`
+		} `json:"articles"`
+	}
+	if err := json.Unmarshal(rrFolder.Body.Bytes(), &folderResp); err != nil {
+		t.Fatalf("unmarshal folder scope response error = %v", err)
+	}
+	if len(folderResp.Articles) != 2 {
+		t.Fatalf("folder scope articles len = %d, want 2", len(folderResp.Articles))
+	}
+	gotFeedIDs := []int64{folderResp.Articles[0].FeedID, folderResp.Articles[1].FeedID}
+	sort.Slice(gotFeedIDs, func(i, j int) bool { return gotFeedIDs[i] < gotFeedIDs[j] })
+	wantFeedIDs := []int64{rootFeed.ID, childFeed.ID}
+	if !reflect.DeepEqual(gotFeedIDs, wantFeedIDs) {
+		t.Fatalf("folder scope feed ids = %v, want %v", gotFeedIDs, wantFeedIDs)
 	}
 }
 

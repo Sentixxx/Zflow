@@ -1,5 +1,32 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change564 日期:2026-04-04 | 文件:.claude/tmp_plan_first_paint_pagination_2026-04-04.md,.phrase/phases/phase-rss-llm-reader-20260225/spec_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/plan_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:首屏文章分页加载策略 | 说明:补充“首屏第一页 + 后台续拉”的阅读页分页策略约束，并新增完成 task177 追踪首次打开页面的分页体验优化 | 关联:task177
+change565 日期:2026-04-04 | 文件:frontend/src/hooks/article-pages.ts,frontend/src/hooks/article-pages.test.ts,frontend/src/hooks/useReaderQueries.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:阅读页首屏加载体验 | 说明:新增后台续拉判定 helper，将文章主查询从整池全量拉取改回真实分页第一页，并在首屏渲染后自动后台续拉剩余页，降低首次打开阅读页的等待成本且保持现有本地筛选与滚动分页链路 | 关联:task177
+change566 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录阅读页首屏分页加载与后台续拉优化的验证结果 | 关联:task177
+
+change561 日期:2026-04-04 | 文件:.claude/tmp_plan_first_paint_list_slimming_2026-04-04.md,.phrase/phases/phase-rss-llm-reader-20260225/spec_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/plan_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:首屏文章列表加载策略 | 说明:补充“列表接口仅返回轻量字段、重内容延迟到详情接口”的实现计划与 phase 文档约束，并新增完成 task176 追踪首屏体验优化 | 关联:task176
+change562 日期:2026-04-04 | 文件:backend/internal/handler/article_handlers.go,backend/internal/handler/server_test.go | 操作:Modify | 影响:文章列表接口载荷 | 说明:为 GET /api/v1/articles 引入轻量列表 DTO，仅返回列表视图必需字段；新增回归测试确保摘要、全文与 AI 摘要等重字段只保留在详情接口 | 关联:task176
+change563 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录首屏文章列表接口瘦身与验证结果 | 关联:task176
+
+change559 日期:2026-04-04 | 文件:frontend/src/hooks/article-pages.ts,frontend/src/hooks/article-pages.test.ts,frontend/src/hooks/useReaderQueries.ts | 操作:Modify | 影响:阅读页全局文章池 | 说明:新增单页全量文章缓存 helper，并将阅读页文章查询改为首次直接拉取完整列表后写入 React Query 单页缓存，修复“即时切换订阅源时仅按第一页本地过滤导致列表为空”的问题 | 关联:task019
+change560 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录全局文章池改为首屏全量缓存的前端修复与验证结果 | 关联:task019
+
+change556 日期:2026-04-04 | 文件:.claude/tmp_plan_instant_scope_switch_2026-04-04.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“即时订阅切换 + 单一 owner”计划书，再执行阅读页主查询回退到全局文章池 | 关联:task019
+change557 日期:2026-04-04 | 文件:frontend/src/hooks/articles-query-key.ts,frontend/src/hooks/articles-query-key.test.ts,frontend/src/hooks/useReaderQueries.ts,frontend/src/hooks/useEntries.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:订阅源切换即时性 | 说明:将阅读页文章主查询 key 收敛为 apiBase + sortMode，全局文章池继续由 React Query 单一持有；订阅/分类切换恢复为本地即时过滤，不再因 scope 变化触发新的冷查询 | 关联:task019
+change558 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录即时订阅切换方案替换“作用域冷查询”的前端重构与验证结果 | 关联:task019
+
+change552 日期:2026-04-04 | 文件:.claude/tmp_plan_article_list_single_owner_2026-04-04.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“文章列表单一 owner 修复”计划书，再执行 query 单 owner 重构 | 关联:task019
+change553 日期:2026-04-04 | 文件:frontend/src/hooks/article-pages.ts,frontend/src/hooks/article-pages.test.ts | 操作:Add | 影响:分页文章缓存辅助逻辑 | 说明:新增分页文章 flatten/map/replace 纯函数与单测，为文章列表 query cache 单一 owner 重构提供稳定基础 | 关联:task019
+change554 日期:2026-04-04 | 文件:frontend/src/hooks/useEntries.ts,frontend/src/hooks/useReaderQueries.ts,frontend/src/pages/ReaderPage.tsx,frontend/src/pages/SettingsPage.tsx | 操作:Modify | 影响:文章列表数据 owner | 说明:移除 useEntries 内部本地 articles state，改为直接消费 React Query 分页结果；手动刷新改为 query refetch，局部文章更新改为写回 query cache，彻底消除“完整列表刷新”和“分页缓存”双写竞争 | 关联:task019
+change555 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录文章列表单一 owner 重构与前端验证结果 | 关联:task019
+
+change546 日期:2026-04-04 | 文件:.claude/tmp_plan_subscription_scope_fix_2026-04-04.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“订阅作用域切换稳定性修复”计划书，再执行订阅/分类作用域查询改造 | 关联:task019
+change547 日期:2026-04-04 | 文件:backend/internal/handler/article_handlers.go,backend/internal/service/article_service.go,backend/internal/handler/server_test.go,backend/internal/service/article_service_test.go,backend/internal/repository/sqlite_feed_repository_impl.go | 操作:Modify | 影响:文章列表后端作用域查询 | 说明:为 GET /api/v1/articles 新增 feed_id/folder_id 解析与服务层作用域过滤，补充订阅与分类树作用域测试，更新 service 层列表测试签名，并移除 SQLite 仓储中阻塞测试的重复 UpdateArticleScores 定义 | 关联:task019
+change548 日期:2026-04-04 | 文件:frontend/src/api/article-query.ts,frontend/src/api/article-query.test.ts,frontend/src/api/client.ts,frontend/src/hooks/useReaderQueries.ts,frontend/src/hooks/useEntries.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:订阅源/分类切换稳定性 | 说明:文章查询参数与 query key 纳入 feed/folder 作用域，ReaderPage 切换订阅或分类时改为纯作用域状态切换，不再先全量刷新文章列表后本地筛选，并在文章更新后重建未读粘性集合 | 关联:task019
+change549 日期:2026-04-04 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/spec_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/plan_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:订阅作用域行为约束 | 说明:补充订阅/分类切换必须走作用域查询的约束，并标记 task019 完成及验证方式 | 关联:task019
+change550 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录订阅源切换稳定性修复与作用域查询改造索引 | 关联:task019
+change551 日期:2026-04-04 | 文件:frontend/src/components/article-detail/ArticleDetailContent.tsx | 操作:Modify | 影响:前端构建验证 | 说明:移除重复的 useRef 导入，消除与本次作用域修复无关但会阻塞 npm run build 的前端编译错误 | 关联:task019
+
 change501 日期:2026-03-22 | 文件:.tmp/plan_20260322_generic_readable_summary_prompt.md | 操作:Add | 影响:执行计划留痕 | 说明:按规则先输出并阅读“通用易读型摘要 prompt 与 query 模式优化”计划书，再执行摘要链路改造 | 关联:task169
 change502 日期:2026-03-22 | 文件:backend/internal/service/article_summary_service.go,backend/internal/service/article_summary_service_test.go,backend/internal/model/article.go,backend/internal/handler/server_test.go,frontend/src/types/domain.ts,frontend/src/hooks/useSettingsActions.ts,Docs/ai-summary-research-review-20260322.md,.phrase/phases/phase-rss-llm-reader-20260225/tech-refer_summary_memory_pipeline_20260322.md | 操作:Modify | 影响:AI 摘要主链路与研究文档 | 说明:将摘要 prompt/query 改为通用主旨优先风格，引入二次语义重写与 query_mode/rewrite_passed 调试信息，并补充相关研究文档 | 关联:task169
 change503 日期:2026-03-22 | 文件:tasks/todo.md,tasks/lessons.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/change_rss_llm_reader.md,.phrase/docs/CHANGE.md | 操作:Modify | 影响:任务与变更追踪 | 说明:新增并完成 task169，记录通用易读型摘要改造、经验教训与验证结果 | 关联:task169

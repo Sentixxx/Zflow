@@ -1,7 +1,6 @@
 import type { Article } from "@/types";
 import { useRef } from "react";
 import { formatRecommendationSummary } from "@/lib/article-list";
-import { useRef } from "react";
 import { ArticleDetailTopBar } from "./ArticleDetailTopBar";
 import { ArticleFloatingActions } from "./ArticleFloatingActions";
 

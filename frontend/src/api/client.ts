@@ -95,8 +95,19 @@ export class ApiClient {
     return data.articles ?? [];
   }
 
-  async listArticlesPage(page: number, limit: number, sort?: SortMode): Promise<{ articles: Article[]; hasMore: boolean }> {
-    const search = buildArticleListQuery({ page, limit, sort });
+  async listArticlesInScope(options?: { page?: number; limit?: number; sort?: SortMode; feedID?: number | null; folderID?: number | null }): Promise<Article[]> {
+    const suffix = buildArticleListQuery(options ?? {});
+    const data = await this.request<{ articles?: Article[] }>(`/api/v1/articles${suffix ? `?${suffix}` : ""}`);
+    return data.articles ?? [];
+  }
+
+  async listArticlesPage(
+    page: number,
+    limit: number,
+    sort?: SortMode,
+    scope?: { feedID?: number | null; folderID?: number | null },
+  ): Promise<{ articles: Article[]; hasMore: boolean }> {
+    const search = buildArticleListQuery({ page, limit, sort, feedID: scope?.feedID, folderID: scope?.folderID });
     const data = await this.request<{ articles?: Article[]; has_more?: boolean }>(`/api/v1/articles?${search}`);
     return {
       articles: data.articles ?? [],

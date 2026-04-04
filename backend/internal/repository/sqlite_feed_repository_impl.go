@@ -793,19 +793,6 @@ func (s *SQLiteFeedRepository) UpdateArticleDisplaySummary(id int64, summary str
 	return err
 }
 
-func (s *SQLiteFeedRepository) UpdateArticleScores(id int64, scores model.RecommendationScores) error {
-	_, err := s.db.Exec(
-		`UPDATE entries SET quality_score = ?, relevance_score = ?, novelty_score = ?, composite_score = ?, updated_at = ? WHERE id = ?`,
-		scores.Quality,
-		scores.Relevance,
-		scores.Novelty,
-		scores.Composite,
-		time.Now().UTC().Format(time.RFC3339),
-		id,
-	)
-	return err
-}
-
 func (s *SQLiteFeedRepository) UpdateArticleFeatures(id int64, features model.ArticleFeatures) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	scoredAt := strings.TrimSpace(features.ScoredAt)

@@ -36,7 +36,7 @@ task017 [x] 场景:用户在窄屏或长文本内容下稳定阅读文章流 | G
 
 task018 [x] 场景:系统在SQLite上稳定管理订阅与文章数据 | Given:后端需要从文件存储升级为可扩展数据库 | When:执行Feed/Folder/Entry CRUD并触发定时刷新 | Then:数据持久化稳定+支持Conditional GET节省带宽 | 验证:单元测试+手动测试
 
-task019 [ ] 场景:用户在前端进行按来源筛选与未读计数浏览 | Given:前端使用统一数据请求层 | When:切换全部/文件夹/订阅源视图 | Then:文章流与未读计数同步更新 | 验证:手动测试
+task019 [x] 场景:用户在前端进行按来源筛选与未读计数浏览 | Given:前端使用统一数据请求层 | When:切换全部/文件夹/订阅源视图 | Then:文章流与未读计数同步更新 | 验证:go test ./internal/handler + npm test -- --run src/api/article-query.test.ts + npm run build + 手动测试
 
 task020 [ ] 场景:用户滚动浏览长文章流时保持流畅 | Given:文章数量持续增长 | When:向下滚动列表 | Then:自动分页加载且交互稳定 | 验证:手动测试
 
@@ -198,3 +198,5 @@ task172 [x] 场景:系统在文章生命周期内持久化后端评分结果 | G
 task173 [x] 场景:维护者为下一阶段评分重构提供可追溯设计基线 | Given:当前推荐评分缺少输入门控、跨文章新颖度与标签弱特征架构 | When:整理第一阶段评分重构的tech-refer设计文档并固化外部参考 | Then:后续实现可依据统一文档推进输入门控+Readability兜底+单篇特征+最近池新颖度+LLM标签弱特征 | 验证:文档检查
 task174 [x] 场景:维护者在局域网设备上联调前端阅读器时无需手动改默认 API 地址 | Given:Vite 开发服务需要被局域网设备访问且浏览器 hostname 不是 localhost | When:在手机或同网段设备打开前端并进入阅读器或设置页 | Then:开发服务监听 0.0.0.0 + 前端默认以当前 hostname 推导 `http://<host>:8080` 且仍支持 localStorage 覆盖 API Base | 验证:npm run test -- src/lib/api-base.test.ts + npm run build + 手动测试
 task175 [x] 场景:系统以稳定可回退的规则管线产出并持久化第一阶段评分特征 | Given:现有推荐分数仍以单篇启发式长度/重叠逻辑为主且缺少输入门控、深度/新鲜度特征与近重复新颖度落库 | When:抓取入库、正文提取或刷新缓存触发评分计算并查询文章列表/详情 | Then:后端基于输入门控+规则特征+近重复新颖度生成 article_features 并镜像 recommendation_scores 落库，列表/详情继续返回原有 DTO，旧数据在首次读取时自动补写新评分结果 | 验证:go test ./...
+task176 [x] 场景:用户第一次打开阅读页时尽快看到文章列表 | Given:阅读页首屏需要加载订阅树与文章列表 | When:系统请求文章列表第一页 | Then:列表接口仅返回首屏列表必需字段+不携带摘要正文等重字段+详情仍通过单篇接口获取完整内容 | 验证:go test ./internal/handler -run TestArticleListOmitsHeavyFields + npm run build + 手动测试
+task177 [x] 场景:用户第一次打开阅读页时不必等待整池文章加载完成 | Given:阅读页文章列表支持无限分页与本地筛选 | When:页面首次请求文章列表 | Then:首屏只阻塞第一页文章+列表渲染后后台续拉剩余分页+现有滚动分页链路保持可用 | 验证:npm test -- --run src/hooks/article-pages.test.ts + npm run build + 手动测试

@@ -2,11 +2,11 @@ import { useMemo } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ApiClient } from "@/api";
 import type { SortMode } from "@/lib/article-list";
-
-const ARTICLE_PAGE_SIZE = 20;
+import { ARTICLE_PAGE_SIZE, buildArticlesQueryKey } from "./articles-query-key";
 
 export function useReaderQueries(apiBase: string, sortMode: SortMode = "latest") {
   const client = useMemo(() => new ApiClient(apiBase), [apiBase]);
+  const articlesQueryKey = buildArticlesQueryKey(apiBase, sortMode);
 
   const feedsQuery = useQuery({
     queryKey: ["feeds", apiBase],
@@ -23,7 +23,7 @@ export function useReaderQueries(apiBase: string, sortMode: SortMode = "latest")
   });
 
   const articlesInfiniteQuery = useInfiniteQuery({
-    queryKey: ["articles", apiBase, ARTICLE_PAGE_SIZE, sortMode],
+    queryKey: articlesQueryKey,
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => client.listArticlesPage(pageParam, ARTICLE_PAGE_SIZE, sortMode),
     getNextPageParam: (lastPage, allPages) => {
@@ -40,6 +40,7 @@ export function useReaderQueries(apiBase: string, sortMode: SortMode = "latest")
     client,
     feedsQuery,
     foldersQuery,
+    articlesQueryKey,
     articlesInfiniteQuery,
   };
 }

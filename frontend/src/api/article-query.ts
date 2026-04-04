@@ -4,9 +4,11 @@ type BuildArticleListQueryOptions = {
   page?: number;
   limit?: number;
   sort?: SortMode;
+  feedID?: number | null;
+  folderID?: number | null;
 };
 
-export function buildArticleListQuery({ page, limit, sort }: BuildArticleListQueryOptions): string {
+export function buildArticleListQuery({ page, limit, sort, feedID, folderID }: BuildArticleListQueryOptions): string {
   const search = new URLSearchParams();
   if (typeof page === "number") {
     search.set("page", String(page));
@@ -16,6 +18,12 @@ export function buildArticleListQuery({ page, limit, sort }: BuildArticleListQue
   }
   if (sort) {
     search.set("sort", sort);
+  }
+  if (typeof feedID === "number") {
+    search.set("feed_id", String(feedID));
+  }
+  if (typeof folderID === "number") {
+    search.set("folder_id", String(folderID));
   }
   return search.toString();
 }

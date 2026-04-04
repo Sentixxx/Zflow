@@ -51,7 +51,7 @@ func TestArticleServiceListPagination(t *testing.T) {
 		t.Fatalf("AddInFolder() error = %v", err)
 	}
 
-	page1, hasMore1 := uc.List(1, 2, ArticleSortLatest)
+	page1, hasMore1 := uc.List(1, 2, ArticleSortLatest, nil, nil)
 	if len(page1) != 2 || !hasMore1 {
 		t.Fatalf("page1 len/hasMore = %d/%v, want 2/true", len(page1), hasMore1)
 	}
@@ -59,7 +59,7 @@ func TestArticleServiceListPagination(t *testing.T) {
 		t.Fatalf("page1[0].RecommendationScores = nil, want non-nil")
 	}
 
-	page2, hasMore2 := uc.List(2, 2, ArticleSortLatest)
+	page2, hasMore2 := uc.List(2, 2, ArticleSortLatest, nil, nil)
 	if len(page2) != 1 || hasMore2 {
 		t.Fatalf("page2 len/hasMore = %d/%v, want 1/false", len(page2), hasMore2)
 	}
@@ -88,7 +88,7 @@ func TestArticleServiceListSortByRecommend(t *testing.T) {
 		t.Fatalf("AddInFolder() error = %v", err)
 	}
 
-	articles, hasMore := uc.List(1, 10, ArticleSortRecommend)
+	articles, hasMore := uc.List(1, 10, ArticleSortRecommend, nil, nil)
 	if hasMore {
 		t.Fatalf("hasMore = true, want false")
 	}
