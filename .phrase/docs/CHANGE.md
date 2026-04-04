@@ -1,6 +1,9 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change586 日期:2026-04-05 | 文件:.claude/tmp_plan_readability_button_fix_2026-04-05.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:Readability 按钮可用性追踪 | 说明:新增 Readability 按钮禁用问题的修复计划并完成 task184 | 关联:task184
+- change587 日期:2026-04-05 | 文件:frontend/src/lib/readability.ts,frontend/src/lib/readability.test.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:Readability 按钮启用逻辑 | 说明:新增可请求 Readability 的判定 helper 与测试，并让详情工具栏依据已选中文章启用抓取按钮 | 关联:task184
+- change588 日期:2026-04-05 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 Readability 按钮可点击修复与前端验证结果 | 关联:task184
 - change576 日期:2026-04-04 | 文件:.claude/tmp_plan_review_followup_2026-04-04.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:review follow-up 追踪 | 说明:补充 backend review 剩余项的 follow-up 计划并新增完成 task181，聚焦 feed 刷新总超时、脚本执行边界和 mock 基线 | 关联:task181
 - change577 日期:2026-04-04 | 文件:backend/internal/handler/server.go,backend/internal/handler/feed_mutation_handlers.go,backend/internal/handler/feed_folder_handlers.go,backend/internal/handler/server_test.go,backend/internal/repository/mock/feed_repository.go | 操作:Modify | 影响:feed 刷新稳态与测试基础设施 | 说明:为创建/刷新 feed 链路加入共享总超时并透传到 feed/icon 请求和脚本执行；脚本 stdout 改为执行期上限控制并补充非沙箱风险注释；新增 repository/mock/MockFeedRepository 作为隔离测试基线 | 关联:task181
 - change578 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 review follow-up 的验证结果与新增 mock 基线 | 关联:task181

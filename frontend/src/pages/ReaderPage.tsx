@@ -6,6 +6,7 @@ import type { ReadFilter, SortMode } from "@/lib/article-list";
 import { sanitizeRichHTML } from "@/lib/sanitize";
 import { buildFeedIconURLByHost } from "@/lib/feed-utils";
 import { resolveInitialAPIBase } from "@/lib/api-base";
+import { canRequestReadability } from "@/lib/readability";
 import {
   TopBar,
   RefreshFailureBanner,
@@ -267,6 +268,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     }
     return new URL(byFeedURL).origin;
   }, [selectedArticle, feedByID]);
+  const canExtractReadable = canRequestReadability(selectedArticle);
   const currentTranslationParagraphs = useMemo(() => {
     if (!selectedArticle) {
       return [];
@@ -909,7 +911,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
             canToggleFavorite={Boolean(selectedArticle)}
             isFavorite={Boolean(selectedArticle?.is_favorite)}
             canOpenSourceSite={Boolean(selectedArticleOpenURL)}
-            canExtractReadable={Boolean(selectedArticle?.link)}
+            canExtractReadable={canExtractReadable}
             isExtractingReadable={isExtractingReadable}
             canRefreshArticleCache={Boolean(selectedArticle)}
             isRefreshingArticleCache={isRefreshingArticleCache}
