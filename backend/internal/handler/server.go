@@ -51,6 +51,8 @@ const (
 	defaultAIProtocol       = "openai"
 	defaultAITargetLang     = "zh-CN"
 	defaultRetentionDays    = 90
+	feedRefreshTimeout      = 20 * time.Second
+	scriptOutputLimitBytes  = 1 << 20
 )
 
 type createFeedRequest struct {
@@ -206,8 +208,8 @@ type fetchResult struct {
 	Error        string
 }
 
-func (s *Server) fetchAndParse(feedURL, etag, lastModified string) fetchResult {
-	req, err := http.NewRequest(http.MethodGet, feedURL, nil)
+func (s *Server) fetchAndParse(ctx context.Context, feedURL, etag, lastModified string) fetchResult {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
 	if err != nil {
 		return fetchResult{Error: err.Error()}
 	}
@@ -268,7 +270,10 @@ func (s *Server) fetchAndParse(feedURL, etag, lastModified string) fetchResult {
 	}
 }
 
-func (s *Server) refreshFeedByID(feedID int64) error {
+func (s *Server) refreshFeedByID(parent context.Context, feedID int64) error {
+	ctx, cancel := context.WithTimeout(parent, feedRefreshTimeout)
+	defer cancel()
+
 	feed, ok, err := s.store.GetFeed(feedID)
 	if err != nil {
 		return fmt.Errorf("failed to load feed: %w", err)
@@ -277,7 +282,7 @@ func (s *Server) refreshFeedByID(feedID int64) error {
 		return errors.New("feed not found")
 	}
 
-	result := s.fetchAndParse(feed.URL, feed.ETag, feed.LastModified)
+	result := s.fetchAndParse(ctx, feed.URL, feed.ETag, feed.LastModified)
 	if result.NotModified {
 		return s.store.UpdateFeedAfterRefresh(feedID, feed.Title, nil, "", result.ETag, result.LastModified)
 	}
@@ -285,7 +290,7 @@ func (s *Server) refreshFeedByID(feedID int64) error {
 		return s.store.UpdateFeedAfterRefresh(feedID, feed.Title, nil, result.Error, feed.ETag, feed.LastModified)
 	}
 	if script := strings.TrimSpace(feed.CustomScript); script != "" {
-		items, err := s.applyScriptToItems(feed.ID, feed.URL, script, normalizeScriptLang(feed.CustomScriptLang), result.Items)
+		items, err := s.applyScriptToItems(ctx, feed.ID, feed.URL, script, normalizeScriptLang(feed.CustomScriptLang), result.Items)
 		if err != nil {
 			s.logger.Warn("refresh", "feed", "failed", "custom script failed, fallback to raw summary", "feed_id", feed.ID, "error", err.Error())
 		} else {
@@ -293,7 +298,7 @@ func (s *Server) refreshFeedByID(feedID int64) error {
 		}
 	}
 	result.Items = service.AttachRecommendationScoresToSeeds(result.Items)
-	s.tryRefreshFeedIcon(feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt, result.IconHints)
+	s.tryRefreshFeedIcon(ctx, feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt, result.IconHints)
 	if err := s.store.UpdateFeedAfterRefresh(feedID, result.Title, result.Items, "", result.ETag, result.LastModified); err != nil {
 		return err
 	}
@@ -330,7 +335,7 @@ type scriptResultPayload struct {
 	Debug       string `json:"debug"`
 }
 
-func (s *Server) applyScriptToItems(feedID int64, feedURL, script, lang string, items []repository.ArticleSeed) ([]repository.ArticleSeed, error) {
+func (s *Server) applyScriptToItems(ctx context.Context, feedID int64, feedURL, script, lang string, items []repository.ArticleSeed) ([]repository.ArticleSeed, error) {
 	out := make([]repository.ArticleSeed, 0, len(items))
 	for _, item := range items {
 		payload := scriptRequestPayload{
@@ -350,7 +355,7 @@ func (s *Server) applyScriptToItems(feedID int64, feedURL, script, lang string, 
 		if err != nil {
 			return nil, err
 		}
-		stdout, err := runScript(lang, script, raw)
+		stdout, err := runScript(ctx, lang, script, raw)
 		if err != nil {
 			s.logger.Warn("refresh", "feed", "failed", "script execution failed", "feed_id", feedID, "item_host", logger.ExtractHost(item.Link), "error", err.Error())
 			out = append(out, item)
@@ -385,8 +390,30 @@ func (s *Server) applyScriptToItems(feedID int64, feedURL, script, lang string, 
 	return out, nil
 }
 
-func runScript(lang, script string, stdin []byte) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+type cappedBuffer struct {
+	limit int
+	buf   bytes.Buffer
+}
+
+func (b *cappedBuffer) Write(p []byte) (int, error) {
+	if b.limit > 0 && b.buf.Len()+len(p) > b.limit {
+		remaining := b.limit - b.buf.Len()
+		if remaining > 0 {
+			_, _ = b.buf.Write(p[:remaining])
+		}
+		return len(p), errors.New("output too large")
+	}
+	return b.buf.Write(p)
+}
+
+func (b *cappedBuffer) Bytes() []byte {
+	return b.buf.Bytes()
+}
+
+func runScript(parent context.Context, lang, script string, stdin []byte) ([]byte, error) {
+	// NOTE: User scripts are intentionally powerful and currently run without OS-level sandboxing.
+	// The only enforced guards here are timeout and bounded stdout capture; treat this as trusted-local automation, not an isolation boundary.
+	ctx, cancel := context.WithTimeout(parent, 12*time.Second)
 	defer cancel()
 
 	var cmd *exec.Cmd
@@ -399,9 +426,9 @@ func runScript(lang, script string, stdin []byte) ([]byte, error) {
 		cmd = exec.CommandContext(ctx, "/bin/sh", "-lc", script)
 	}
 	cmd.Stdin = bytes.NewReader(stdin)
-	var stdout bytes.Buffer
+	stdout := &cappedBuffer{limit: scriptOutputLimitBytes}
 	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
+	cmd.Stdout = stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		errText := strings.TrimSpace(stderr.String())
@@ -409,9 +436,6 @@ func runScript(lang, script string, stdin []byte) ([]byte, error) {
 			errText = err.Error()
 		}
 		return nil, fmt.Errorf("script run failed: %s", errText)
-	}
-	if stdout.Len() > 1<<20 {
-		return nil, errors.New("script output too large")
 	}
 	return stdout.Bytes(), nil
 }
@@ -433,7 +457,7 @@ func isSupportedScriptLang(lang string) bool {
 	}
 }
 
-func (s *Server) tryRefreshFeedIcon(feedID int64, feedURL, existingIconPath, iconFetchedAt string, feedIconHints []string) {
+func (s *Server) tryRefreshFeedIcon(ctx context.Context, feedID int64, feedURL, existingIconPath, iconFetchedAt string, feedIconHints []string) {
 	if s.hasFreshIconAsset(existingIconPath, iconFetchedAt) {
 		s.logger.Info("icon", "refresh", "skipped", "icon refresh skipped because local asset is fresh", "feed_id", feedID, "feed_url", feedURL)
 		return
@@ -441,10 +465,10 @@ func (s *Server) tryRefreshFeedIcon(feedID int64, feedURL, existingIconPath, ico
 	if s.tryReuseIconFromSameHost(feedID, feedURL) {
 		return
 	}
-	iconCandidates := s.discoverIconURLs(feedURL, feedIconHints)
+	iconCandidates := s.discoverIconURLs(ctx, feedURL, feedIconHints)
 	s.logger.Info("icon", "refresh", "started", "icon refresh started", "feed_id", feedID, "feed_url", feedURL, "candidate_count", len(iconCandidates))
 	for idx, iconURL := range iconCandidates {
-		iconBytes, ext, err := s.fetchIcon(iconURL)
+		iconBytes, ext, err := s.fetchIcon(ctx, iconURL)
 		if err != nil {
 			s.logger.Info("icon", "fetch", "failed", "icon candidate failed", "feed_id", feedID, "candidate_index", idx+1, "candidate_url", iconURL, "error", err.Error())
 			continue
@@ -533,7 +557,7 @@ func normalizeOrigin(feedURL string) (string, bool) {
 	return u.Scheme + "://" + u.Host, true
 }
 
-func (s *Server) discoverIconURLs(feedURL string, feedIconHints []string) []string {
+func (s *Server) discoverIconURLs(ctx context.Context, feedURL string, feedIconHints []string) []string {
 	origin, ok := normalizeOrigin(feedURL)
 	if !ok {
 		return nil
@@ -550,9 +574,9 @@ func (s *Server) discoverIconURLs(feedURL string, feedIconHints []string) []stri
 		origin + "/apple-touch-icon.png",
 		origin + "/apple-touch-icon-precomposed.png",
 	}...)
-	candidates = append(candidates, s.discoverIconURLsFromHTML(origin, origin)...)
+	candidates = append(candidates, s.discoverIconURLsFromHTML(ctx, origin, origin)...)
 	if feedURL != origin {
-		candidates = append(candidates, s.discoverIconURLsFromHTML(feedURL, origin)...)
+		candidates = append(candidates, s.discoverIconURLsFromHTML(ctx, feedURL, origin)...)
 	}
 	if googleFallback := googleFaviconURL(origin); googleFallback != "" {
 		candidates = append(candidates, googleFallback)
@@ -608,8 +632,8 @@ var (
 	reRelAttr     = regexp.MustCompile(`(?is)\brel\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>` + "`" + `]+))`)
 )
 
-func (s *Server) discoverIconURLsFromHTML(pageURL, origin string) []string {
-	req, err := http.NewRequest(http.MethodGet, pageURL, nil)
+func (s *Server) discoverIconURLsFromHTML(ctx context.Context, pageURL, origin string) []string {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
 		return nil
 	}
@@ -697,8 +721,8 @@ func uniqueURLs(urls []string) []string {
 	return out
 }
 
-func (s *Server) fetchIcon(iconURL string) ([]byte, string, error) {
-	req, err := http.NewRequest(http.MethodGet, iconURL, nil)
+func (s *Server) fetchIcon(ctx context.Context, iconURL string) ([]byte, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, iconURL, nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -921,7 +945,7 @@ func (s *Server) RefreshAllFeeds(ctx context.Context) error {
 			return ctx.Err()
 		default:
 		}
-		if err := s.refreshFeedByID(feed.ID); err != nil {
+		if err := s.refreshFeedByID(ctx, feed.ID); err != nil {
 			s.logger.Warn("refresh", "feed", "failed", "scheduled refresh failed", "feed_id", feed.ID, "error", err.Error())
 		}
 	}

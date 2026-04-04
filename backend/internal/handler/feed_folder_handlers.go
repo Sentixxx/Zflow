@@ -95,7 +95,7 @@ func (s *Server) handleFeedByID(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
-		if err := s.refreshFeedByID(id); err != nil {
+		if err := s.refreshFeedByID(r.Context(), id); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -30,7 +31,10 @@ func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := s.fetchAndParse(req.URL, "", "")
+	ctx, cancel := context.WithTimeout(r.Context(), feedRefreshTimeout)
+	defer cancel()
+
+	result := s.fetchAndParse(ctx, req.URL, "", "")
 	result.Items = service.AttachRecommendationScoresToSeeds(result.Items)
 	feed, err := s.store.AddInFolder(req.URL, result.Title, result.Items, result.Error, req.FolderID, result.ETag, result.LastModified)
 	if err == repository.ErrFeedExists {
@@ -52,7 +56,7 @@ func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
 	if err := s.summaryUC.BackfillFeed(feed.ID, 50); err != nil {
 		s.logger.Warn("summary", "backfill", "failed", "display summary backfill failed after create feed", "feed_id", feed.ID, "error", err.Error())
 	}
-	s.tryRefreshFeedIcon(feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt, result.IconHints)
+	s.tryRefreshFeedIcon(ctx, feed.ID, feed.URL, feed.IconPath, feed.IconFetchedAt, result.IconHints)
 
 	writeJSON(w, http.StatusCreated, feed)
 }
