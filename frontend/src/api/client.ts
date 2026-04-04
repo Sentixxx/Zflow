@@ -107,11 +107,13 @@ export class ApiClient {
     sort?: SortMode,
     scope?: { feedID?: number | null; folderID?: number | null },
   ): Promise<{ articles: Article[]; hasMore: boolean }> {
-    const search = buildArticleListQuery({ page, limit, sort, feedID: scope?.feedID, folderID: scope?.folderID });
-    const data = await this.request<{ articles?: Article[]; has_more?: boolean }>(`/api/v1/articles?${search}`);
+    const requestedLimit = limit + 1;
+    const search = buildArticleListQuery({ page, limit: requestedLimit, sort, feedID: scope?.feedID, folderID: scope?.folderID });
+    const data = await this.request<{ articles?: Article[] }>(`/api/v1/articles?${search}`);
+    const rows = data.articles ?? [];
     return {
-      articles: data.articles ?? [],
-      hasMore: Boolean(data.has_more),
+      articles: rows.slice(0, limit),
+      hasMore: rows.length > limit,
     };
   }
 
@@ -224,6 +226,17 @@ export class ApiClient {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    const parseLine = (raw: string): TranslateStreamEvent | null => {
+      try {
+        return JSON.parse(raw) as TranslateStreamEvent;
+      } catch (error) {
+        apiLogger.warn("translate:stream:invalid", {
+          error: error instanceof Error ? error.message : String(error),
+          line_length: raw.length,
+        });
+        return null;
+      }
+    };
 
     while (true) {
       const { done, value } = await reader.read();
@@ -238,15 +251,19 @@ export class ApiClient {
         if (!trimmed) {
           continue;
         }
-        const parsed = JSON.parse(trimmed) as TranslateStreamEvent;
-        onEvent(parsed);
+        const parsed = parseLine(trimmed);
+        if (parsed) {
+          onEvent(parsed);
+        }
       }
     }
 
     const tail = buffer.trim();
     if (tail) {
-      const parsed = JSON.parse(tail) as TranslateStreamEvent;
-      onEvent(parsed);
+      const parsed = parseLine(tail);
+      if (parsed) {
+        onEvent(parsed);
+      }
     }
   }
 

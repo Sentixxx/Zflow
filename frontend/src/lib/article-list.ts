@@ -129,12 +129,8 @@ export function formatArticleTime(raw: string | undefined): string {
     return `${hours}小时${minutes}分钟前`;
   }
 
-  const utc8Ms = ts + 8 * 60 * 60 * 1000;
-  const date = new Date(utc8Ms);
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  return `${year}/${month}/${day}`;
+  const formatter = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
+  return formatter.format(new Date(ts));
 }
 
 export function filterAndSortArticles(

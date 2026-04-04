@@ -1,12 +1,19 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
-change589 日期:2026-04-05 | 文件:.claude/tmp_plan_readability_auto_fetch_2026-04-05.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:Readability 自动抓取追踪 | 说明:补充 Readability 自动抓取正文的修复计划并完成 task185 | 关联:task185
-change590 日期:2026-04-05 | 文件:frontend/src/lib/readability.ts,frontend/src/lib/readability.test.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:Readability 自动抓取判定 | 说明:新增自动抓取可用性判定 helper 与测试，并移除对前端 link 的依赖以确保打开详情时后台触发 Readability | 关联:task185
-change591 日期:2026-04-05 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 Readability 自动抓取修复与前端验证结果 | 关联:task185
-
-change586 日期:2026-04-05 | 文件:.claude/tmp_plan_readability_button_fix_2026-04-05.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:Readability 按钮可用性追踪 | 说明:新增 Readability 按钮禁用问题的修复计划并完成 task184 | 关联:task184
-change587 日期:2026-04-05 | 文件:frontend/src/lib/readability.ts,frontend/src/lib/readability.test.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:Readability 按钮启用逻辑 | 说明:新增可请求 Readability 的判定 helper 与测试，并让详情工具栏依据已选中文章启用抓取按钮 | 关联:task184
-change588 日期:2026-04-05 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 Readability 按钮可点击修复与前端验证结果 | 关联:task184
+change594 日期:2026-04-05 | 文件:.claude/tmp_plan_readability_button_fix_2026-04-05.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:Readability 按钮可用性追踪 | 说明:新增 Readability 按钮禁用问题的修复计划并完成 task189 | 关联:task189
+change595 日期:2026-04-05 | 文件:frontend/src/lib/readability.ts,frontend/src/lib/readability.test.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:Readability 按钮启用逻辑 | 说明:新增可请求 Readability 的判定 helper 与测试，并让详情工具栏依据已选中文章启用抓取按钮 | 关联:task189
+change596 日期:2026-04-05 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 Readability 按钮可点击修复与前端验证结果 | 关联:task189
+change597 日期:2026-04-05 | 文件:.claude/tmp_plan_readability_auto_fetch_2026-04-05.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:Readability 自动抓取追踪 | 说明:补充 Readability 自动抓取正文的修复计划并完成 task190 | 关联:task190
+change598 日期:2026-04-05 | 文件:frontend/src/lib/readability.ts,frontend/src/lib/readability.test.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:Readability 自动抓取判定 | 说明:新增自动抓取可用性判定 helper 与测试，并移除对前端 link 的依赖以确保打开详情时后台触发 Readability | 关联:task190
+change599 日期:2026-04-05 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 Readability 自动抓取修复与前端验证结果 | 关联:task190
+change586 日期:2026-04-04 | 文件:frontend/src/lib/article-list.ts,frontend/src/lib/article-list.test.ts | 操作:Modify | 影响:文章时间展示 | 说明:日期格式改为本地时区并补充单测 | 关联:task184
+change587 日期:2026-04-04 | 文件:frontend/src/api/client.ts,frontend/src/api/client.test.ts | 操作:Modify | 影响:翻译流与分页 | 说明:流式 JSON 解析容错并按 limit+1 判定 hasMore | 关联:task185
+change588 日期:2026-04-04 | 文件:frontend/src/lib/folder-tree.ts,frontend/src/lib/folder-tree.test.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:分类过滤性能 | 说明:缓存子孙集合并稳定列表过滤函数 | 关联:task187
+change589 日期:2026-04-04 | 文件:frontend/src/hooks/useReaderBootstrap.ts,frontend/src/hooks/useSettingsState.ts,frontend/src/hooks/useFeeds.ts,frontend/src/pages/ReaderPage.tsx,frontend/src/pages/SettingsPage.tsx | 操作:Modify | 影响:阅读/设置共享状态 | 说明:抽离 bootstrap 与 settings 状态并收敛 feeds 数据源 | 关联:task186
+change590 日期:2026-04-04 | 文件:frontend/src/components/article-list/ArticleList.tsx,frontend/src/components/article-list/ArticleList.test.tsx,frontend/package.json,frontend/package-lock.json | 操作:Modify | 影响:文章列表渲染 | 说明:引入 react-virtual 实现虚拟化并补充列表测试 | 关联:task188
+change591 日期:2026-04-04 | 文件:frontend/vitest.config.ts,frontend/src/hooks/useReaderBootstrap.test.tsx,frontend/src/hooks/useSettingsState.test.tsx | 操作:Modify | 影响:前端测试基线 | 说明:Vitest 支持别名与 tsx 测试并补充 hooks 单测 | 关联:task186
+change592 日期:2026-04-04 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task184-task188 | 说明:新增并完成前端审查修复任务 | 关联:task188
+change593 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录前端审查修复与验证结果 | 关联:task188
 
 change583 日期:2026-04-04 | 文件:.claude/tmp_plan_cors_same_host_2026-04-04.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:CORS LAN 回归追踪 | 说明:补充局域网同 host CORS 回归的修复计划并新增完成 task183 | 关联:task183
 change584 日期:2026-04-04 | 文件:backend/internal/handler/server.go,backend/internal/handler/server_test.go | 操作:Modify | 影响:CORS allowOrigin 逻辑 | 说明:在保留显式 allowlist 的前提下，新增与当前请求同 host 的 origin 自动放行，并补充 LAN origin 回归测试 | 关联:task183

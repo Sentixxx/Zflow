@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import type { Feed, Folder } from "@/types";
 import type { ApiClient } from "@/api";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -11,25 +10,12 @@ export function useFeeds(
   foldersQuery: UseQueryResult<Folder[], Error>,
   setMessage: MessageSetter,
 ) {
-  const [feeds, setFeeds] = useState<Feed[]>([]);
-  const [folders, setFolders] = useState<Folder[]>([]);
-
-  useEffect(() => {
-    if (feedsQuery.data) {
-      setFeeds(feedsQuery.data);
-    }
-  }, [feedsQuery.data]);
-
-  useEffect(() => {
-    if (foldersQuery.data) {
-      setFolders(foldersQuery.data);
-    }
-  }, [foldersQuery.data]);
+  const feeds = feedsQuery.data ?? [];
+  const folders = foldersQuery.data ?? [];
 
   const loadFeeds = async (options?: { silentStatus?: boolean }) => {
     try {
       const data = (await feedsQuery.refetch()).data ?? (await client.listFeeds());
-      setFeeds(data);
       if (!options?.silentStatus) {
         setMessage("订阅列表已刷新");
       }
@@ -40,10 +26,9 @@ export function useFeeds(
     }
   };
 
-  const loadFolders = async () => {
+  const loadFolders = async (options?: { silentStatus?: boolean }) => {
     try {
       const data = (await foldersQuery.refetch()).data ?? (await client.listFolders());
-      setFolders(data);
       return data;
     } catch (e) {
       setMessage((e as Error).message, true);
@@ -54,8 +39,6 @@ export function useFeeds(
   return {
     feeds,
     folders,
-    setFeeds,
-    setFolders,
     loadFeeds,
     loadFolders,
   };
