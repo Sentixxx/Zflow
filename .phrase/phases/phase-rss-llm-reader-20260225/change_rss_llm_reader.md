@@ -1,5 +1,9 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change570 日期:2026-04-04 | 文件:.claude/tmp_plan_ci_regression_2026-04-04.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:CI 回归追踪 | 说明:补充后台评分刷新改造后的 CI 回归计划与完成 task179，记录“handler 测试对齐纯读约束”的修复目标 | 关联:task179
+change571 日期:2026-04-04 | 文件:backend/internal/handler/server_test.go | 操作:Modify | 影响:后端 CI 稳定性 | 说明:将 recommend 排序测试改为使用预评分种子，并把详情测试从“同步补写旧评分”调整为“纯读不补写”，使测试与后台评分刷新新架构一致 | 关联:task179
+change572 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 CI 回归修复与后端整包测试恢复通过的结果 | 关联:task179
+
 change567 日期:2026-04-04 | 文件:.claude/tmp_plan_background_score_refresh_2026-04-04.md,.phrase/phases/phase-rss-llm-reader-20260225/spec_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/plan_rss_llm_reader.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:评分补写策略 | 说明:将历史评分缺失/旧版本补写从列表首读同步执行改为后台周期刷新，并新增完成 task178 追踪“列表纯读 + 后台补写”约束 | 关联:task178
 change568 日期:2026-04-04 | 文件:backend/internal/repository/feed_repository.go,backend/internal/repository/sqlite_feed_repository_impl.go,backend/internal/service/article_service.go,backend/internal/service/article_service_test.go,backend/internal/scheduler/article_score_refresh.go,backend/internal/handler/server.go,backend/cmd/server/main.go | 操作:Modify | 影响:文章列表延迟与评分后台刷新 | 说明:新增按批查询缺失或旧版本评分文章的仓储接口，列表/详情改为只读取已落库分数，后台 scheduler 周期刷新 stale article_features；新实例 curl 实测文章列表延迟从约 5.06s 降到 0.016s、feed 作用域约 0.010s、recommend 排序约 0.020s | 关联:task178
 change569 日期:2026-04-04 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录后台评分刷新替换列表同步补写后的验证结果与接口耗时改善 | 关联:task178

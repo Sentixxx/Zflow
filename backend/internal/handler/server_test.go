@@ -19,6 +19,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func scoreHandlerTestSeeds(items []repository.ArticleSeed) []repository.ArticleSeed {
+	return service.AttachRecommendationScoresToSeeds(items)
+}
+
 func TestCreateFeedAndList(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
@@ -206,7 +210,7 @@ func TestArticleListOmitsHeavyFields(t *testing.T) {
 
 	var listResp struct {
 		Articles []map[string]any `json:"articles"`
-	} 
+	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &listResp); err != nil {
 		t.Fatalf("unmarshal list response error = %v", err)
 	}
@@ -248,7 +252,7 @@ func TestArticleListSortByRecommend(t *testing.T) {
 	}
 	server := NewServer(repo, t.TempDir())
 
-	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", scoreHandlerTestSeeds([]repository.ArticleSeed{
 		{
 			Title:       "Tiny note",
 			Link:        "https://example.com/1",
@@ -263,7 +267,7 @@ func TestArticleListSortByRecommend(t *testing.T) {
 			CoverURL:    "https://example.com/cover.jpg",
 			PublishedAt: "2026-02-26T00:00:00Z",
 		},
-	}, "", nil, "", "")
+	}), "", nil, "", "")
 	if err != nil {
 		t.Fatalf("AddInFolder() error = %v", err)
 	}
@@ -392,7 +396,7 @@ func TestArticleListSupportsFeedAndFolderScope(t *testing.T) {
 	}
 }
 
-func TestArticleDetailBackfillsLegacyScores(t *testing.T) {
+func TestArticleDetailDoesNotBackfillLegacyScores(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "feeds.db")
 	repo, err := repository.NewSQLiteFeedRepository(dbPath)
 	if err != nil {
@@ -400,7 +404,7 @@ func TestArticleDetailBackfillsLegacyScores(t *testing.T) {
 	}
 	server := NewServer(repo, t.TempDir())
 
-	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", scoreHandlerTestSeeds([]repository.ArticleSeed{
 		{
 			Title:       "Distributed systems migration notes",
 			Link:        "https://example.com/1",
@@ -408,7 +412,7 @@ func TestArticleDetailBackfillsLegacyScores(t *testing.T) {
 			FullContent: strings.Repeat("Distributed systems migration notes rollout stages impact scope fallback strategy. ", 18),
 			PublishedAt: "2026-02-26T00:00:00Z",
 		},
-	}, "", nil, "", "")
+	}), "", nil, "", "")
 	if err != nil {
 		t.Fatalf("AddInFolder() error = %v", err)
 	}
@@ -446,19 +450,19 @@ func TestArticleDetailBackfillsLegacyScores(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &detail); err != nil {
 		t.Fatalf("unmarshal detail response error = %v", err)
 	}
-	if detail.Scores.Composite <= 0 {
-		t.Fatalf("detail composite = %d, want > 0", detail.Scores.Composite)
+	if detail.Scores.Composite != 0 {
+		t.Fatalf("detail composite = %d, want stored zero score without sync backfill", detail.Scores.Composite)
 	}
 
 	stored, ok := repo.GetArticle(articles[0].ID)
 	if !ok {
 		t.Fatalf("GetArticle() ok = false, want true")
 	}
-	if stored.RecommendationScores == nil || stored.RecommendationScores.Composite <= 0 {
-		t.Fatalf("stored recommendation_scores = %+v, want backfilled scores", stored.RecommendationScores)
+	if stored.RecommendationScores == nil || stored.RecommendationScores.Composite != 0 {
+		t.Fatalf("stored recommendation_scores = %+v, want unchanged zero scores", stored.RecommendationScores)
 	}
-	if stored.ArticleFeatures == nil || stored.ArticleFeatures.FeatureVersion <= 0 {
-		t.Fatalf("stored article_features = %+v, want persisted feature row", stored.ArticleFeatures)
+	if stored.ArticleFeatures != nil {
+		t.Fatalf("stored article_features = %+v, want no persisted feature row after pure read", stored.ArticleFeatures)
 	}
 }
 
