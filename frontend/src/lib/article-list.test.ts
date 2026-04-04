@@ -22,6 +22,7 @@ function article(input: Partial<Article> & Pick<Article, "id">): Article {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("formatArticleTime", () => {
@@ -30,6 +31,14 @@ describe("formatArticleTime", () => {
     vi.setSystemTime(new Date("2026-02-26T08:00:00Z"));
     expect(formatArticleTime("2026-02-26T07:59:45Z")).toBe("刚刚");
     expect(formatArticleTime("2026-02-26T07:30:00Z")).toContain("分钟前");
+  });
+
+  it("formats dates using Intl DateTimeFormat", () => {
+    const formatter = { format: vi.fn(() => "2026/02/27") } as Intl.DateTimeFormat;
+    const dtfSpy = vi.spyOn(Intl, "DateTimeFormat").mockReturnValue(formatter);
+    const result = formatArticleTime("2026-02-26T23:30:00Z");
+    expect(dtfSpy).toHaveBeenCalledWith(undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
+    expect(result).toBe("2026/02/27");
   });
 });
 
