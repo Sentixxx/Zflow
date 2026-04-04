@@ -31,7 +31,8 @@ function makeFeed(): Feed {
 
 describe("ArticleList", () => {
   it("marks list as virtualized when rendering articles", () => {
-    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const globalWithAct = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    globalWithAct.IS_REACT_ACT_ENVIRONMENT = true;
     const container = document.createElement("div");
     const root = createRoot(container);
     const feed = makeFeed();

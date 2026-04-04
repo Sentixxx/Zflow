@@ -49,15 +49,24 @@ vi.mock("./useEntries", () => ({
 
 import { useReaderBootstrap } from "./useReaderBootstrap";
 
+type BootstrapSnapshot = {
+  client: ApiClient;
+  feeds: string[];
+  folders: string[];
+  articles: string[];
+  hasNextArticlePage: boolean;
+};
+
 describe("useReaderBootstrap", () => {
   it("wires shared reader data and actions", () => {
-    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const globalWithAct = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    globalWithAct.IS_REACT_ACT_ENVIRONMENT = true;
     const container = document.createElement("div");
     const root = createRoot(container);
-    let snapshot: ReturnType<typeof useReaderBootstrap> | null = null;
+    const snapshotRef = { current: null as BootstrapSnapshot | null };
 
     const Probe = () => {
-      snapshot = useReaderBootstrap("http://example.com", "latest");
+      snapshotRef.current = useReaderBootstrap("http://example.com", "latest") as unknown as BootstrapSnapshot;
       return null;
     };
 
@@ -65,10 +74,11 @@ describe("useReaderBootstrap", () => {
       root.render(<Probe />);
     });
 
-    expect(snapshot?.client).toBe(mockClient);
-    expect(snapshot?.feeds).toEqual(["feed"]);
-    expect(snapshot?.folders).toEqual(["folder"]);
-    expect(snapshot?.articles).toEqual(["article"]);
-    expect(snapshot?.hasNextArticlePage).toBe(true);
+    const snapshot = snapshotRef.current as BootstrapSnapshot;
+    expect(snapshot.client).toBe(mockClient);
+    expect(snapshot.feeds).toEqual(["feed"]);
+    expect(snapshot.folders).toEqual(["folder"]);
+    expect(snapshot.articles).toEqual(["article"]);
+    expect(snapshot.hasNextArticlePage).toBe(true);
   });
 });

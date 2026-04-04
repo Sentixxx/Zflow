@@ -124,6 +124,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     handleRefreshArticles,
     handleRefreshFeeds,
     addFeed,
+    createRootFolder,
     setMessage,
     status,
     error,

@@ -34,7 +34,7 @@ describe("formatArticleTime", () => {
   });
 
   it("formats dates using Intl DateTimeFormat", () => {
-    const formatter = { format: vi.fn(() => "2026/02/27") } as Intl.DateTimeFormat;
+    const formatter = { format: vi.fn(() => "2026/02/27") } as unknown as Intl.DateTimeFormat;
     const dtfSpy = vi.spyOn(Intl, "DateTimeFormat").mockReturnValue(formatter);
     const result = formatArticleTime("2026-02-26T23:30:00Z");
     expect(dtfSpy).toHaveBeenCalledWith(undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
