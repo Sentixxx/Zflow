@@ -26,19 +26,18 @@ export function ToolbarIconButton({
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
           onClick={onClick}
           disabled={disabled || loading}
           aria-label={ariaLabel}
-          className={cn(active && "bg-accent text-accent-foreground border-primary/40")}
+          className={cn(
+            "h-8 w-8",
+            active && "text-primary bg-primary/10",
+            loading && "[&_svg]:animate-spin"
+          )}
         >
-          <span
-            className={cn("text-base font-semibold leading-none", loading && "animate-[spin_0.78s_linear_infinite]")}
-            style={{ display: "inline-block" }}
-          >
-            {children}
-          </span>
+          {children}
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">{title}</TooltipContent>

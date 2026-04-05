@@ -42,11 +42,11 @@ export function TopBar({
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2">
+      <div className="flex gap-1">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant="outline"
+              variant="ghost"
               size="icon"
               onClick={onRefreshArticles}
               disabled={isRefreshingArticles || isRefreshingFeeds}
@@ -63,7 +63,7 @@ export function TopBar({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant="outline"
+              variant="ghost"
               size="icon"
               onClick={onRefreshFeeds}
               disabled={isRefreshingFeeds || isRefreshingArticles}
