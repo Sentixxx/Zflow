@@ -74,23 +74,23 @@
   container-name: article-pane;
 }
 
-/* Fluid content wrapper: padding and max-width scale with panel width */
+/* Fluid content wrapper: side padding is always 5% of panel width */
 .article-content-wrapper {
-  padding: 20px 16px 96px;
+  padding: 1.25rem 5% 6rem;
 }
 
-@container article-pane (min-width: 360px) {
-  .article-content-wrapper { padding: 20px 24px 96px; }
+/* Font scales smoothly with panel width (1cqw = 1% of container) */
+.article-content-wrapper .prose-article {
+  font-size: clamp(14.5px, 2.8cqw, 17.5px);
 }
 
-@container article-pane (min-width: 560px) {
-  .article-content-wrapper { padding: 24px 48px 96px; }
-  .article-content-wrapper .prose-article { font-size: 16.5px; }
-}
-
-@container article-pane (min-width: 780px) {
-  .article-content-wrapper { padding: 28px 80px 96px; max-width: 1000px; margin-left: auto; margin-right: auto; }
-  .article-content-wrapper .prose-article { font-size: 17px; line-height: 1.95; }
+/* On very wide panels, cap line width and centre */
+@container article-pane (min-width: 900px) {
+  .article-content-wrapper {
+    max-width: 880px;
+    margin-left: auto;
+    margin-right: auto;
+  }
 }
 
 /* Prose styles for rendered article HTML (dangerouslySetInnerHTML content) */
