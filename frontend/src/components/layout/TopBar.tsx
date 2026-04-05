@@ -1,3 +1,4 @@
+import { RefreshCw, Rss } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -51,12 +52,7 @@ export function TopBar({
               disabled={isRefreshingArticles || isRefreshingFeeds}
               aria-label={isRefreshingArticles ? "正在刷新文章" : "刷新文章列表"}
             >
-              <span
-                className={cn("text-lg font-semibold leading-none", isRefreshingArticles && "animate-[spin_0.78s_linear_infinite]")}
-                style={{ display: "inline-block" }}
-              >
-                ⟳
-              </span>
+              <RefreshCw className={cn("w-4 h-4", isRefreshingArticles && "animate-spin")} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
@@ -73,12 +69,7 @@ export function TopBar({
               disabled={isRefreshingFeeds || isRefreshingArticles}
               aria-label={isRefreshingFeeds ? "正在远端抓取订阅源" : "远端抓取订阅源"}
             >
-              <span
-                className={cn("text-lg font-semibold leading-none", isRefreshingFeeds && "animate-[spin_0.78s_linear_infinite]")}
-                style={{ display: "inline-block" }}
-              >
-                ◎
-              </span>
+              <Rss className={cn("w-4 h-4", isRefreshingFeeds && "animate-pulse")} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">

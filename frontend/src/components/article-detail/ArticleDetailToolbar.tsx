@@ -1,6 +1,11 @@
-import sourceSiteIcon from "../../assets/source-site.svg";
-import readabilityIcon from "../../assets/readability.svg";
-import markUnreadIcon from "../../assets/mark-unread.svg";
+import {
+  BookOpen,
+  Star,
+  FileText,
+  ExternalLink,
+  MoreHorizontal,
+  RefreshCw,
+} from "lucide-react";
 import { ToolbarIconButton } from "@/components/ui/ToolbarIconButton";
 import {
   DropdownMenu,
@@ -10,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 type ArticleDetailToolbarProps = {
   canMarkUnread: boolean;
@@ -47,14 +53,14 @@ export function ArticleDetailToolbar({
   onRefreshArticleCache,
 }: ArticleDetailToolbarProps) {
   return (
-    <div className="flex items-center gap-1.5 flex-shrink-0">
+    <div className="flex items-center gap-1 flex-shrink-0">
       <ToolbarIconButton
         onClick={onMarkUnread}
         disabled={!canMarkUnread}
         title={canMarkUnread ? "标记为未读" : "当前已是未读"}
         ariaLabel="标记未读"
       >
-        <img className="w-4 h-4" src={markUnreadIcon} alt="" />
+        <BookOpen className="w-4 h-4" />
       </ToolbarIconButton>
 
       <ToolbarIconButton
@@ -64,7 +70,12 @@ export function ArticleDetailToolbar({
         ariaLabel={isFavorite ? "取消收藏" : "收藏文章"}
         active={isFavorite}
       >
-        <span className="text-base" aria-hidden="true">{isFavorite ? "★" : "☆"}</span>
+        <Star
+          className={cn(
+            "w-4 h-4 transition-colors",
+            isFavorite && "fill-amber-400 text-amber-400"
+          )}
+        />
       </ToolbarIconButton>
 
       <ToolbarIconButton
@@ -82,7 +93,7 @@ export function ArticleDetailToolbar({
         }
         ariaLabel={hasReadableContent ? "重新抓取正文" : "抓取正文"}
       >
-        <img className="w-4 h-4" src={readabilityIcon} alt="" />
+        <FileText className="w-4 h-4" />
       </ToolbarIconButton>
 
       <ToolbarIconButton
@@ -91,7 +102,7 @@ export function ArticleDetailToolbar({
         title={canOpenSourceSite ? `在新标签页打开原文：${sourceSiteURL}` : "当前文章缺少可用链接"}
         ariaLabel="打开原文链接"
       >
-        <img className="w-4 h-4" src={sourceSiteIcon} alt="" />
+        <ExternalLink className="w-4 h-4" />
       </ToolbarIconButton>
 
       {/* More menu */}
@@ -99,8 +110,8 @@ export function ArticleDetailToolbar({
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" aria-label="更多工具">
-                <span className="text-base font-bold tracking-widest leading-none">···</span>
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="更多工具">
+                <MoreHorizontal className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
@@ -111,6 +122,7 @@ export function ArticleDetailToolbar({
             onClick={onRefreshArticleCache}
             disabled={!canRefreshArticleCache || isRefreshingArticleCache}
           >
+            <RefreshCw className={cn("w-3.5 h-3.5 mr-2", isRefreshingArticleCache && "animate-spin")} />
             {isRefreshingArticleCache ? "刷新中..." : "刷新当前文章缓存"}
           </DropdownMenuItem>
         </DropdownMenuContent>
