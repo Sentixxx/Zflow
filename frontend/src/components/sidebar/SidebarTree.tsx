@@ -1,6 +1,8 @@
 import type { Article, Feed, Folder } from "@/types";
 import { feedHost } from "@/lib/feed-utils";
 import { RssFallbackIcon } from "@/components/ui";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
 type SidebarMode = "subscriptions" | "favorites";
 
@@ -83,79 +85,79 @@ export function SidebarTree({
 }: SidebarTreeProps) {
   const renderFeedNode = (feed: Feed, paddingLeft: number) => {
     const isRenaming = renamingFeedID === feed.id;
+    const isDragging = draggingFeedID === feed.id;
+    const isSelected = selectedFeedID === feed.id;
     const host = feedHost(feed.url);
-    const iconSrc = feed.icon_url ? `${apiBase.replace(/\/$/, "")}${feed.icon_url}` : feedIconURLByHost.get(host) || "";
+    const iconSrc = feed.icon_url
+      ? `${apiBase.replace(/\/$/, "")}${feed.icon_url}`
+      : feedIconURLByHost.get(host) || "";
+
     return (
-      <div key={`feed-${feed.id}`} className={`tree-row feed-row ${isRenaming ? "editing" : ""}`}>
+      <div key={`feed-${feed.id}`} className="relative group">
         <button
-          className={`item feed-item ${selectedFeedID === feed.id ? "active" : ""} ${draggingFeedID === feed.id ? "dragging" : ""}`}
+          className={cn(
+            "w-full text-left px-2 py-1.5 text-sm transition-colors border-b border-border/50 pr-8",
+            isSelected ? "bg-accent text-accent-foreground border-l-2 border-l-primary" : "hover:bg-muted/60",
+            isDragging && "opacity-40"
+          )}
           style={{ paddingLeft }}
-          onClick={() => {
-            if (!isRenaming) {
-              onSelectFeed(feed.id);
-            }
-          }}
+          onClick={() => { if (!isRenaming) onSelectFeed(feed.id); }}
           draggable={!isRenaming}
-          onDragStart={(event) => {
-            if (isRenaming) return;
-            onFeedDragStart(event, feed.id);
-          }}
+          onDragStart={(event) => { if (isRenaming) return; onFeedDragStart(event, feed.id); }}
           onDragEnd={onFeedDragEnd}
         >
           {isRenaming ? (
-            <div className="feed-rename-row" onClick={(event) => event.stopPropagation()}>
+            <div onClick={(event) => event.stopPropagation()}>
               <input
-                className="feed-rename-input"
+                className="w-full rounded border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 value={renamingFeedTitle}
                 onChange={(event) => onRenamingFeedTitleChange(event.target.value)}
                 autoFocus
-                onBlur={() => {
-                  onRenameFeed(feed.id);
-                }}
+                onBlur={() => onRenameFeed(feed.id)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    onRenameFeed(feed.id);
-                  }
+                  if (event.key === "Enter") { event.preventDefault(); onRenameFeed(feed.id); }
                 }}
               />
             </div>
           ) : (
-            <div className="feed-title-row">
-              {iconSrc ? (
-                <>
-                  <img
-                    className="feed-icon"
-                    src={iconSrc}
-                    alt=""
-                    loading="lazy"
-                    onError={(event) => {
-                      event.currentTarget.style.display = "none";
-                      const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
-                      if (fallback) {
-                        fallback.style.display = "inline-flex";
-                      }
-                    }}
-                  />
-                  <span className="feed-icon-fallback" style={{ display: "none" }} aria-hidden="true">
+            <>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                {iconSrc ? (
+                  <>
+                    <img
+                      className="w-3.5 h-3.5 rounded-sm object-cover flex-shrink-0"
+                      src={iconSrc} alt="" loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                        const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
+                        if (fallback) fallback.style.display = "inline-flex";
+                      }}
+                    />
+                    <span className="hidden w-3.5 h-3.5 text-orange-500 flex-shrink-0" aria-hidden="true">
+                      <RssFallbackIcon />
+                    </span>
+                  </>
+                ) : (
+                  <span className="inline-flex w-3.5 h-3.5 text-orange-500 flex-shrink-0" aria-hidden="true">
                     <RssFallbackIcon />
                   </span>
-                </>
-              ) : (
-                <span className="feed-icon-fallback" aria-hidden="true">
-                  <RssFallbackIcon />
-                </span>
-              )}
-              <strong>{feed.title || "(未命名源)"}</strong>
-            </div>
+                )}
+                <span className="font-medium truncate">{feed.title || "(未命名源)"}</span>
+              </div>
+              <div className="text-xs text-muted-foreground truncate">
+                {feed.url} · {feed.item_count} · {feed.last_fetch_status}
+                {feed.last_fetch_status === "failed" && feed.last_fetch_error ? ` · ${feed.last_fetch_error}` : ""}
+              </div>
+            </>
           )}
-          <div className="meta">
-            {feed.url} · items={feed.item_count} · {feed.last_fetch_status}
-            {feed.last_fetch_status === "failed" && feed.last_fetch_error ? ` · 错误: ${feed.last_fetch_error}` : ""}
-          </div>
         </button>
         {!isRenaming && (
-          <button className="node-action-btn" onClick={(event) => onOpenFeedContextMenu(event, feed)} title="管理订阅源" aria-label={`管理订阅源 ${feed.title || feed.url}`}>
+          <button
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted flex items-center justify-center text-muted-foreground transition-opacity"
+            onClick={(event) => onOpenFeedContextMenu(event, feed)}
+            title="管理订阅源"
+            aria-label={`管理订阅源 ${feed.title || feed.url}`}
+          >
             ⋯
           </button>
         )}
@@ -168,70 +170,115 @@ export function SidebarTree({
     const folderFeeds = feedsByFolder.get(folder.id) || [];
     const hasChildren = children.length > 0 || folderFeeds.length > 0;
     const expanded = !collapsedFolders[folder.id];
+    const isSelected = selectedFolderID === folder.id;
+    const isDragTarget = dragOverFolderID === folder.id;
     const paddingLeft = 8 + depth * 14;
+
     return (
       <div key={`folder-${folder.id}`}>
         <div
-          className={`tree-row ${selectedFolderID === folder.id ? "active" : ""} ${dragOverFolderID === folder.id ? "drop-target" : ""}`}
+          className={cn("relative group", isDragTarget && "bg-accent/40")}
           onDragOver={(event) => onFolderDragOver(event, folder.id)}
           onDragLeave={() => onFolderDragLeave(folder.id)}
           onDrop={(event) => onFolderDrop(event, folder.id)}
         >
-          <button className={`item folder-item ${selectedFolderID === folder.id ? "active" : ""}`} onClick={() => onSelectFolder(folder.id)} style={{ paddingLeft }}>
+          <button
+            className={cn(
+              "w-full text-left px-2 py-1.5 text-sm font-semibold border-b border-border/50 pr-8 flex items-center gap-1.5 transition-colors",
+              isSelected ? "bg-accent text-accent-foreground border-l-2 border-l-primary" : "hover:bg-muted/60"
+            )}
+            style={{ paddingLeft }}
+            onClick={() => onSelectFolder(folder.id)}
+          >
             <span
-              className={`folder-caret ${expanded ? "expanded" : ""} ${hasChildren ? "" : "disabled"}`}
+              className={cn(
+                "w-3 text-muted-foreground text-xs transition-transform duration-150",
+                hasChildren ? "cursor-pointer" : "opacity-30",
+                expanded && hasChildren && "rotate-90"
+              )}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                if (hasChildren) {
-                  onToggleFolderCollapsed(folder.id);
-                }
+                if (hasChildren) onToggleFolderCollapsed(folder.id);
               }}
             >
               ▸
             </span>
-            <span className="folder-name">{folder.name}</span>
+            <span className="truncate">{folder.name}</span>
           </button>
-          <button className="node-action-btn" onClick={(event) => onOpenFolderContextMenu(event, folder)} title="管理分类" aria-label={`管理分类 ${folder.name}`}>
+          <button
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted flex items-center justify-center text-muted-foreground transition-opacity"
+            onClick={(event) => onOpenFolderContextMenu(event, folder)}
+            title="管理分类"
+            aria-label={`管理分类 ${folder.name}`}
+          >
             ⋯
           </button>
         </div>
-        <div className={`folder-children ${expanded ? "expanded" : "collapsed"}`}>
-          <div className="folder-children-inner">
+        {expanded && (
+          <div>
             {folderFeeds.map((feed) => renderFeedNode(feed, paddingLeft + 18))}
             {children.map((child) => renderFolderNode(child, depth + 1))}
           </div>
-        </div>
+        )}
       </div>
     );
   };
 
   return (
-    <div className="sidebar-content">
-      <div className="sidebar-mode-tabs">
-        <button className={`sidebar-mode-tab ${sidebarMode === "subscriptions" ? "active" : ""}`} onClick={() => onSwitchSidebarMode("subscriptions")}>
-          订阅源
-        </button>
-        <button className={`sidebar-mode-tab ${sidebarMode === "favorites" ? "active" : ""}`} onClick={() => onSwitchSidebarMode("favorites")}>
-          收藏
-        </button>
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+      {/* Mode tabs */}
+      <div className="grid grid-cols-2 gap-1.5 px-2 pt-2 pb-1.5 shrink-0">
+        {(["subscriptions", "favorites"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => onSwitchSidebarMode(mode)}
+            className={cn(
+              "rounded-md px-2 py-1.5 text-sm font-medium transition-colors border",
+              sidebarMode === mode
+                ? "bg-accent text-accent-foreground border-primary/30"
+                : "bg-transparent text-muted-foreground border-transparent hover:border-border hover:bg-muted/50"
+            )}
+          >
+            {mode === "subscriptions" ? "订阅源" : "收藏"}
+          </button>
+        ))}
       </div>
-      {sidebarMode === "subscriptions" ? (
-        <>
-          <div className="section-head">
-            <h3 className="section-title">订阅列表</h3>
-            <button className="mini-btn" onClick={onCreateRootFolder}>
-              新建分类
-            </button>
-          </div>
-          <div className="list">
-            <button className={`item feed-item ${selectedFeedID == null && selectedFolderID == null ? "active" : ""}`} onClick={() => onSelectFeed(null)}>
-              <strong>全部订阅源</strong>
+
+      <Separator />
+
+      {/* List content */}
+      <div className="flex-1 min-h-0 overflow-auto pb-14">
+        {sidebarMode === "subscriptions" ? (
+          <>
+            <div className="flex items-center justify-between px-3 py-2">
+              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">订阅列表</span>
+              <button
+                onClick={onCreateRootFolder}
+                className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:bg-muted/60 transition-colors"
+              >
+                新建分类
+              </button>
+            </div>
+            {/* All feeds item */}
+            <button
+              className={cn(
+                "w-full text-left px-3 py-1.5 text-sm font-medium border-b border-border/50 transition-colors",
+                selectedFeedID == null && selectedFolderID == null
+                  ? "bg-accent text-accent-foreground border-l-2 border-l-primary"
+                  : "hover:bg-muted/60"
+              )}
+              onClick={() => onSelectFeed(null)}
+            >
+              全部订阅源
             </button>
             {rootFolders.map((folder) => renderFolderNode(folder))}
             {uncategorizedFeeds.length > 0 && (
               <div
-                className={`tree-divider ${dragOverUncategorized ? "drop-target" : ""}`}
+                className={cn(
+                  "px-3 py-1 text-xs text-muted-foreground border-b border-border/50 transition-colors",
+                  dragOverUncategorized && "bg-accent/40"
+                )}
                 onDragOver={onUncategorizedDragOver}
                 onDragLeave={onUncategorizedDragLeave}
                 onDrop={onUncategorizedDrop}
@@ -240,32 +287,37 @@ export function SidebarTree({
               </div>
             )}
             {uncategorizedFeeds.map((feed) => renderFeedNode(feed, 8))}
-            {feeds.length === 0 && <div className="item">暂无订阅</div>}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="section-head">
-            <h3 className="section-title">收藏文章</h3>
-          </div>
-          <div className="list">
+            {feeds.length === 0 && (
+              <div className="px-3 py-4 text-sm text-muted-foreground">暂无订阅</div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="px-3 py-2">
+              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">收藏文章</span>
+            </div>
             {favoriteArticles.map((article) => (
               <button
                 key={`favorite-${article.id}`}
-                className={`item favorite-entry ${selectedArticleID === article.id ? "active" : ""}`}
+                className={cn(
+                  "w-full text-left px-3 py-2 text-sm border-b border-border/50 flex items-start gap-2 transition-colors",
+                  selectedArticleID === article.id
+                    ? "bg-accent text-accent-foreground border-l-2 border-l-primary"
+                    : "hover:bg-muted/60"
+                )}
                 onClick={() => onSelectArticle(article.id)}
                 title={article.title || "(无标题)"}
               >
-                <span className="favorite-entry-star" aria-hidden="true">
-                  ☆
-                </span>
-                <span className="favorite-entry-title">{article.title || "(无标题)"}</span>
+                <span className="text-amber-400 shrink-0 mt-0.5" aria-hidden="true">☆</span>
+                <span className="truncate">{article.title || "(无标题)"}</span>
               </button>
             ))}
-            {favoriteArticles.length === 0 && <div className="item">暂无收藏</div>}
-          </div>
-        </>
-      )}
+            {favoriteArticles.length === 0 && (
+              <div className="px-3 py-4 text-sm text-muted-foreground">暂无收藏</div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

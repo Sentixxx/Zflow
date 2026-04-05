@@ -27,6 +27,8 @@ import { useSidebarFeedActions } from "@/hooks/useSidebarFeedActions";
 import { useReaderLayout } from "@/hooks/useReaderLayout";
 import { shouldHydrateArticlePool } from "@/hooks/article-pages";
 import { useSettingsState } from "@/hooks/useSettingsState";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const PREFETCH_BATCH_SIZE = 20;
 const VISIBLE_STEP_SIZE = 10;
@@ -709,40 +711,69 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   }, [articles.length, hasNextArticlePage, articlesInfiniteQuery.isFetching, articlesInfiniteQuery.isFetchingNextPage, fetchNextArticlePage]);
 
   return (
-    <div className="shell">
-      <TopBar
-        statusText={error || status}
-        isError={Boolean(error)}
-        isRefreshingArticles={isRefreshingArticles}
-        isRefreshingFeeds={isRefreshingFeeds}
-        onRefreshArticles={handleRefreshArticles}
-        onRefreshFeeds={refreshFeedsFromNetwork}
-      />
+    <div className="h-screen flex flex-col overflow-hidden bg-background">
+      {/* Top bar */}
+      <div className="px-3 pt-3 pb-0 shrink-0">
+        <TopBar
+          statusText={error || status}
+          isError={Boolean(error)}
+          isRefreshingArticles={isRefreshingArticles}
+          isRefreshingFeeds={isRefreshingFeeds}
+          onRefreshArticles={handleRefreshArticles}
+          onRefreshFeeds={refreshFeedsFromNetwork}
+        />
+      </div>
       <RefreshFailureBanner failures={refreshFailures} onClose={() => setRefreshFailures([])} />
 
-      <main className={`layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={layoutStyle}>
-        <section className={`panel sidebar ${sidebarCollapsed ? "collapsed" : ""} ${isNarrow && mobilePane !== "nav" ? "mobile-hidden" : "mobile-active"}`}>
-          <div className="sidebar-header">
-            <h2 className={`sidebar-title ${sidebarCollapsed ? "hidden" : ""}`}>内容导航</h2>
+      {/* Three-column resizable layout */}
+      <main
+        className={cn("flex-1 min-h-0 grid overflow-hidden", isNarrow && "!grid-cols-[1fr]")}
+        style={layoutStyle}
+      >
+        {/* Sidebar */}
+        <section
+          className={cn(
+            "flex flex-col h-full overflow-hidden border-r border-border",
+            isNarrow && mobilePane !== "nav" && "hidden"
+          )}
+        >
+          {/* Sidebar header */}
+          <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border shrink-0">
             {!sidebarCollapsed && (
-              <div className="sidebar-header-actions">
-                <button className="sidebar-quick-add-btn" onClick={openQuickAddFeed} title="快速添加订阅源" aria-label="快速添加订阅源">
-                  +
-                </button>
-              </div>
+              <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex-1 truncate">
+                内容导航
+              </h2>
+            )}
+            {!sidebarCollapsed && (
+              <button
+                className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground text-base leading-none transition-colors"
+                onClick={openQuickAddFeed}
+                title="快速添加订阅源"
+                aria-label="快速添加订阅源"
+              >
+                +
+              </button>
             )}
             {!isNarrow && (
               <button
-                className="sidebar-toggle"
+                className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
                 onClick={() => setSidebarCollapsed((v) => !v)}
                 aria-label={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
                 title={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
               >
-                <span className={`chevron ${sidebarCollapsed ? "right" : "left"}`}>⌃</span>
+                <span
+                  className={cn(
+                    "text-xs transition-transform duration-150",
+                    sidebarCollapsed ? "rotate-90" : "-rotate-90"
+                  )}
+                >
+                  ⌃
+                </span>
               </button>
             )}
           </div>
 
+          {/* Sidebar tree */}
           {!sidebarCollapsed && (
             <SidebarTree
               sidebarMode={sidebarMode}
@@ -766,12 +797,8 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
               onSwitchSidebarMode={switchSidebarMode}
               onCreateRootFolder={createRootFolder}
               onSelectFeed={selectFeed}
-              onSelectFolder={(folderID) => {
-                selectFolder(folderID);
-              }}
-              onSelectArticle={(articleID) => {
-                void selectArticle(articleID);
-              }}
+              onSelectFolder={(folderID) => { selectFolder(folderID); }}
+              onSelectArticle={(articleID) => { void selectArticle(articleID); }}
               onToggleFolderCollapsed={toggleFolderCollapsed}
               onOpenFeedContextMenu={openFeedContextMenu}
               onOpenFolderContextMenu={openFolderContextMenu}
@@ -779,32 +806,39 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
               onFeedDragEnd={onFeedDragEnd}
               onFolderDragOver={onFolderDragOver}
               onFolderDragLeave={onFolderDragLeave}
-              onFolderDrop={(event, folderID) => {
-                void onFolderDrop(event, folderID);
-              }}
+              onFolderDrop={(event, folderID) => { void onFolderDrop(event, folderID); }}
               onUncategorizedDragOver={onUncategorizedDragOver}
               onUncategorizedDragLeave={onUncategorizedDragLeave}
-              onUncategorizedDrop={(event) => {
-                void onUncategorizedDrop(event);
-              }}
+              onUncategorizedDrop={(event) => { void onUncategorizedDrop(event); }}
               onRenamingFeedTitleChange={setRenamingFeedTitle}
-              onRenameFeed={(feedID) => {
-                void renameFeed(feedID);
-              }}
+              onRenameFeed={(feedID) => { void renameFeed(feedID); }}
             />
           )}
 
-          <div className={`sidebar-footer ${sidebarCollapsed ? "collapsed" : ""}`}>
-            <button className="settings-entry" onClick={toggleSettings} title="设置" aria-label="打开设置">
-              <span className="gear">⚙</span>
+          {/* Sidebar footer */}
+          <div className="shrink-0 border-t border-border p-2 mt-auto">
+            <button
+              className={cn(
+                "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors",
+                sidebarCollapsed && "justify-center"
+              )}
+              onClick={toggleSettings}
+              title="设置"
+              aria-label="打开设置"
+            >
+              <span className="text-base leading-none">⚙</span>
               {!sidebarCollapsed && <span>设置</span>}
             </button>
           </div>
-
         </section>
+
+        {/* Sidebar resizer */}
         {!isNarrow && (
           <div
-            className={`resizer ${sidebarCollapsed ? "disabled" : ""}`}
+            className={cn(
+              "w-2 cursor-col-resize bg-border/20 hover:bg-primary/20 transition-colors shrink-0",
+              sidebarCollapsed && "cursor-default"
+            )}
             onMouseDown={beginResize("sidebar")}
             role="separator"
             aria-orientation="vertical"
@@ -812,14 +846,25 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
           />
         )}
 
-        <section className={`panel list-panel ${isNarrow && mobilePane !== "list" ? "mobile-hidden" : "mobile-active"}`}>
-          <div className="list-header">
-            <h2>{articleListTitle}</h2>
-            <ArticleListToolbar readFilter={readFilter} sortMode={sortMode} onToggleReadFilter={toggleReadFilter} onSortModeChange={handleSortModeChange} />
+        {/* Article list panel */}
+        <section
+          className={cn(
+            "flex flex-col h-full overflow-hidden border-r border-border",
+            isNarrow && mobilePane !== "list" && "hidden"
+          )}
+        >
+          <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border shrink-0">
+            <h2 className="text-sm font-semibold truncate">{articleListTitle}</h2>
+            <ArticleListToolbar
+              readFilter={readFilter}
+              sortMode={sortMode}
+              onToggleReadFilter={toggleReadFilter}
+              onSortModeChange={handleSortModeChange}
+            />
           </div>
           {hasListContextOverrides && (
-            <div className="list-context-bar">
-              <span className="list-context-text">{listContextSummary}</span>
+            <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border bg-muted/20 shrink-0">
+              {listContextSummary}
             </div>
           )}
           <ArticleList
@@ -830,22 +875,31 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
             apiBase={apiBase}
             listBounce={listBounce}
             onScroll={onArticleListScroll}
-            onSelectArticle={(id) => {
-              void selectArticle(id);
-            }}
+            onSelectArticle={(id) => { void selectArticle(id); }}
           />
-          <div className="pager">
-            <span className="meta">
-              已显示 {pagedArticles.length} / {filteredAndSortedArticles.length} 条 · 预取20条，每次追加10条
-            </span>
+          <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border shrink-0">
+            已显示 {pagedArticles.length} / {filteredAndSortedArticles.length} 条 · 预取20条，每次追加10条
           </div>
-
         </section>
+
+        {/* List resizer */}
         {!isNarrow && (
-          <div className="resizer" onMouseDown={beginResize("list")} role="separator" aria-orientation="vertical" aria-label="调整文章列表宽度" />
+          <div
+            className="w-2 cursor-col-resize bg-border/20 hover:bg-primary/20 transition-colors shrink-0"
+            onMouseDown={beginResize("list")}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整文章列表宽度"
+          />
         )}
 
-        <section className={`panel detail-panel ${isNarrow && mobilePane !== "detail" ? "mobile-hidden" : "mobile-active"}`}>
+        {/* Article detail panel */}
+        <section
+          className={cn(
+            "flex flex-col h-full overflow-hidden",
+            isNarrow && mobilePane !== "detail" && "hidden"
+          )}
+        >
           <ArticleDetailContent
             key={selectedArticle?.id ?? "empty"}
             article={selectedArticle}
@@ -871,90 +925,111 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
             onExtractReadable={extractReadableContent}
             onRefreshArticleCache={refreshCurrentArticleCache}
             onTranslateArticle={translateArticle}
-            onGoPrev={() => {
-              if (previousArticleID == null) {
-                return;
-              }
-              void selectArticle(previousArticleID);
-            }}
-            onGoNext={() => {
-              if (nextArticleID == null) {
-                return;
-              }
-              void selectArticle(nextArticleID);
-            }}
+            onGoPrev={() => { if (previousArticleID != null) void selectArticle(previousArticleID); }}
+            onGoNext={() => { if (nextArticleID != null) void selectArticle(nextArticleID); }}
           />
         </section>
       </main>
 
+      {/* Mobile bottom navigation */}
       {isNarrow && (
-        <nav className="mobile-bottom-nav" aria-label="移动端分栏导航">
-          <button className={`mobile-bottom-nav-btn ${mobilePane === "nav" ? "active" : ""}`} onClick={() => setMobilePane("nav")}>
-            导航
-            <span className="mobile-bottom-nav-count">{feeds.length}</span>
-          </button>
-          <button className={`mobile-bottom-nav-btn ${mobilePane === "list" ? "active" : ""}`} onClick={() => setMobilePane("list")}>
-            列表
-            <span className="mobile-bottom-nav-count">{filteredAndSortedArticles.length}</span>
-          </button>
-          <button
-            className={`mobile-bottom-nav-btn ${mobilePane === "detail" ? "active" : ""}`}
-            onClick={() => setMobilePane("detail")}
-            disabled={!selectedArticle}
-          >
-            详情
-          </button>
+        <nav
+          className="fixed bottom-0 left-0 right-0 grid grid-cols-3 border-t border-border bg-background/95 backdrop-blur-sm z-40"
+          aria-label="移动端分栏导航"
+        >
+          {(["nav", "list", "detail"] as const).map((pane) => {
+            const labels = { nav: "导航", list: "列表", detail: "详情" };
+            const counts = { nav: feeds.length, list: filteredAndSortedArticles.length, detail: null };
+            return (
+              <button
+                key={pane}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-0.5 py-2.5 text-xs transition-colors",
+                  mobilePane === pane
+                    ? "text-primary font-medium"
+                    : "text-muted-foreground hover:text-foreground",
+                  pane === "detail" && !selectedArticle && "opacity-40"
+                )}
+                onClick={() => setMobilePane(pane)}
+                disabled={pane === "detail" && !selectedArticle}
+              >
+                <span>{labels[pane]}</span>
+                {counts[pane] != null && (
+                  <span className="text-[10px] text-muted-foreground">{counts[pane]}</span>
+                )}
+              </button>
+            );
+          })}
         </nav>
       )}
 
+      {/* Drag-to-delete dropzone */}
       {draggingFeedID != null && (
         <div
-          className={`delete-dropzone ${dragOverDeleteZone ? "active" : ""}`}
+          className={cn(
+            "fixed bottom-20 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 px-6 py-4 rounded-xl border-2 border-dashed transition-colors z-50",
+            dragOverDeleteZone
+              ? "border-destructive bg-destructive/15 text-destructive"
+              : "border-border bg-background/90 text-muted-foreground"
+          )}
           onDragOver={onDeleteZoneDragOver}
           onDragLeave={onDeleteZoneDragLeave}
           onDrop={onDeleteZoneDrop}
         >
-          <div className="delete-dropzone-icon">🗑</div>
-          <div className="delete-dropzone-text">拖到这里删除订阅源</div>
+          <span className="text-2xl">🗑</span>
+          <span className="text-sm font-medium">拖到这里删除订阅源</span>
         </div>
       )}
 
+      {/* Delete feed confirm dialog */}
       {pendingDeleteFeed && (
-        <div className="modal-backdrop" onClick={() => setPendingDeleteFeed(null)}>
-          <div className="confirm-modal" onClick={(event) => event.stopPropagation()}>
-            <h3>确认删除订阅源</h3>
-            <p>{pendingDeleteFeed.title || pendingDeleteFeed.url}</p>
-            <div className="row">
-              <button className="secondary" onClick={() => setPendingDeleteFeed(null)}>
-                取消
-              </button>
-              <button className="danger-btn" onClick={() => void deleteFeed(pendingDeleteFeed)}>
-                删除
-              </button>
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => setPendingDeleteFeed(null)}
+        >
+          <div
+            className="bg-background rounded-xl shadow-xl border border-border p-6 w-full max-w-sm space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold">确认删除订阅源</h3>
+            <p className="text-sm text-muted-foreground">{pendingDeleteFeed.title || pendingDeleteFeed.url}</p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setPendingDeleteFeed(null)}>取消</Button>
+              <Button variant="destructive" onClick={() => void deleteFeed(pendingDeleteFeed)}>删除</Button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Change category dialog */}
       {manageCategoryFeed && (
-        <div className="modal-backdrop" onClick={() => setManageCategoryFeed(null)}>
-          <div className="confirm-modal category-modal" onClick={(event) => event.stopPropagation()}>
-            <h3>修改订阅分类</h3>
-            <p>{manageCategoryFeed.title || manageCategoryFeed.url}</p>
-            <label htmlFor="manageFeedFolder">目标分类</label>
-            <select id="manageFeedFolder" value={manageCategoryFolderID ?? ""} onChange={(e) => setManageCategoryFolderID(e.target.value ? Number(e.target.value) : null)}>
-              <option value="">未分类</option>
-              {folders.map((folder) => (
-                <option key={folder.id} value={folder.id}>
-                  {folder.name}
-                </option>
-              ))}
-            </select>
-            <div className="row">
-              <button className="secondary" onClick={() => setManageCategoryFeed(null)}>
-                取消
-              </button>
-              <button onClick={saveFeedCategory}>保存</button>
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => setManageCategoryFeed(null)}
+        >
+          <div
+            className="bg-background rounded-xl shadow-xl border border-border p-6 w-full max-w-sm space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold">修改订阅分类</h3>
+            <p className="text-sm text-muted-foreground">{manageCategoryFeed.title || manageCategoryFeed.url}</p>
+            <div className="space-y-1.5">
+              <label htmlFor="manageFeedFolder" className="text-sm font-medium">目标分类</label>
+              <select
+                id="manageFeedFolder"
+                value={manageCategoryFolderID ?? ""}
+                onChange={(e) => setManageCategoryFolderID(e.target.value ? Number(e.target.value) : null)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">未分类</option>
+                {folders.map((folder) => (
+                  <option key={folder.id} value={folder.id}>{folder.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setManageCategoryFeed(null)}>取消</Button>
+              <Button onClick={saveFeedCategory}>保存</Button>
             </div>
           </div>
         </div>
@@ -983,14 +1058,8 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
         scriptContent={scriptContent}
         onSelectScriptFeed={selectScriptFeed}
         onUploadScriptFile={uploadScriptFile}
-        onScriptLangChange={(lang) => {
-          setScriptLang(lang);
-          setScriptDirty(true);
-        }}
-        onScriptContentChange={(value) => {
-          setScriptContent(value);
-          setScriptDirty(true);
-        }}
+        onScriptLangChange={(lang) => { setScriptLang(lang); setScriptDirty(true); }}
+        onScriptContentChange={(value) => { setScriptContent(value); setScriptDirty(true); }}
         onSaveFeedScript={saveFeedScript}
         apiBase={apiBase}
         onAPIBaseChange={setApiBase}
@@ -1027,40 +1096,35 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
         onImportOPML={importOPML}
       />
 
+      {/* Feed context menu */}
       {feedContextMenu && (
-        <div className="context-menu" style={{ left: feedContextMenu.x, top: feedContextMenu.y }} onClick={(e) => e.stopPropagation()}>
-          <button className="context-item" onClick={() => startRenameFeed(feedContextMenu.feed)}>
-            重命名订阅
-          </button>
-          <button className="context-item" onClick={() => openFeedCategoryDialog(feedContextMenu.feed)}>
-            修改分类
-          </button>
-          <button className="context-item" onClick={() => openScriptSettingsForFeed(feedContextMenu.feed)}>
-            设置脚本
-          </button>
+        <div
+          className="fixed z-50 bg-background border border-border rounded-lg shadow-lg py-1 min-w-[148px]"
+          style={{ left: feedContextMenu.x, top: feedContextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors" onClick={() => startRenameFeed(feedContextMenu.feed)}>重命名订阅</button>
+          <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors" onClick={() => openFeedCategoryDialog(feedContextMenu.feed)}>修改分类</button>
+          <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors" onClick={() => openScriptSettingsForFeed(feedContextMenu.feed)}>设置脚本</button>
           <button
-            className="context-item danger"
-            onClick={() => {
-              setPendingDeleteFeed(feedContextMenu.feed);
-              closeFeedContextMenu();
-            }}
+            className="w-full text-left px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+            onClick={() => { setPendingDeleteFeed(feedContextMenu.feed); closeFeedContextMenu(); }}
           >
             删除订阅
           </button>
         </div>
       )}
 
+      {/* Folder context menu */}
       {folderContextMenu && (
-        <div className="context-menu" style={{ left: folderContextMenu.x, top: folderContextMenu.y }} onClick={(e) => e.stopPropagation()}>
-          <button className="context-item" onClick={createSubFolder}>
-            新建子分类
-          </button>
-          <button className="context-item" onClick={renameFolder}>
-            重命名分类
-          </button>
-          <button className="context-item danger" onClick={deleteFolder}>
-            删除分类
-          </button>
+        <div
+          className="fixed z-50 bg-background border border-border rounded-lg shadow-lg py-1 min-w-[148px]"
+          style={{ left: folderContextMenu.x, top: folderContextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors" onClick={createSubFolder}>新建子分类</button>
+          <button className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors" onClick={renameFolder}>重命名分类</button>
+          <button className="w-full text-left px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors" onClick={deleteFolder}>删除分类</button>
         </div>
       )}
     </div>

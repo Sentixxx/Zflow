@@ -1,4 +1,5 @@
 import { ArticleDetailToolbar } from "./ArticleDetailToolbar";
+import { Separator } from "@/components/ui/separator";
 
 type ArticleDetailTopBarProps = {
   title: string;
@@ -42,29 +43,36 @@ export function ArticleDetailTopBar({
   onRefreshArticleCache,
 }: ArticleDetailTopBarProps) {
   return (
-    <div className="detail-panel-head">
-      <div className="detail-panel-title-wrap">
-        <h2 className="detail-panel-title">{title}</h2>
-        {contextText && <p className="detail-panel-context">{contextText}</p>}
-        {recommendationText && <p className="detail-panel-context detail-panel-recommendation">{recommendationText}</p>}
+    <>
+      <div className="flex items-start justify-between gap-3 px-4 pt-3 pb-2">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold leading-snug truncate">{title}</h2>
+          {contextText && (
+            <p className="text-xs text-muted-foreground mt-0.5">{contextText}</p>
+          )}
+          {recommendationText && (
+            <p className="text-xs text-primary/80 mt-0.5">{recommendationText}</p>
+          )}
+        </div>
+        <ArticleDetailToolbar
+          canMarkUnread={canMarkUnread}
+          canToggleFavorite={canToggleFavorite}
+          isFavorite={isFavorite}
+          canOpenSourceSite={canOpenSourceSite}
+          canExtractReadable={canExtractReadable}
+          isExtractingReadable={isExtractingReadable}
+          canRefreshArticleCache={canRefreshArticleCache}
+          isRefreshingArticleCache={isRefreshingArticleCache}
+          hasReadableContent={hasReadableContent}
+          sourceSiteURL={sourceSiteURL}
+          onMarkUnread={onMarkUnread}
+          onToggleFavorite={onToggleFavorite}
+          onOpenSourceSite={onOpenSourceSite}
+          onExtractReadable={onExtractReadable}
+          onRefreshArticleCache={onRefreshArticleCache}
+        />
       </div>
-      <ArticleDetailToolbar
-        canMarkUnread={canMarkUnread}
-        canToggleFavorite={canToggleFavorite}
-        isFavorite={isFavorite}
-        canOpenSourceSite={canOpenSourceSite}
-        canExtractReadable={canExtractReadable}
-        isExtractingReadable={isExtractingReadable}
-        canRefreshArticleCache={canRefreshArticleCache}
-        isRefreshingArticleCache={isRefreshingArticleCache}
-        hasReadableContent={hasReadableContent}
-        sourceSiteURL={sourceSiteURL}
-        onMarkUnread={onMarkUnread}
-        onToggleFavorite={onToggleFavorite}
-        onOpenSourceSite={onOpenSourceSite}
-        onExtractReadable={onExtractReadable}
-        onRefreshArticleCache={onRefreshArticleCache}
-      />
-    </div>
+      <Separator />
+    </>
   );
 }

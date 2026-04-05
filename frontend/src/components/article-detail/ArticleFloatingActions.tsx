@@ -1,16 +1,6 @@
-type FloatingAction = {
-  id: string;
-  label: string;
-  icon: string;
-  title: string;
-};
-
-const FLOATING_ACTIONS: FloatingAction[] = [
-  { id: "prev", label: "上一篇", icon: "←", title: "上一篇" },
-  { id: "next", label: "下一篇", icon: "→", title: "下一篇" },
-  { id: "scroll-top", label: "回到顶部", icon: "↑", title: "回到顶部" },
-  { id: "translate", label: "一键翻译", icon: "译", title: "一键翻译" },
-];
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 type ArticleFloatingActionsProps = {
   onPrev: () => void;
@@ -22,42 +12,47 @@ type ArticleFloatingActionsProps = {
   isTranslating: boolean;
 };
 
-export function ArticleFloatingActions({ onPrev, onNext, canGoPrev, canGoNext, onScrollTop, onTranslate, isTranslating }: ArticleFloatingActionsProps) {
+export function ArticleFloatingActions({
+  onPrev,
+  onNext,
+  canGoPrev,
+  canGoNext,
+  onScrollTop,
+  onTranslate,
+  isTranslating,
+}: ArticleFloatingActionsProps) {
+  const actions = [
+    { id: "prev", icon: "←", label: "上一篇", disabled: !canGoPrev, onClick: onPrev },
+    { id: "next", icon: "→", label: "下一篇", disabled: !canGoNext, onClick: onNext },
+    { id: "scroll-top", icon: "↑", label: "回到顶部", disabled: false, onClick: onScrollTop },
+    { id: "translate", icon: "译", label: isTranslating ? "翻译中..." : "一键翻译", disabled: isTranslating, onClick: onTranslate },
+  ] as const;
+
   return (
-    <div className="article-floating-proximity" aria-hidden="false">
-      <aside className="article-floating-actions" aria-label="文章快捷操作">
-        {FLOATING_ACTIONS.map((action) => (
-          <button
-            key={action.id}
-            type="button"
-            className="floating-action-btn"
-            title={action.title}
-            aria-label={action.label}
-            disabled={(action.id === "translate" && isTranslating) || (action.id === "prev" && !canGoPrev) || (action.id === "next" && !canGoNext)}
-            onClick={() => {
-              if (action.id === "prev") {
-                onPrev();
-                return;
-              }
-              if (action.id === "next") {
-                onNext();
-                return;
-              }
-              if (action.id === "scroll-top") {
-                onScrollTop();
-                return;
-              }
-              if (action.id === "translate") {
-                onTranslate();
-              }
-            }}
-          >
-            <span className="floating-action-icon" aria-hidden="true">
-              {action.icon}
-            </span>
-          </button>
-        ))}
-      </aside>
-    </div>
+    <aside
+      className="fixed bottom-6 right-6 flex flex-col gap-1.5 z-30"
+      aria-label="文章快捷操作"
+    >
+      {actions.map((action) => (
+        <Tooltip key={action.id}>
+          <TooltipTrigger asChild>
+            <Button
+              variant="secondary"
+              size="icon"
+              disabled={action.disabled}
+              onClick={action.onClick}
+              aria-label={action.label}
+              className={cn(
+                "rounded-full shadow-md border border-border/60 w-9 h-9",
+                action.id === "translate" && isTranslating && "animate-pulse"
+              )}
+            >
+              <span className="text-base font-medium leading-none">{action.icon}</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">{action.label}</TooltipContent>
+        </Tooltip>
+      ))}
+    </aside>
   );
 }
