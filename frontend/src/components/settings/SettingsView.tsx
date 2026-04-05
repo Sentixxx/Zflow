@@ -6,6 +6,7 @@ import { ConnectionSettingsCard } from "./ConnectionSettingsCard";
 import { AISettingsCard } from "./AISettingsCard";
 import { DataSettingsCard } from "./DataSettingsCard";
 import type { ScriptLang, SettingsTab } from "./types";
+import { cn } from "@/lib/utils";
 
 export type SettingsViewProps = {
   settingsTab: SettingsTab;
@@ -66,165 +67,128 @@ export type SettingsViewProps = {
   onImportOPML: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
+const TAB_OPTIONS: Array<{ value: SettingsTab; label: string }> = [
+  { value: "subscription", label: "订阅管理" },
+  { value: "script", label: "脚本设置" },
+  { value: "connection", label: "连接设置" },
+  { value: "ai", label: "AI 设置" },
+  { value: "data", label: "数据管理" },
+];
+
 export function SettingsView(props: SettingsViewProps) {
-  const {
-    settingsTab,
-    onSettingsTabChange,
-    feedURL,
-    onFeedURLChange,
-    newFeedFolderID,
-    onNewFeedFolderIDChange,
-    folders,
-    onCreateRootFolder,
-    onAddFeed,
-    onRefreshFeeds,
-    onRefreshFeedsFromNetwork,
-    onRefreshArticles,
-    isRefreshingFeeds,
-    isRefreshingArticles,
-    scriptFeedID,
-    feeds,
-    scriptLang,
-    scriptContent,
-    onSelectScriptFeed,
-    onUploadScriptFile,
-    onScriptLangChange,
-    onScriptContentChange,
-    onSaveFeedScript,
-    apiBase,
-    onAPIBaseChange,
-    onSaveAPIBase,
-    networkProxyURL,
-    onNetworkProxyURLChange,
-    onSaveNetworkSettings,
-    aiProtocol,
-    aiAPIKey,
-    aiAPIKeyMasked,
-    aiAPIKeyConfigured,
-    aiBaseURL,
-    aiModel,
-    aiTargetLang,
-    onAIProtocolChange,
-    onAIAPIKeyChange,
-    onAIBaseURLChange,
-    onAIModelChange,
-    onAITargetLangChange,
-    onSaveAISettings,
-    articleRetentionDays,
-    selectedArticleID,
-    selectedArticleTitle,
-    isRefreshingCurrentArticleAISummary,
-    onArticleRetentionDaysChange,
-    onSaveDataSettings,
-    onRefreshCurrentArticleAISummary,
-    onClearCurrentArticleAISummary,
-    onClearRecentAISummaries,
-    onRegenerateSummaries,
-    onExportProfileJSON,
-    onExportOPML,
-    onImportProfileJSON,
-    onImportOPML,
-  } = props;
-  const tabOptions: Array<{ value: SettingsTab; label: string }> = [
-    { value: "subscription", label: "订阅管理" },
-    { value: "script", label: "脚本设置" },
-    { value: "connection", label: "连接设置" },
-    { value: "ai", label: "AI 设置" },
-    { value: "data", label: "数据管理" },
-  ];
+  const { settingsTab, onSettingsTabChange, ...rest } = props;
 
   return (
-    <div className="settings-modal-body">
-      <aside className="settings-nav">
-        {tabOptions.map((tab) => (
-          <button key={tab.value} className={`settings-tab ${settingsTab === tab.value ? "active" : ""}`} onClick={() => onSettingsTabChange(tab.value)}>
+    <div className="flex h-full">
+      {/* Sidebar nav */}
+      <aside className="w-40 shrink-0 border-r bg-muted/30 p-3 flex flex-col gap-0.5">
+        {TAB_OPTIONS.map((tab) => (
+          <button
+            key={tab.value}
+            onClick={() => onSettingsTabChange(tab.value)}
+            className={cn(
+              "w-full text-left px-3 py-2 rounded-md text-sm transition-colors",
+              settingsTab === tab.value
+                ? "bg-background text-foreground font-medium shadow-sm"
+                : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
+            )}
+          >
             {tab.label}
           </button>
         ))}
       </aside>
-      <section className="settings-page">
-        <div className="settings-mobile-tab-picker">
-          <label htmlFor="settingsMobileTab">设置分组</label>
-          <select id="settingsMobileTab" value={settingsTab} onChange={(event) => onSettingsTabChange(event.target.value as SettingsTab)}>
-            {tabOptions.map((tab) => (
-              <option key={tab.value} value={tab.value}>
-                {tab.label}
-              </option>
+
+      {/* Content — fixed height, always scrollable */}
+      <section className="flex-1 min-w-0 overflow-y-auto p-6 min-h-0">
+        {/* Mobile tab picker */}
+        <div className="sm:hidden mb-4">
+          <label htmlFor="settingsMobileTab" className="block text-sm text-muted-foreground mb-1.5">
+            设置分组
+          </label>
+          <select
+            id="settingsMobileTab"
+            value={settingsTab}
+            onChange={(event) => onSettingsTabChange(event.target.value as SettingsTab)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {TAB_OPTIONS.map((tab) => (
+              <option key={tab.value} value={tab.value}>{tab.label}</option>
             ))}
           </select>
         </div>
+
         {settingsTab === "subscription" && (
           <SubscriptionSettingsCard
-            feedURL={feedURL}
-            onFeedURLChange={onFeedURLChange}
-            newFeedFolderID={newFeedFolderID}
-            onNewFeedFolderIDChange={onNewFeedFolderIDChange}
-            folders={folders}
-            onCreateRootFolder={onCreateRootFolder}
-            onAddFeed={onAddFeed}
-            onRefreshFeeds={onRefreshFeeds}
-            onRefreshFeedsFromNetwork={onRefreshFeedsFromNetwork}
-            onRefreshArticles={onRefreshArticles}
-            isRefreshingFeeds={isRefreshingFeeds}
-            isRefreshingArticles={isRefreshingArticles}
+            feedURL={rest.feedURL}
+            onFeedURLChange={rest.onFeedURLChange}
+            newFeedFolderID={rest.newFeedFolderID}
+            onNewFeedFolderIDChange={rest.onNewFeedFolderIDChange}
+            folders={rest.folders}
+            onCreateRootFolder={rest.onCreateRootFolder}
+            onAddFeed={rest.onAddFeed}
+            onRefreshFeeds={rest.onRefreshFeeds}
+            onRefreshFeedsFromNetwork={rest.onRefreshFeedsFromNetwork}
+            onRefreshArticles={rest.onRefreshArticles}
+            isRefreshingFeeds={rest.isRefreshingFeeds}
+            isRefreshingArticles={rest.isRefreshingArticles}
           />
         )}
         {settingsTab === "script" && (
           <ScriptSettingsCard
-            scriptFeedID={scriptFeedID}
-            feeds={feeds}
-            scriptLang={scriptLang}
-            scriptContent={scriptContent}
-            onSelectScriptFeed={onSelectScriptFeed}
-            onUploadScriptFile={onUploadScriptFile}
-            onScriptLangChange={onScriptLangChange}
-            onScriptContentChange={onScriptContentChange}
-            onSaveFeedScript={onSaveFeedScript}
+            scriptFeedID={rest.scriptFeedID}
+            feeds={rest.feeds}
+            scriptLang={rest.scriptLang}
+            scriptContent={rest.scriptContent}
+            onSelectScriptFeed={rest.onSelectScriptFeed}
+            onUploadScriptFile={rest.onUploadScriptFile}
+            onScriptLangChange={rest.onScriptLangChange}
+            onScriptContentChange={rest.onScriptContentChange}
+            onSaveFeedScript={rest.onSaveFeedScript}
           />
         )}
         {settingsTab === "connection" && (
           <ConnectionSettingsCard
-            apiBase={apiBase}
-            onAPIBaseChange={onAPIBaseChange}
-            onSaveAPIBase={onSaveAPIBase}
-            networkProxyURL={networkProxyURL}
-            onNetworkProxyURLChange={onNetworkProxyURLChange}
-            onSaveNetworkSettings={onSaveNetworkSettings}
+            apiBase={rest.apiBase}
+            onAPIBaseChange={rest.onAPIBaseChange}
+            onSaveAPIBase={rest.onSaveAPIBase}
+            networkProxyURL={rest.networkProxyURL}
+            onNetworkProxyURLChange={rest.onNetworkProxyURLChange}
+            onSaveNetworkSettings={rest.onSaveNetworkSettings}
           />
         )}
         {settingsTab === "ai" && (
           <AISettingsCard
-            aiProtocol={aiProtocol}
-            aiAPIKey={aiAPIKey}
-            aiAPIKeyMasked={aiAPIKeyMasked}
-            aiAPIKeyConfigured={aiAPIKeyConfigured}
-            aiBaseURL={aiBaseURL}
-            aiModel={aiModel}
-            aiTargetLang={aiTargetLang}
-            onAIProtocolChange={onAIProtocolChange}
-            onAIAPIKeyChange={onAIAPIKeyChange}
-            onAIBaseURLChange={onAIBaseURLChange}
-            onAIModelChange={onAIModelChange}
-            onAITargetLangChange={onAITargetLangChange}
-            onSaveAISettings={onSaveAISettings}
+            aiProtocol={rest.aiProtocol}
+            aiAPIKey={rest.aiAPIKey}
+            aiAPIKeyMasked={rest.aiAPIKeyMasked}
+            aiAPIKeyConfigured={rest.aiAPIKeyConfigured}
+            aiBaseURL={rest.aiBaseURL}
+            aiModel={rest.aiModel}
+            aiTargetLang={rest.aiTargetLang}
+            onAIProtocolChange={rest.onAIProtocolChange}
+            onAIAPIKeyChange={rest.onAIAPIKeyChange}
+            onAIBaseURLChange={rest.onAIBaseURLChange}
+            onAIModelChange={rest.onAIModelChange}
+            onAITargetLangChange={rest.onAITargetLangChange}
+            onSaveAISettings={rest.onSaveAISettings}
           />
         )}
         {settingsTab === "data" && (
           <DataSettingsCard
-            articleRetentionDays={articleRetentionDays}
-            selectedArticleID={selectedArticleID}
-            selectedArticleTitle={selectedArticleTitle}
-            isRefreshingCurrentArticleAISummary={isRefreshingCurrentArticleAISummary}
-            onArticleRetentionDaysChange={onArticleRetentionDaysChange}
-            onSaveDataSettings={onSaveDataSettings}
-            onRefreshCurrentArticleAISummary={onRefreshCurrentArticleAISummary}
-            onClearCurrentArticleAISummary={onClearCurrentArticleAISummary}
-            onClearRecentAISummaries={onClearRecentAISummaries}
-            onRegenerateSummaries={onRegenerateSummaries}
-            onExportProfileJSON={onExportProfileJSON}
-            onExportOPML={onExportOPML}
-            onImportProfileJSON={onImportProfileJSON}
-            onImportOPML={onImportOPML}
+            articleRetentionDays={rest.articleRetentionDays}
+            selectedArticleID={rest.selectedArticleID}
+            selectedArticleTitle={rest.selectedArticleTitle}
+            isRefreshingCurrentArticleAISummary={rest.isRefreshingCurrentArticleAISummary}
+            onArticleRetentionDaysChange={rest.onArticleRetentionDaysChange}
+            onSaveDataSettings={rest.onSaveDataSettings}
+            onRefreshCurrentArticleAISummary={rest.onRefreshCurrentArticleAISummary}
+            onClearCurrentArticleAISummary={rest.onClearCurrentArticleAISummary}
+            onClearRecentAISummaries={rest.onClearRecentAISummaries}
+            onRegenerateSummaries={rest.onRegenerateSummaries}
+            onExportProfileJSON={rest.onExportProfileJSON}
+            onExportOPML={rest.onExportOPML}
+            onImportProfileJSON={rest.onImportProfileJSON}
+            onImportOPML={rest.onImportOPML}
           />
         )}
       </section>

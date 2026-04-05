@@ -1,3 +1,4 @@
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SettingsView } from "./SettingsView";
 import type { SettingsViewProps } from "./SettingsView";
 
@@ -7,21 +8,16 @@ type SettingsModalProps = SettingsViewProps & {
 };
 
 export function SettingsModal({ open, onClose, ...viewProps }: SettingsModalProps) {
-  if (!open) {
-    return null;
-  }
-
   return (
-    <div className="modal-backdrop settings-backdrop" onClick={onClose}>
-      <div className="settings-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="settings-modal-header">
-          <h3>设置</h3>
-          <button className="sidebar-toggle" onClick={onClose} aria-label="关闭设置">
-            ✕
-          </button>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+      <DialogContent className="max-w-2xl h-[80vh] flex flex-col gap-0 p-0 overflow-hidden">
+        <DialogHeader className="px-6 py-4 border-b shrink-0">
+          <DialogTitle>设置</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-hidden min-h-0">
+          <SettingsView {...viewProps} />
         </div>
-        <SettingsView {...viewProps} />
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,3 +1,8 @@
+import { RefreshCw, Rss } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
 type TopBarProps = {
   statusText: string;
   isError: boolean;
@@ -16,33 +21,61 @@ export function TopBar({
   onRefreshFeeds,
 }: TopBarProps) {
   return (
-    <header className="topbar">
-      <div className="brand">
-        <span className="brand-mark">▸</span>
-        <h1>Zflow</h1>
+    <header
+      className="flex items-center justify-between relative px-4 rounded-xl border border-border shadow-sm"
+      style={{ height: "var(--topbar-height)", background: "hsl(var(--background) / 0.92)", backdropFilter: "blur(6px)" }}
+    >
+      {/* Brand */}
+      <div className="flex items-center gap-2.5">
+        <span className="text-lg font-bold text-amber-500 dark:text-amber-400">▸</span>
+        <h1 className="text-xl font-semibold tracking-tight m-0">Zflow</h1>
       </div>
-      <div className={`top-status ${isError ? "error" : ""}`}>{statusText}</div>
-      <div className="top-actions">
-        <button
-          className={`icon-btn ${isRefreshingArticles ? "loading" : ""}`}
-          onClick={onRefreshArticles}
-          disabled={isRefreshingArticles || isRefreshingFeeds}
-          title={isRefreshingArticles ? "正在刷新文章..." : "刷新文章列表"}
-          data-tooltip={isRefreshingArticles ? "正在刷新文章..." : "刷新文章列表"}
-          aria-label={isRefreshingArticles ? "正在刷新文章" : "刷新文章列表"}
-        >
-          <span className="icon-btn-glyph">⟳</span>
-        </button>
-        <button
-          className={`icon-btn ${isRefreshingFeeds ? "loading" : ""}`}
-          onClick={onRefreshFeeds}
-          disabled={isRefreshingFeeds || isRefreshingArticles}
-          title={isRefreshingFeeds ? "正在远端抓取订阅源..." : "远端抓取订阅源"}
-          data-tooltip={isRefreshingFeeds ? "正在远端抓取订阅源..." : "远端抓取订阅源"}
-          aria-label={isRefreshingFeeds ? "正在远端抓取订阅源" : "远端抓取订阅源"}
-        >
-          <span className="icon-btn-glyph">◎</span>
-        </button>
+
+      {/* Center status */}
+      <div
+        className={cn(
+          "absolute left-1/2 -translate-x-1/2 max-w-[48vw] truncate text-sm text-muted-foreground pointer-events-none",
+          isError && "text-destructive"
+        )}
+      >
+        {statusText}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onRefreshArticles}
+              disabled={isRefreshingArticles || isRefreshingFeeds}
+              aria-label={isRefreshingArticles ? "正在刷新文章" : "刷新文章列表"}
+            >
+              <RefreshCw className={cn("w-4 h-4", isRefreshingArticles && "animate-spin")} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {isRefreshingArticles ? "正在刷新文章..." : "刷新文章列表"}
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onRefreshFeeds}
+              disabled={isRefreshingFeeds || isRefreshingArticles}
+              aria-label={isRefreshingFeeds ? "正在远端抓取订阅源" : "远端抓取订阅源"}
+            >
+              <Rss className={cn("w-4 h-4", isRefreshingFeeds && "animate-pulse")} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {isRefreshingFeeds ? "正在远端抓取订阅源..." : "远端抓取订阅源"}
+          </TooltipContent>
+        </Tooltip>
       </div>
     </header>
   );

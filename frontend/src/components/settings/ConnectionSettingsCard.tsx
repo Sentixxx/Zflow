@@ -1,3 +1,7 @@
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
 type ConnectionSettingsCardProps = {
   apiBase: string;
   networkProxyURL: string;
@@ -16,21 +20,37 @@ export function ConnectionSettingsCard({
   onSaveNetworkSettings,
 }: ConnectionSettingsCardProps) {
   return (
-    <div className="settings-page-inner settings-section-card">
-      <h4 className="section-title">连接设置</h4>
-      <label htmlFor="apiBase">API Base URL</label>
-      <div className="row">
-        <input id="apiBase" value={apiBase} onChange={(e) => onAPIBaseChange(e.target.value)} />
-        <button className="secondary" onClick={onSaveAPIBase}>
-          保存
-        </button>
-      </div>
-      <label htmlFor="networkProxy">网络代理 URL（可选，支持 http/https/socks5）</label>
-      <div className="row">
-        <input id="networkProxy" value={networkProxyURL} placeholder="http://127.0.0.1:7890" onChange={(e) => onNetworkProxyURLChange(e.target.value)} />
-        <button className="secondary" onClick={onSaveNetworkSettings}>
-          保存代理
-        </button>
+    <div className="space-y-6">
+      <div>
+        <h4 className="text-base font-semibold mb-4">连接设置</h4>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="apiBase">API Base URL</Label>
+            <div className="flex gap-2">
+              <Input
+                id="apiBase"
+                value={apiBase}
+                onChange={(e) => onAPIBaseChange(e.target.value)}
+                className="flex-1"
+              />
+              <Button variant="outline" onClick={onSaveAPIBase}>保存</Button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="networkProxy">网络代理 URL（可选，支持 http/https/socks5）</Label>
+            <div className="flex gap-2">
+              <Input
+                id="networkProxy"
+                value={networkProxyURL}
+                placeholder="http://127.0.0.1:7890"
+                onChange={(e) => onNetworkProxyURLChange(e.target.value)}
+                className="flex-1"
+              />
+              <Button variant="outline" onClick={onSaveNetworkSettings}>保存代理</Button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
