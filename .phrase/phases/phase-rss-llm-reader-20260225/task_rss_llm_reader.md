@@ -213,3 +213,4 @@ task187 [x] 场景:用户切换分类筛选时列表计算不再重复遍历文�
 task188 [x] 场景:用户滚动长文章列表时 DOM 数量不再线性增长 | Given:文章数量较多且列表滚动频繁 | When:滚动文章列表 | Then:文章列表使用虚拟化渲染并保持首屏可用 | 验证:npm run test -- src/components/article-list/ArticleList.test.tsx + npm run build
 task189 [x] 场景:用户点击 Readability 按钮时不会因详情数据缺少 link 而被禁用 | Given:文章详情已选中且 link 字段可能为空或尚未回填 | When:用户点击正文抓取按钮 | Then:按钮可点击并触发 Readability 请求，缺失 link 的限制交由后端返回错误 | 验证:npm run test + npm run build
 task190 [x] 场景:用户打开文章详情时 Readability 能在后台自动抓取正文 | Given:文章详情已选中且 full_content 为空但后端仍可获取原文链接 | When:打开文章详情页 | Then:无需手动刷新即可触发 Readability 抓取并在完成后展示正文 | 验证:npm run test + npm run build
+task191 [x] 场景:用户打开阅读器时页面整体视觉风格统一且专业 | Given:前端使用 2652 行自定义 CSS 导致 border-radius/font-size/控件高度等样式不一致 | When:用户访问阅读器 | Then:全部组件迁移至 Tailwind CSS v3 + shadcn/ui 设计系统，CSS 变量驱动 light/dark 双主题，三栏布局/设置弹框/侧边栏/文章详情等视觉均一致 | 验证:npm run build + npm run test + chrome-devtools 暗色模式截图验证
