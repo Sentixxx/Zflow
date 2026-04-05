@@ -262,8 +262,10 @@ devDependencies:
 
 - **单元测试**：Vitest 现有测试继续通过。若有 `toHaveClass('...')` 或类似 class 断言，改用 `getByRole`, `getByText`, `toBeVisible` 等更稳健的查询
 - **视觉回归**：迁移过程中按组件对照旧 UI 截图，人工确认无明显退化
+- **自动化浏览器验证**：使用 `chrome-devtools-mcp` 启动 dev server、导航到关键页面、截图对比、触发交互（点击、hover、表单填写），在每个迁移步骤后跑一次冒烟
+- **可访问性检查**：迁移完成后通过 `chrome-devtools-mcp` 的 a11y 能力抽查焦点、ARIA、键盘导航
 - **构建验证**：每完成一个迁移步骤，运行 `npm run build` 确保 TypeScript 类型和 Tailwind purge 都正常
-- **暗色模式**：切换系统外观验证
+- **暗色模式**：切换系统外观或使用 `chrome-devtools-mcp` emulate 验证
 
 ## 风险与缓解
 
