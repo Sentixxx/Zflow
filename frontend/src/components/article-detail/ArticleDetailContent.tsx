@@ -114,14 +114,14 @@ export function ArticleDetailContent({
 
       <div
         ref={detailRef}
-        className="flex-1 min-h-0 overflow-y-auto"
+        className="article-scroll-pane flex-1 min-h-0 overflow-y-auto"
       >
         {!article && (
           <p className="text-sm text-muted-foreground text-center mt-20">请选择一篇文章查看详情</p>
         )}
 
         {article && (
-          <div className="max-w-[740px] mx-auto px-8 pt-6 pb-24">
+          <div className="article-content-wrapper">
             {/* Meta row */}
             <div className="flex items-center gap-2.5 mb-5 text-xs text-muted-foreground flex-wrap">
               <span>{article.published_at || "-"}</span>
