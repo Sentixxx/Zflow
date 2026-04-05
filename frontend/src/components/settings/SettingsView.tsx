@@ -98,8 +98,8 @@ export function SettingsView(props: SettingsViewProps) {
         ))}
       </aside>
 
-      {/* Content */}
-      <section className="flex-1 min-w-0 overflow-y-auto p-6">
+      {/* Content — fixed height, always scrollable */}
+      <section className="flex-1 min-w-0 overflow-y-auto p-6 min-h-0">
         {/* Mobile tab picker */}
         <div className="sm:hidden mb-4">
           <label htmlFor="settingsMobileTab" className="block text-sm text-muted-foreground mb-1.5">
