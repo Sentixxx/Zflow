@@ -76,7 +76,7 @@
 
 /* Fluid content wrapper: side padding is always 5% of panel width */
 .article-content-wrapper {
-  padding: 1.25rem 5% 6rem;
+  padding: 1.25rem 3% 6rem;
 }
 
 /* Font scales smoothly with panel width (1cqw = 1% of container) */
