@@ -89,7 +89,7 @@
 }
 
 @container article-pane (min-width: 780px) {
-  .article-content-wrapper { padding: 28px 80px 96px; max-width: 1000px; }
+  .article-content-wrapper { padding: 28px 80px 96px; max-width: 1000px; margin-left: auto; margin-right: auto; }
   .article-content-wrapper .prose-article { font-size: 17px; line-height: 1.95; }
 }
 
