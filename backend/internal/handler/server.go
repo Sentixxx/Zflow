@@ -21,6 +21,7 @@ import (
 
 type Server struct {
 	store          repository.FeedRepository
+	vectorStore    repository.VectorRepository
 	client         *http.Client
 	clientMu       sync.RWMutex
 	iconDir        string
@@ -28,6 +29,7 @@ type Server struct {
 	articleUC      *service.ArticleService
 	feedRefreshUC  *service.FeedRefreshService
 	summaryUC      *service.ArticleSummaryService
+	embeddingUC    *service.EmbeddingService
 	logger         *logger.ModuleLogger
 }
 
@@ -113,7 +115,7 @@ type translateStreamEvent struct {
 	Error      string   `json:"error,omitempty"`
 }
 
-func NewServer(feedStore repository.FeedRepository, dataDir string) *Server {
+func NewServer(feedStore repository.FeedRepository, dataDir string, opts ...ServerOption) *Server {
 	iconDir := filepath.Join(dataDir, "feed-icons")
 	_ = os.MkdirAll(iconDir, 0o755)
 	server := &Server{
@@ -158,7 +160,38 @@ func NewServer(feedStore repository.FeedRepository, dataDir string) *Server {
 		server.httpClient,
 		server.summaryUC.BackfillFeed,
 	)
+	for _, opt := range opts {
+		opt(server)
+	}
 	return server
+}
+
+type ServerOption func(*Server)
+
+func WithVectorRepository(vr repository.VectorRepository) ServerOption {
+	return func(s *Server) {
+		s.vectorStore = vr
+		s.embeddingUC = service.NewEmbeddingService(
+			vr,
+			s.store,
+			s.httpClientForAI,
+			func() (service.EmbeddingConfig, error) {
+				cfg, err := s.loadAISettings()
+				if err != nil {
+					return service.EmbeddingConfig{}, err
+				}
+				return service.EmbeddingConfig{
+					APIKey:  cfg.APIKey,
+					BaseURL: cfg.BaseURL,
+					Model:   cfg.Model,
+				}, nil
+			},
+		)
+	}
+}
+
+func (s *Server) EmbeddingService() *service.EmbeddingService {
+	return s.embeddingUC
 }
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {

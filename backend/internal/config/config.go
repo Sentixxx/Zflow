@@ -12,6 +12,7 @@ type AppConfig struct {
 	Addr            string
 	DataDir         string
 	DBPath          string
+	PostgresDSN     string
 	RefreshInterval time.Duration
 	LogLevel        string
 	LogFormat       string
@@ -38,6 +39,12 @@ func Load() AppConfig {
 		dbPath = filepath.Join(dataDir, "zflow.db")
 	}
 
+	postgresDSN := firstNonEmpty(
+		os.Getenv("ZFLOW_POSTGRES_DSN"),
+		os.Getenv("DATABASE_URL"),
+		"postgres://localhost:5432/zflow?sslmode=disable",
+	)
+
 	refreshInterval := parseDurationWithFallback(
 		firstNonEmpty(os.Getenv("ZFLOW_REFRESH_INTERVAL"), os.Getenv("REFRESH_INTERVAL")),
 		15*time.Minute,
@@ -50,6 +57,7 @@ func Load() AppConfig {
 		Addr:            strings.TrimSpace(addr),
 		DataDir:         strings.TrimSpace(dataDir),
 		DBPath:          strings.TrimSpace(dbPath),
+		PostgresDSN:     strings.TrimSpace(postgresDSN),
 		RefreshInterval: refreshInterval,
 		LogLevel:        strings.ToLower(strings.TrimSpace(logLevel)),
 		LogFormat:       strings.ToLower(strings.TrimSpace(logFormat)),

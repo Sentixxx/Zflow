@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Sentixxx/Zflow/backend/internal/config"
+	"github.com/Sentixxx/Zflow/backend/internal/db"
 	"github.com/Sentixxx/Zflow/backend/internal/handler"
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
 	"github.com/Sentixxx/Zflow/backend/internal/router"
@@ -24,19 +25,32 @@ func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	feedStore, err := repository.NewSQLiteFeedRepository(cfg.DBPath)
+	l := logger.NewModuleFromEnv("http")
+
+	dbConn, err := db.OpenPostgres(cfg.PostgresDSN)
 	if err != nil {
-		l := logger.NewModuleFromEnv("http")
-		l.Error("create", "settings", "failed", "failed to init feed store", "error", err.Error())
+		l.Error("create", "database", "failed", "failed to connect to postgres", "dsn", cfg.PostgresDSN, "error", err.Error())
 		os.Exit(1)
 	}
-	defer feedStore.Close()
+	defer dbConn.Close()
 
-	srv := handler.NewServer(feedStore, cfg.DataDir)
+	if err := db.RunMigrations(rootCtx, dbConn); err != nil {
+		l.Error("create", "database", "failed", "failed to run migrations", "error", err.Error())
+		os.Exit(1)
+	}
+
+	feedStore := repository.NewPostgresFeedRepository(dbConn)
+	vectorStore := repository.NewPostgresVectorRepository(dbConn)
+
+	srv := handler.NewServer(feedStore, cfg.DataDir, handler.WithVectorRepository(vectorStore))
 	refreshScheduler := scheduler.NewFeedRefreshScheduler(srv.FeedRefreshService(), cfg.RefreshInterval)
 	go refreshScheduler.Start(rootCtx)
 	scoreRefreshScheduler := scheduler.NewArticleScoreRefreshScheduler(srv.ArticleService(), time.Minute, 50)
 	go scoreRefreshScheduler.Start(rootCtx)
+	if embSvc := srv.EmbeddingService(); embSvc != nil {
+		embeddingScheduler := scheduler.NewEmbeddingRefreshScheduler(embSvc, 5*time.Minute, 20)
+		go embeddingScheduler.Start(rootCtx)
+	}
 
 	httpServer := &http.Server{
 		Addr:    cfg.Addr,
@@ -53,7 +67,6 @@ func main() {
 		}
 	}()
 
-	l := logger.NewModuleFromEnv("http")
 	listener, err := listenHTTPListener(cfg.Addr)
 	if err != nil {
 		l.Error("request", "http", "failed", "failed to bind http listener", "addr", cfg.Addr, "error", err.Error())
