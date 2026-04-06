@@ -1,6 +1,7 @@
 import type { Article } from "@/types";
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { formatRecommendationSummary } from "@/lib/article-list";
+import { renderTranslatedHTML, splitTranslatedTextBlocks } from "@/lib/translation";
 import { ArticleDetailTopBar } from "./ArticleDetailTopBar";
 import { ArticleFloatingActions } from "./ArticleFloatingActions";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ type ArticleDetailContentProps = {
   article: Article | null;
   sanitizedSummaryHTML: string;
   sanitizedFullContentHTML: string;
+  translationTemplateHTML: string;
   canMarkUnread: boolean;
   canToggleFavorite: boolean;
   isFavorite: boolean;
@@ -30,6 +32,7 @@ type ArticleDetailContentProps = {
   canRefreshArticleCache: boolean;
   isRefreshingArticleCache: boolean;
   isTranslatingArticle: boolean;
+  isTranslationVisible: boolean;
   sourceSiteURL: string;
   detailProgressText: string;
   canGoPrev: boolean;
@@ -54,6 +57,7 @@ export function ArticleDetailContent({
   article,
   sanitizedSummaryHTML,
   sanitizedFullContentHTML,
+  translationTemplateHTML,
   canMarkUnread,
   canToggleFavorite,
   isFavorite,
@@ -68,6 +72,7 @@ export function ArticleDetailContent({
   canGoPrev,
   canGoNext,
   translationParagraphs,
+  isTranslationVisible,
   onMarkUnread,
   onToggleFavorite,
   onOpenSourceSite,
@@ -84,10 +89,15 @@ export function ArticleDetailContent({
     (normalizedFull.includes("xref") && normalizedFull.includes("endobj"));
   const hasUsableFullContent = Boolean(normalizedFull) && !looksLikePDFGarbage;
   const panelTitle = article ? article.title || "(无标题)" : "请选择一篇文章查看详情";
-  const hasTranslation = translationParagraphs.length > 0 || isTranslatingArticle;
-  const showReadableContent = hasUsableFullContent && !hasTranslation;
+  const hasTranslation = translationParagraphs.length > 0;
+  const showTranslation = isTranslationVisible;
+  const showReadableContent = hasUsableFullContent && !showTranslation;
   const hasSummaryCard = Boolean((sanitizedSummaryHTML || "").trim());
   const summaryStatusMeta = getSummaryStatusMeta(article?.display_summary_status);
+  const renderedTranslatedHTML = useMemo(
+    () => renderTranslatedHTML(translationTemplateHTML, translationParagraphs, isTranslatingArticle),
+    [translationTemplateHTML, translationParagraphs, isTranslatingArticle],
+  );
 
   return (
     <>
@@ -168,27 +178,42 @@ export function ArticleDetailContent({
             )}
 
             {/* Body section divider */}
-            {(showReadableContent || hasTranslation || hasSummaryCard) && (
+            {(showReadableContent || showTranslation || hasSummaryCard) && (
               <div className="flex items-center gap-3 mb-5">
                 <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground whitespace-nowrap">
-                  {hasTranslation ? "原文 / 译文" : "正文"}
+                  {showTranslation ? "原文 / 译文" : "正文"}
                 </span>
                 <div className="flex-1 h-px bg-border/60" />
               </div>
             )}
 
             {/* Body content */}
-            {hasTranslation ? (
+            {showTranslation && renderedTranslatedHTML ? (
+              <div
+                className="prose-article"
+                dangerouslySetInnerHTML={{ __html: renderedTranslatedHTML }}
+              />
+            ) : showTranslation ? (
               <div className="space-y-6">
                 {translationParagraphs.map((item) => (
                   <div key={item.index} className="space-y-2">
-                    <p className="text-[15px] leading-[1.85] text-muted-foreground">
+                    <p className="text-[15px] leading-[1.85] text-muted-foreground break-words [overflow-wrap:anywhere]">
                       {item.source || "(原文段落加载中...)"}
                     </p>
                     {item.status === "done" ? (
-                      <p className="text-base leading-[1.85] border-l-2 border-primary/50 pl-4">
-                        {item.translated}
-                      </p>
+                      <div className="space-y-3 border-l-2 border-primary/50 pl-4">
+                        {splitTranslatedTextBlocks(item.translated).map((block, blockIndex) => (
+                          <div
+                            key={`${item.index}-${blockIndex}`}
+                            className={cn(
+                              "text-base leading-[1.85] whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+                              blockIndex > 0 && "pt-1",
+                            )}
+                          >
+                            {block}
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
                         <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" aria-hidden="true" />
@@ -231,6 +256,8 @@ export function ArticleDetailContent({
           }}
           onTranslate={onTranslateArticle}
           isTranslating={isTranslatingArticle}
+          hasTranslation={hasTranslation}
+          isTranslationVisible={isTranslationVisible}
         />
       )}
     </>

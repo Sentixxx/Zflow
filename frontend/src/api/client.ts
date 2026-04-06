@@ -208,12 +208,13 @@ export class ApiClient {
   async translateArticleStream(
     id: number,
     targetLang: string,
+    sources: string[],
     onEvent: (event: TranslateStreamEvent) => void,
   ): Promise<void> {
     const response = await fetch(this.buildURL(`/api/v1/articles/${id}/translate/stream`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target_lang: targetLang }),
+      body: JSON.stringify({ target_lang: targetLang, sources }),
     });
     if (!response.ok) {
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;

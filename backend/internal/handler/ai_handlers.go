@@ -228,7 +228,10 @@ func (s *Server) streamArticleTranslation(w http.ResponseWriter, r *http.Request
 		targetLang = defaultAITargetLang
 	}
 
-	paragraphs := extractArticleTranslationParagraphs(article)
+	paragraphs := normalizeRequestedTranslationSources(req.Sources)
+	if len(paragraphs) == 0 {
+		paragraphs = extractArticleTranslationParagraphs(article)
+	}
 	if len(paragraphs) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "article content is empty"})
 		return
@@ -276,6 +279,17 @@ func (s *Server) streamArticleTranslation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	_ = emit(translateStreamEvent{Type: "done", ArticleID: articleID, Total: len(paragraphs)})
+}
+
+func normalizeRequestedTranslationSources(sources []string) []string {
+	result := make([]string, 0, len(sources))
+	for _, source := range sources {
+		normalized := strings.Join(strings.Fields(strings.TrimSpace(source)), " ")
+		if normalized != "" {
+			result = append(result, normalized)
+		}
+	}
+	return result
 }
 
 func (s *Server) translateTextWithAI(ctx context.Context, text string, targetLang string, settings aiSettings, history []translationPair) (string, error) {

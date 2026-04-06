@@ -91,7 +91,8 @@ type updateAISettingsRequest struct {
 }
 
 type translateArticleRequest struct {
-	TargetLang string `json:"target_lang"`
+	TargetLang string   `json:"target_lang"`
+	Sources    []string `json:"sources"`
 }
 
 type aiSettings struct {

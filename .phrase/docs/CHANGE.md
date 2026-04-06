@@ -1,6 +1,20 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change613 日期:2026-04-07 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task197 | 说明:新增“正文底部原始条目附录区”待办任务，约束 RSS item 原始字段与 Readability 正文并存，后续以脚注样式展示完整原始附录 | 关联:task197
+- change612 日期:2026-04-06 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task196 | 说明:新增代码块/特殊 CSS 场景下的沉浸式翻译兼容性待办任务，记录后续需补充的节点规则与站点适配工作 | 关联:task196
+- change609 日期:2026-04-06 | 文件:frontend/src/lib/translation.ts,frontend/src/lib/translation.test.ts,frontend/src/pages/ReaderPage.tsx,frontend/src/components/article-detail/ArticleDetailContent.tsx,frontend/src/components/article-detail/ArticleDetailContent.test.tsx,frontend/src/api/client.ts,frontend/src/api/client.test.ts,backend/internal/handler/ai_handlers.go,backend/internal/handler/server.go,backend/internal/handler/server_test.go | 操作:Add\|Modify | 影响:翻译职责划分与正文渲染 | 说明:将翻译映射职责收敛到前端，保留原文 HTML 结构并在对应文本块后插入译文块，同时由前端提交 sources 段落数组给后端流式返回映射译文 | 关联:task195
+- change610 日期:2026-04-06 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task195 | 说明:新增并完成翻译块映射职责重构任务，记录前后端验证命令 | 关联:task195
+- change611 日期:2026-04-06 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录翻译职责前移到前端、保留原文结构插入译文块的修复结果与验证命令 | 关联:task195
+- change606 日期:2026-04-06 | 文件:frontend/src/hooks/useArticleActions.ts,frontend/src/pages/ReaderPage.tsx,frontend/src/components/article-detail/ArticleDetailContent.tsx,frontend/src/components/article-detail/ArticleFloatingActions.tsx,frontend/src/components/article-detail/ArticleDetailContent.test.tsx | 操作:Modify | 影响:翻译后台进行与前端视图解耦 | 说明:将翻译运行状态改为按文章独立跟踪，允许翻译进行中立即切回原文且不阻塞其他文章视图，详情区仅按显式显示状态决定是否展示译文 | 关联:task194
+- change607 日期:2026-04-06 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task194 | 说明:新增并完成翻译后台继续运行且前端可切回原文的修复任务，记录验证命令 | 关联:task194
+- change608 日期:2026-04-06 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录翻译后台运行与前端视图解耦修复及前端验证结果 | 关联:task194
+- change603 日期:2026-04-06 | 文件:frontend/src/hooks/useArticleActions.ts,frontend/src/pages/ReaderPage.tsx,frontend/src/components/article-detail/ArticleFloatingActions.tsx,frontend/src/components/article-detail/ArticleDetailContent.tsx,frontend/src/components/article-detail/ArticleDetailContent.test.tsx | 操作:Modify\|Add | 影响:翻译模式切换 | 说明:拆分翻译缓存与显示状态并按文章独立切换，悬浮按钮统一为查看翻译/显示原文两态文案，并补充详情页回归测试 | 关联:task193
+- change604 日期:2026-04-06 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task193 | 说明:新增并完成翻译模式切换修复任务，记录测试与构建验证命令 | 关联:task193
+- change605 日期:2026-04-06 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录翻译模式切换修复与前端验证结果 | 关联:task193
+- change600 日期:2026-04-06 | 文件:frontend/src/lib/translation.ts,frontend/src/lib/translation.test.ts,frontend/src/components/article-detail/ArticleDetailContent.tsx | 操作:Add\|Modify | 影响:译文详情渲染 | 说明:新增译文文本块拆分 helper 与单测，并将详情页译文改为保留换行的受控纯文本块渲染以避免空行/超长文本撑坏版式 | 关联:task192
+- change601 日期:2026-04-06 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task192 | 说明:新增并完成翻译后详情版式回归修复任务，记录前端验证命令 | 关联:task192
+- change602 日期:2026-04-06 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录翻译详情渲染回归修复与前端验证结果 | 关联:task192
 - change594 日期:2026-04-05 | 文件:.claude/tmp_plan_readability_button_fix_2026-04-05.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:Readability 按钮可用性追踪 | 说明:新增 Readability 按钮禁用问题的修复计划并完成 task189 | 关联:task189
 - change595 日期:2026-04-05 | 文件:frontend/src/lib/readability.ts,frontend/src/lib/readability.test.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:Readability 按钮启用逻辑 | 说明:新增可请求 Readability 的判定 helper 与测试，并让详情工具栏依据已选中文章启用抓取按钮 | 关联:task189
 - change596 日期:2026-04-05 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 Readability 按钮可点击修复与前端验证结果 | 关联:task189

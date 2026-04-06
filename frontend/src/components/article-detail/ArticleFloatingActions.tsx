@@ -11,6 +11,8 @@ type ArticleFloatingActionsProps = {
   onScrollTop: () => void;
   onTranslate: () => void;
   isTranslating: boolean;
+  hasTranslation: boolean;
+  isTranslationVisible: boolean;
 };
 
 export function ArticleFloatingActions({
@@ -21,7 +23,13 @@ export function ArticleFloatingActions({
   onScrollTop,
   onTranslate,
   isTranslating,
+  hasTranslation,
+  isTranslationVisible,
 }: ArticleFloatingActionsProps) {
+  const translateLabel = isTranslating
+    ? "翻译中..."
+    : (hasTranslation && isTranslationVisible ? "显示原文" : "查看翻译");
+
   const actions = [
     { id: "prev", icon: <ChevronLeft className="w-4 h-4" />, label: "上一篇", disabled: !canGoPrev, onClick: onPrev },
     { id: "next", icon: <ChevronRight className="w-4 h-4" />, label: "下一篇", disabled: !canGoNext, onClick: onNext },
@@ -29,8 +37,8 @@ export function ArticleFloatingActions({
     {
       id: "translate",
       icon: <Languages className={cn("w-4 h-4", isTranslating && "animate-pulse")} />,
-      label: isTranslating ? "翻译中..." : "一键翻译",
-      disabled: isTranslating,
+      label: translateLabel,
+      disabled: false,
       onClick: onTranslate,
     },
   ] as const;

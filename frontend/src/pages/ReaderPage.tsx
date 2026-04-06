@@ -3,6 +3,7 @@ import type { Article, Feed, Folder } from "@/types";
 import { SORT_MODE_LABELS, filterAndSortArticles } from "@/lib/article-list";
 import type { ReadFilter, SortMode } from "@/lib/article-list";
 import { sanitizeRichHTML } from "@/lib/sanitize";
+import { buildTranslationTemplate } from "@/lib/translation";
 import { buildFeedIconURLByHost } from "@/lib/feed-utils";
 import { resolveInitialAPIBase } from "@/lib/api-base";
 import { buildDescendantFolderIDs } from "@/lib/folder-tree";
@@ -70,8 +71,9 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
   const [listBounce, setListBounce] = useState<boolean>(false);
   const [isExtractingReadable, setIsExtractingReadable] = useState<boolean>(false);
   const [isRefreshingArticleCache, setIsRefreshingArticleCache] = useState<boolean>(false);
-  const [isTranslatingArticle, setIsTranslatingArticle] = useState<boolean>(false);
   const [translationParagraphsByArticleID, setTranslationParagraphsByArticleID] = useState<Record<number, TranslationParagraph[]>>({});
+  const [translationVisibleByArticleID, setTranslationVisibleByArticleID] = useState<Record<number, boolean>>({});
+  const [translationRunningByArticleID, setTranslationRunningByArticleID] = useState<Record<number, boolean>>({});
   const [mobilePane, setMobilePane] = useState<MobilePane>("list");
   const lastLoadAtRef = useRef<number>(0);
   const bounceTimerRef = useRef<number | null>(null);
@@ -138,6 +140,11 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     [selectedArticle?.display_summary, selectedArticle?.summary],
   );
   const sanitizedFullContentHTML = useMemo(() => sanitizeRichHTML(selectedArticle?.full_content), [selectedArticle?.full_content]);
+  const translationTemplate = useMemo(
+    () => buildTranslationTemplate(sanitizedFullContentHTML),
+    [sanitizedFullContentHTML],
+  );
+  const translationSources = translationTemplate.sources;
 
 
   const folderNameByID = useMemo(() => {
@@ -287,6 +294,18 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     }
     return translationParagraphsByArticleID[selectedArticle.id] || [];
   }, [selectedArticle, translationParagraphsByArticleID]);
+  const isCurrentTranslationVisible = useMemo(() => {
+    if (!selectedArticle) {
+      return false;
+    }
+    return translationVisibleByArticleID[selectedArticle.id] ?? false;
+  }, [selectedArticle, translationVisibleByArticleID]);
+  const isCurrentTranslationRunning = useMemo(() => {
+    if (!selectedArticle) {
+      return false;
+    }
+    return translationRunningByArticleID[selectedArticle.id] ?? false;
+  }, [selectedArticle, translationRunningByArticleID]);
 
   const {
     handleSaveAPIBase,
@@ -388,10 +407,14 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     setIsExtractingReadable,
     isRefreshingArticleCache,
     setIsRefreshingArticleCache,
-    isTranslatingArticle,
-    setIsTranslatingArticle,
     aiTargetLang,
+    translationSources,
+    translationParagraphsByArticleID,
     setTranslationParagraphsByArticleID,
+    translationVisibleByArticleID,
+    setTranslationVisibleByArticleID,
+    translationRunningByArticleID,
+    setTranslationRunningByArticleID,
   });
 
   const { pushArticleRoute, clearArticleRoute } = useArticleRoute(selectedArticle?.id ?? null, (id) => {
@@ -917,6 +940,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
             article={selectedArticle}
             sanitizedSummaryHTML={sanitizedSummaryHTML}
             sanitizedFullContentHTML={sanitizedFullContentHTML}
+            translationTemplateHTML={translationTemplate.html}
             canMarkUnread={Boolean(selectedArticle?.is_read)}
             canToggleFavorite={Boolean(selectedArticle)}
             isFavorite={Boolean(selectedArticle?.is_favorite)}
@@ -925,7 +949,8 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
             isExtractingReadable={isExtractingReadable}
             canRefreshArticleCache={Boolean(selectedArticle)}
             isRefreshingArticleCache={isRefreshingArticleCache}
-            isTranslatingArticle={isTranslatingArticle}
+            isTranslatingArticle={isCurrentTranslationRunning}
+            isTranslationVisible={isCurrentTranslationVisible}
             sourceSiteURL={selectedArticleOpenURL}
             detailProgressText={detailProgressText}
             translationParagraphs={currentTranslationParagraphs}

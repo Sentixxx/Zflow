@@ -25,7 +25,7 @@ describe("translateArticleStream", () => {
     ]);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(stream, { status: 200 }));
 
-    await expect(client.translateArticleStream(1, "zh-CN", onEvent)).resolves.toBeUndefined();
+    await expect(client.translateArticleStream(1, "zh-CN", [], onEvent)).resolves.toBeUndefined();
     expect(onEvent).toHaveBeenCalledTimes(1);
   });
 });

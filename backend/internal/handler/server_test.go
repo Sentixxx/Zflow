@@ -1112,7 +1112,7 @@ func TestArticleTranslateStreamByParagraph(t *testing.T) {
 	}
 
 	articleID := listResp.Articles[0].ID
-	reqStream := httptest.NewRequest(http.MethodPost, "/api/v1/articles/"+strconv.FormatInt(articleID, 10)+"/translate/stream", bytes.NewReader([]byte(`{"target_lang":"zh-CN"}`)))
+	reqStream := httptest.NewRequest(http.MethodPost, "/api/v1/articles/"+strconv.FormatInt(articleID, 10)+"/translate/stream", bytes.NewReader([]byte(`{"target_lang":"zh-CN","sources":["First paragraph","Second paragraph"]}`)))
 	rrStream := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rrStream, reqStream)
 	if rrStream.Code != http.StatusOK {

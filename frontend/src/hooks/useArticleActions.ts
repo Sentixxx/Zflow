@@ -19,10 +19,14 @@ type UseArticleActionsParams = {
   setIsExtractingReadable: Dispatch<SetStateAction<boolean>>;
   isRefreshingArticleCache: boolean;
   setIsRefreshingArticleCache: Dispatch<SetStateAction<boolean>>;
-  isTranslatingArticle: boolean;
-  setIsTranslatingArticle: Dispatch<SetStateAction<boolean>>;
   aiTargetLang: string;
+  translationSources: string[];
+  translationParagraphsByArticleID: Record<number, TranslationParagraph[]>;
   setTranslationParagraphsByArticleID: Dispatch<SetStateAction<Record<number, TranslationParagraph[]>>>;
+  translationVisibleByArticleID: Record<number, boolean>;
+  setTranslationVisibleByArticleID: Dispatch<SetStateAction<Record<number, boolean>>>;
+  translationRunningByArticleID: Record<number, boolean>;
+  setTranslationRunningByArticleID: Dispatch<SetStateAction<Record<number, boolean>>>;
 };
 
 export function useArticleActions({
@@ -35,10 +39,14 @@ export function useArticleActions({
   setIsExtractingReadable,
   isRefreshingArticleCache,
   setIsRefreshingArticleCache,
-  isTranslatingArticle,
-  setIsTranslatingArticle,
   aiTargetLang,
+  translationSources,
+  translationParagraphsByArticleID,
   setTranslationParagraphsByArticleID,
+  translationVisibleByArticleID,
+  setTranslationVisibleByArticleID,
+  translationRunningByArticleID,
+  setTranslationRunningByArticleID,
 }: UseArticleActionsParams) {
   const syncSelectedArticle = (updated: Article) => {
     setSelectedArticle((current) => (current?.id === updated.id ? updated : current));
@@ -110,6 +118,8 @@ export function useArticleActions({
       syncSelectedArticle(updated);
       setArticles((current) => current.map((entry) => (entry.id === updated.id ? { ...entry, ...updated } : entry)));
       setTranslationParagraphsByArticleID((current) => ({ ...current, [updated.id]: [] }));
+      setTranslationVisibleByArticleID((current) => ({ ...current, [updated.id]: false }));
+      setTranslationRunningByArticleID((current) => ({ ...current, [updated.id]: false }));
       setMessage("文章缓存已刷新");
     } catch (e) {
       setMessage((e as Error).message, true);
@@ -119,15 +129,33 @@ export function useArticleActions({
   };
 
   const translateArticle = async () => {
-    if (!selectedArticle || isTranslatingArticle) {
+    if (!selectedArticle) {
       return;
     }
     const articleID = selectedArticle.id;
-    setIsTranslatingArticle(true);
+    const isRunning = translationRunningByArticleID[articleID] ?? false;
+    const hasStoredTranslation = (translationParagraphsByArticleID[articleID] || []).length > 0;
+
+    if (isRunning) {
+      const nextVisible = !(translationVisibleByArticleID[articleID] ?? false);
+      setTranslationVisibleByArticleID((current) => ({ ...current, [articleID]: nextVisible }));
+      setMessage(nextVisible ? "已切换到译文模式" : "已切回原文模式");
+      return;
+    }
+
+    if (hasStoredTranslation) {
+      const nextVisible = !(translationVisibleByArticleID[articleID] ?? false);
+      setTranslationVisibleByArticleID((current) => ({ ...current, [articleID]: nextVisible }));
+      setMessage(nextVisible ? "已切换到译文模式" : "已切回原文模式");
+      return;
+    }
+
     setMessage("正在调用 AI 翻译...");
+    setTranslationVisibleByArticleID((current) => ({ ...current, [articleID]: true }));
+    setTranslationRunningByArticleID((current) => ({ ...current, [articleID]: true }));
     setTranslationParagraphsByArticleID((current) => ({ ...current, [articleID]: [] }));
     try {
-      await client.translateArticleStream(articleID, aiTargetLang.trim() || "zh-CN", (event) => {
+      await client.translateArticleStream(articleID, aiTargetLang.trim() || "zh-CN", translationSources, (event) => {
         if (event.type === "start") {
           const paragraphs: TranslationParagraph[] = Array.from({ length: Math.max(0, event.total) }, (_, idx) => ({
             index: idx + 1,
@@ -169,7 +197,7 @@ export function useArticleActions({
     } catch (e) {
       setMessage((e as Error).message, true);
     } finally {
-      setIsTranslatingArticle(false);
+      setTranslationRunningByArticleID((current) => ({ ...current, [articleID]: false }));
     }
   };
 
