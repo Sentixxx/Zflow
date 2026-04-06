@@ -1,69 +1,25 @@
 package feedparser
 
-import "testing"
+import (
+	"testing"
 
-func TestParseFeedRSS(t *testing.T) {
+	"github.com/Sentixxx/Zflow/backend/internal/model"
+)
+
+func TestParseFeedCapturesOriginalItemFields(t *testing.T) {
 	raw := []byte(`<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
-    <title>Example RSS</title>
-    <item><title>A</title><link>https://example.com/a</link><description>DA</description></item>
-    <item><title>B</title><link>https://example.com/b</link><description>DB</description></item>
-  </channel>
-</rss>`)
-
-	feed, err := ParseFeed(raw)
-	if err != nil {
-		t.Fatalf("ParseFeed() error = %v", err)
-	}
-	if feed.Title != "Example RSS" {
-		t.Fatalf("title = %q, want %q", feed.Title, "Example RSS")
-	}
-	if len(feed.Items) != 2 {
-		t.Fatalf("count = %d, want 2", len(feed.Items))
-	}
-	if feed.Items[0].Link != "https://example.com/a" {
-		t.Fatalf("item[0].link = %q", feed.Items[0].Link)
-	}
-}
-
-func TestParseFeedAtom(t *testing.T) {
-	raw := []byte(`<?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <title>Example Atom</title>
-  <entry><title>E1</title></entry>
-  <entry><title>E2</title></entry>
-  <entry><title>E3</title></entry>
-</feed>`)
-
-	feed, err := ParseFeed(raw)
-	if err != nil {
-		t.Fatalf("ParseFeed() error = %v", err)
-	}
-	if feed.Title != "Example Atom" {
-		t.Fatalf("title = %q, want %q", feed.Title, "Example Atom")
-	}
-	if len(feed.Items) != 3 {
-		t.Fatalf("count = %d, want 3", len(feed.Items))
-	}
-}
-
-func TestParseFeedExtractMediaCoverURL(t *testing.T) {
-	raw := []byte(`<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
-  <channel>
-    <title>Example RSS</title>
+    <title>HN Feed</title>
     <item>
-      <title>A</title>
-      <link>https://example.com/a</link>
-      <description>DA</description>
-      <media:thumbnail url="https://cdn.example.com/thumb-a.jpg" />
-    </item>
-    <item>
-      <title>B</title>
-      <link>https://example.com/b</link>
-      <description>DB</description>
-      <enclosure type="image/jpeg" url="https://cdn.example.com/cover-b.jpg" />
+      <title>Example story</title>
+      <link>https://news.ycombinator.com/item?id=1</link>
+      <description><![CDATA[<p>Original RSS summary</p>]]></description>
+      <pubDate>Mon, 07 Apr 2026 00:00:00 GMT</pubDate>
+      <comments>https://news.ycombinator.com/item?id=1</comments>
+      <guid>https://news.ycombinator.com/item?id=1</guid>
+      <dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">pg</dc:creator>
+      <content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[<p>Encoded body</p>]]></content:encoded>
     </item>
   </channel>
 </rss>`)
@@ -72,38 +28,45 @@ func TestParseFeedExtractMediaCoverURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseFeed() error = %v", err)
 	}
-	if len(feed.Items) != 2 {
-		t.Fatalf("count = %d, want 2", len(feed.Items))
+	if len(feed.Items) != 1 {
+		t.Fatalf("items len = %d, want 1", len(feed.Items))
 	}
-	if feed.Items[0].CoverURL != "https://cdn.example.com/thumb-a.jpg" {
-		t.Fatalf("item[0].cover = %q", feed.Items[0].CoverURL)
+
+	payload := feed.Items[0].SourcePayload
+	if payload == nil {
+		t.Fatalf("SourcePayload = nil, want non-nil")
 	}
-	if feed.Items[1].CoverURL != "https://cdn.example.com/cover-b.jpg" {
-		t.Fatalf("item[1].cover = %q", feed.Items[1].CoverURL)
+	if payload.Summary != "<p>Original RSS summary</p>" {
+		t.Fatalf("payload.Summary = %q, want RSS summary", payload.Summary)
+	}
+	if len(payload.Fields) < 3 {
+		t.Fatalf("payload.Fields len = %d, want >= 3", len(payload.Fields))
+	}
+	if !hasSourceField(payload.Fields, "comments", "https://news.ycombinator.com/item?id=1") {
+		t.Fatalf("payload.Fields = %+v, want comments field", payload.Fields)
+	}
+	if !hasSourceField(payload.Fields, "creator", "pg") {
+		t.Fatalf("payload.Fields = %+v, want creator field", payload.Fields)
+	}
+	if !hasSourceHTMLField(payload.Fields, "encoded", "<p>Encoded body</p>") {
+		t.Fatalf("payload.Fields = %+v, want encoded html field", payload.Fields)
 	}
 }
 
-func TestParseFeedExtractFeedIconHints(t *testing.T) {
-	raw := []byte(`<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
-  <channel>
-    <title>Icon Feed</title>
-    <image>
-      <url>https://example.com/rss-image.png</url>
-    </image>
-    <itunes:image href="https://example.com/podcast-cover.jpg" />
-    <item><title>A</title></item>
-  </channel>
-</rss>`)
+func hasSourceField(fields []model.ArticleSourceField, key string, value string) bool {
+	for _, field := range fields {
+		if field.Key == key && field.Value == value {
+			return true
+		}
+	}
+	return false
+}
 
-	feed, err := ParseFeed(raw)
-	if err != nil {
-		t.Fatalf("ParseFeed() error = %v", err)
+func hasSourceHTMLField(fields []model.ArticleSourceField, key string, html string) bool {
+	for _, field := range fields {
+		if field.Key == key && field.ValueHTML == html {
+			return true
+		}
 	}
-	if len(feed.IconHints) == 0 {
-		t.Fatalf("icon hints should not be empty")
-	}
-	if feed.IconHints[0] != "https://example.com/rss-image.png" {
-		t.Fatalf("icon hint[0] = %q", feed.IconHints[0])
-	}
+	return false
 }

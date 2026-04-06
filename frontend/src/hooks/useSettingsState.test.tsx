@@ -6,8 +6,10 @@ import { useSettingsState } from "./useSettingsState";
 
 type SettingsSnapshot = {
   aiProtocol: "openai" | "anthropic";
+  embeddingModel: string;
   scriptLang: "shell" | "python" | "javascript";
   setAIProtocol: (value: "openai" | "anthropic") => void;
+  setEmbeddingModel: (value: string) => void;
 };
 
 describe("useSettingsState", () => {
@@ -29,13 +31,16 @@ describe("useSettingsState", () => {
 
     const snapshot = snapshotRef.current as SettingsSnapshot;
     expect(snapshot.aiProtocol).toBe("openai");
+    expect(snapshot.embeddingModel).toBe("");
     expect(snapshot.scriptLang).toBe("shell");
 
     act(() => {
       snapshotRef.current?.setAIProtocol("anthropic");
+      snapshotRef.current?.setEmbeddingModel("text-embedding-3-small");
     });
 
     const updated = snapshotRef.current as SettingsSnapshot;
     expect(updated.aiProtocol).toBe("anthropic");
+    expect(updated.embeddingModel).toBe("text-embedding-3-small");
   });
 });

@@ -25,6 +25,21 @@ type RecommendationScores struct {
 	Composite int `json:"composite"`
 }
 
+type ArticleSourceField struct {
+	Key       string `json:"key"`
+	Value     string `json:"value,omitempty"`
+	ValueHTML string `json:"value_html,omitempty"`
+}
+
+type ArticleSourcePayload struct {
+	FeedType    string               `json:"feed_type,omitempty"`
+	Title       string               `json:"title,omitempty"`
+	Link        string               `json:"link,omitempty"`
+	Summary     string               `json:"summary,omitempty"`
+	PublishedAt string               `json:"published_at,omitempty"`
+	Fields      []ArticleSourceField `json:"fields,omitempty"`
+}
+
 type ArticleFeatures struct {
 	GateStatus         ArticleGateStatus `json:"-"`
 	Quality            int               `json:"-"`
@@ -51,6 +66,7 @@ type Article struct {
 	DisplaySummaryStatus string                `json:"display_summary_status,omitempty"`
 	DisplaySummaryAt     string                `json:"display_summary_updated_at,omitempty"`
 	FullContent          string                `json:"full_content,omitempty"`
+	SourcePayload        *ArticleSourcePayload `json:"source_payload,omitempty"`
 	CoverURL             string                `json:"cover_url,omitempty"`
 	PublishedAt          string                `json:"published_at,omitempty"`
 	IsRead               bool                  `json:"is_read"`

@@ -44,6 +44,9 @@ const (
 	settingKeyAIBaseURL     = "ai_base_url"
 	settingKeyAIModel       = "ai_model"
 	settingKeyAITargetLang  = "ai_target_lang"
+	settingKeyEmbeddingAPIKey  = "embedding_api_key"
+	settingKeyEmbeddingBaseURL = "embedding_base_url"
+	settingKeyEmbeddingModel   = "embedding_model"
 	settingKeyRetentionDays = "article_retention_days"
 	defaultAIBaseURL        = "https://api.openai.com/v1"
 	defaultAIModel          = "gpt-4o-mini"
@@ -83,11 +86,14 @@ type updateFeedTitleRequest struct {
 }
 
 type updateAISettingsRequest struct {
-	Protocol   string `json:"protocol"`
-	APIKey     string `json:"api_key"`
-	BaseURL    string `json:"base_url"`
-	Model      string `json:"model"`
-	TargetLang string `json:"target_lang"`
+	Protocol         string `json:"protocol"`
+	APIKey           string `json:"api_key"`
+	BaseURL          string `json:"base_url"`
+	Model            string `json:"model"`
+	TargetLang       string `json:"target_lang"`
+	EmbeddingAPIKey  string `json:"embedding_api_key"`
+	EmbeddingBaseURL string `json:"embedding_base_url"`
+	EmbeddingModel   string `json:"embedding_model"`
 }
 
 type translateArticleRequest struct {
@@ -101,6 +107,13 @@ type aiSettings struct {
 	BaseURL    string `json:"base_url"`
 	Model      string `json:"model"`
 	TargetLang string `json:"target_lang"`
+	Embedding  embeddingSettings `json:"embedding"`
+}
+
+type embeddingSettings struct {
+	APIKey  string `json:"api_key"`
+	BaseURL string `json:"base_url"`
+	Model   string `json:"model"`
 }
 
 type translationPair struct {
@@ -181,7 +194,7 @@ func WithVectorRepository(vr repository.VectorRepository) ServerOption {
 			s.store,
 			s.httpClientForAI,
 			func() (service.EmbeddingConfig, error) {
-				cfg, err := s.loadAISettings()
+				cfg, err := s.loadEmbeddingSettings()
 				if err != nil {
 					return service.EmbeddingConfig{}, err
 				}

@@ -280,11 +280,12 @@ func (s *FeedRefreshService) fetchAndParse(ctx context.Context, feedURL, etag, l
 	items := make([]repository.ArticleSeed, 0, len(parsed.Items))
 	for _, item := range parsed.Items {
 		items = append(items, repository.ArticleSeed{
-			Title:       item.Title,
-			Link:        item.Link,
-			Summary:     item.Summary,
-			CoverURL:    item.CoverURL,
-			PublishedAt: item.PublishedAt,
+			Title:         item.Title,
+			Link:          item.Link,
+			Summary:       item.Summary,
+			SourcePayload: item.SourcePayload,
+			CoverURL:      item.CoverURL,
+			PublishedAt:   item.PublishedAt,
 		})
 	}
 	return feedFetchResult{

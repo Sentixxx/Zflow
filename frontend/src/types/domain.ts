@@ -28,6 +28,21 @@ export interface RecommendationScores {
   composite: number;
 }
 
+export interface ArticleSourceField {
+  key: string;
+  value?: string;
+  value_html?: string;
+}
+
+export interface ArticleSourcePayload {
+  feed_type?: string;
+  title?: string;
+  link?: string;
+  summary?: string;
+  published_at?: string;
+  fields?: ArticleSourceField[];
+}
+
 export interface TopicCluster {
   id: number;
   title: string;
@@ -97,6 +112,7 @@ export interface Article {
   display_summary_status?: string;
   display_summary_updated_at?: string;
   full_content?: string;
+  source_payload?: ArticleSourcePayload;
   cover_url?: string;
   published_at?: string;
   is_read: boolean;

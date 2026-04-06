@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ type ArticleSeed struct {
 	Link                 string
 	Summary              string
 	FullContent          string
+	SourcePayload        *model.ArticleSourcePayload
 	CoverURL             string
 	PublishedAt          string
 	RecommendationScores *model.RecommendationScores
@@ -88,6 +90,7 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 			title TEXT NOT NULL,
 			link TEXT NOT NULL DEFAULT '',
 			summary TEXT NOT NULL DEFAULT '',
+			source_payload TEXT NOT NULL DEFAULT '',
 			ai_summary TEXT NOT NULL DEFAULT '',
 			ai_summary_status TEXT NOT NULL DEFAULT '',
 			ai_summary_updated_at TEXT NOT NULL DEFAULT '',
@@ -140,6 +143,9 @@ func (s *SQLiteFeedRepository) migrate(ctx context.Context) error {
 		}
 	}
 	if err := s.ensureColumn(ctx, "entries", "full_content", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "entries", "source_payload", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "entries", "ai_summary", "TEXT NOT NULL DEFAULT ''"); err != nil {
@@ -682,7 +688,7 @@ func (s *SQLiteFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string
 func (s *SQLiteFeedRepository) ListArticles() []model.Article {
 	rows, err := s.db.Query(`
 		SELECT
-			e.id, e.feed_id, e.title, e.link, e.summary, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
+			e.id, e.feed_id, e.title, e.link, e.summary, e.source_payload, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
 			e.display_summary, e.display_summary_status, e.display_summary_updated_at, e.full_content, e.cover_url, e.published_at,
 			e.is_read, e.is_favorite, e.favorited_at, e.quality_score, e.relevance_score, e.novelty_score, e.composite_score, e.created_at,
 			af.gate_status, COALESCE(af.quality_score, 0), COALESCE(af.relevance_score, 0), COALESCE(af.depth_score, 0), COALESCE(af.freshness_score, 0), COALESCE(af.novelty_score, 0), COALESCE(af.composite_score, 0), COALESCE(af.content_fingerprint, ''), COALESCE(af.feature_version, 0), COALESCE(af.scored_at, '')
@@ -704,14 +710,16 @@ func (s *SQLiteFeedRepository) ListArticles() []model.Article {
 		var features model.ArticleFeatures
 		var featureVersion sql.NullInt64
 		var scoredAt sql.NullString
+		var sourcePayload string
 		if err := rows.Scan(
-			&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
+			&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &sourcePayload, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
 			&article.DisplaySummary, &article.DisplaySummaryStatus, &article.DisplaySummaryAt, &article.FullContent, &article.CoverURL, &article.PublishedAt,
 			&readFlag, &favoriteFlag, &article.FavoritedAt, &scores.Quality, &scores.Relevance, &scores.Novelty, &scores.Composite, &article.CreatedAt,
 			&gateStatus, &features.Quality, &features.Relevance, &features.Depth, &features.Freshness, &features.Novelty, &features.Composite, &features.ContentFingerprint, &featureVersion, &scoredAt,
 		); err != nil {
 			continue
 		}
+		article.SourcePayload = decodeSourcePayload(sourcePayload)
 		article.IsRead = readFlag == 1
 		article.IsFavorite = favoriteFlag == 1
 		article.RecommendationScores = &scores
@@ -763,7 +771,7 @@ func (s *SQLiteFeedRepository) ListArticlesNeedingScoreRefresh(featureVersion in
 	}
 	rows, err := s.db.Query(`
 		SELECT
-			e.id, e.feed_id, e.title, e.link, e.summary, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
+			e.id, e.feed_id, e.title, e.link, e.summary, e.source_payload, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
 			e.display_summary, e.display_summary_status, e.display_summary_updated_at, e.full_content, e.cover_url, e.published_at,
 			e.is_read, e.is_favorite, e.favorited_at, e.quality_score, e.relevance_score, e.novelty_score, e.composite_score, e.created_at,
 			af.gate_status, COALESCE(af.quality_score, 0), COALESCE(af.relevance_score, 0), COALESCE(af.depth_score, 0), COALESCE(af.freshness_score, 0), COALESCE(af.novelty_score, 0), COALESCE(af.composite_score, 0), COALESCE(af.content_fingerprint, ''), COALESCE(af.feature_version, 0), COALESCE(af.scored_at, '')
@@ -790,14 +798,16 @@ func (s *SQLiteFeedRepository) ListArticlesNeedingScoreRefresh(featureVersion in
 		var features model.ArticleFeatures
 		var featureVersion sql.NullInt64
 		var scoredAt sql.NullString
+		var sourcePayload string
 		if err := rows.Scan(
-			&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
+			&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &sourcePayload, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
 			&article.DisplaySummary, &article.DisplaySummaryStatus, &article.DisplaySummaryAt, &article.FullContent, &article.CoverURL, &article.PublishedAt,
 			&readFlag, &favoriteFlag, &article.FavoritedAt, &scores.Quality, &scores.Relevance, &scores.Novelty, &scores.Composite, &article.CreatedAt,
 			&gateStatus, &features.Quality, &features.Relevance, &features.Depth, &features.Freshness, &features.Novelty, &features.Composite, &features.ContentFingerprint, &featureVersion, &scoredAt,
 		); err != nil {
 			continue
 		}
+		article.SourcePayload = decodeSourcePayload(sourcePayload)
 		article.IsRead = readFlag == 1
 		article.IsFavorite = favoriteFlag == 1
 		article.RecommendationScores = &scores
@@ -819,7 +829,7 @@ func (s *SQLiteFeedRepository) ListArticlesMissingDisplaySummary(feedID int64, l
 		limit = 100
 	}
 	rows, err := s.db.Query(
-		`SELECT id, feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at
+		`SELECT id, feed_id, title, link, summary, source_payload, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at
 		 FROM entries
 		 WHERE feed_id = ? AND display_summary = ''
 		 ORDER BY id DESC
@@ -836,12 +846,14 @@ func (s *SQLiteFeedRepository) ListArticlesMissingDisplaySummary(feedID int64, l
 		var article model.Article
 		var readFlag int
 		var favoriteFlag int
+		var sourcePayload string
 		if err := rows.Scan(
 			&article.ID,
 			&article.FeedID,
 			&article.Title,
 			&article.Link,
 			&article.Summary,
+			&sourcePayload,
 			&article.AISummary,
 			&article.AISummaryStatus,
 			&article.AISummaryAt,
@@ -858,6 +870,7 @@ func (s *SQLiteFeedRepository) ListArticlesMissingDisplaySummary(feedID int64, l
 		); err != nil {
 			continue
 		}
+		article.SourcePayload = decodeSourcePayload(sourcePayload)
 		article.IsRead = readFlag == 1
 		article.IsFavorite = favoriteFlag == 1
 		articles = append(articles, article)
@@ -877,7 +890,7 @@ func (s *SQLiteFeedRepository) DeleteArticle(id int64) (bool, error) {
 func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
 	row := s.db.QueryRow(`
 		SELECT
-			e.id, e.feed_id, e.title, e.link, e.summary, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
+			e.id, e.feed_id, e.title, e.link, e.summary, e.source_payload, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
 			e.display_summary, e.display_summary_status, e.display_summary_updated_at, e.full_content, e.cover_url, e.published_at,
 			e.is_read, e.is_favorite, e.favorited_at, e.quality_score, e.relevance_score, e.novelty_score, e.composite_score, e.created_at,
 			af.gate_status, COALESCE(af.quality_score, 0), COALESCE(af.relevance_score, 0), COALESCE(af.depth_score, 0), COALESCE(af.freshness_score, 0), COALESCE(af.novelty_score, 0), COALESCE(af.composite_score, 0), COALESCE(af.content_fingerprint, ''), COALESCE(af.feature_version, 0), COALESCE(af.scored_at, '')
@@ -892,8 +905,9 @@ func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
 	var features model.ArticleFeatures
 	var featureVersion sql.NullInt64
 	var scoredAt sql.NullString
+	var sourcePayload string
 	if err := row.Scan(
-		&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
+		&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &sourcePayload, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
 		&article.DisplaySummary, &article.DisplaySummaryStatus, &article.DisplaySummaryAt, &article.FullContent, &article.CoverURL, &article.PublishedAt,
 		&readFlag, &favoriteFlag, &article.FavoritedAt, &scores.Quality, &scores.Relevance, &scores.Novelty, &scores.Composite, &article.CreatedAt,
 		&gateStatus, &features.Quality, &features.Relevance, &features.Depth, &features.Freshness, &features.Novelty, &features.Composite, &features.ContentFingerprint, &featureVersion, &scoredAt,
@@ -902,6 +916,7 @@ func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
 	}
 	article.IsRead = readFlag == 1
 	article.IsFavorite = favoriteFlag == 1
+	article.SourcePayload = decodeSourcePayload(sourcePayload)
 	article.RecommendationScores = &scores
 	if gateStatus.Valid {
 		features.GateStatus = model.ArticleGateStatus(gateStatus.String)
@@ -1166,9 +1181,9 @@ func (s *SQLiteFeedRepository) insertEntriesTx(tx *sql.Tx, feedID int64, items [
 		}
 
 		res, err := tx.Exec(
-			`INSERT INTO entries(feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, quality_score, relevance_score, novelty_score, composite_score, created_at, updated_at)
-			 VALUES(?, ?, ?, ?, '', '', '', '', '', '', ?, ?, ?, 0, 0, '', ?, ?, ?, ?, ?, ?)`,
-			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, cleaned.FullContent, cleaned.CoverURL, cleaned.PublishedAt, scores.Quality, scores.Relevance, scores.Novelty, scores.Composite, now, now,
+			`INSERT INTO entries(feed_id, title, link, summary, source_payload, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, quality_score, relevance_score, novelty_score, composite_score, created_at, updated_at)
+			 VALUES(?, ?, ?, ?, ?, '', '', '', '', '', '', ?, ?, ?, 0, 0, '', ?, ?, ?, ?, ?, ?)`,
+			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, encodeSourcePayload(cleaned.SourcePayload), cleaned.FullContent, cleaned.CoverURL, cleaned.PublishedAt, scores.Quality, scores.Relevance, scores.Novelty, scores.Composite, now, now,
 		)
 		if err != nil {
 			return insertedCount, err
@@ -1249,7 +1264,69 @@ func cleanSeed(seed ArticleSeed) ArticleSeed {
 	seed.FullContent = strings.TrimSpace(seed.FullContent)
 	seed.CoverURL = strings.TrimSpace(seed.CoverURL)
 	seed.PublishedAt = strings.TrimSpace(seed.PublishedAt)
+	seed.SourcePayload = cleanSourcePayload(seed.SourcePayload)
 	return seed
+}
+
+func cleanSourcePayload(payload *model.ArticleSourcePayload) *model.ArticleSourcePayload {
+	if payload == nil {
+		return nil
+	}
+	cleaned := &model.ArticleSourcePayload{
+		FeedType:    strings.TrimSpace(payload.FeedType),
+		Title:       strings.TrimSpace(payload.Title),
+		Link:        strings.TrimSpace(payload.Link),
+		Summary:     strings.TrimSpace(payload.Summary),
+		PublishedAt: strings.TrimSpace(payload.PublishedAt),
+	}
+	for _, field := range payload.Fields {
+		key := strings.TrimSpace(field.Key)
+		value := strings.TrimSpace(field.Value)
+		valueHTML := unwrapSourceCDATA(strings.TrimSpace(field.ValueHTML))
+		if key == "" || (value == "" && valueHTML == "") {
+			continue
+		}
+		cleaned.Fields = append(cleaned.Fields, model.ArticleSourceField{
+			Key:       key,
+			Value:     value,
+			ValueHTML: valueHTML,
+		})
+	}
+	if cleaned.FeedType == "" && cleaned.Title == "" && cleaned.Link == "" && cleaned.Summary == "" && cleaned.PublishedAt == "" && len(cleaned.Fields) == 0 {
+		return nil
+	}
+	return cleaned
+}
+
+func encodeSourcePayload(payload *model.ArticleSourcePayload) string {
+	cleaned := cleanSourcePayload(payload)
+	if cleaned == nil {
+		return ""
+	}
+	raw, err := json.Marshal(cleaned)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+func decodeSourcePayload(raw string) *model.ArticleSourcePayload {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var payload model.ArticleSourcePayload
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return nil
+	}
+	return cleanSourcePayload(&payload)
+}
+
+func unwrapSourceCDATA(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if strings.HasPrefix(trimmed, "<![CDATA[") && strings.HasSuffix(trimmed, "]]>") {
+		return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(trimmed, "<![CDATA["), "]]>"))
+	}
+	return trimmed
 }
 
 func (s *SQLiteFeedRepository) UpdateFeedScript(id int64, script string, lang string) (model.Feed, bool, error) {

@@ -10,6 +10,11 @@ export function useSettingsState() {
   const [aiBaseURL, setAIBaseURL] = useState("");
   const [aiModel, setAIModel] = useState("");
   const [aiTargetLang, setAITargetLang] = useState("zh-CN");
+  const [embeddingAPIKey, setEmbeddingAPIKey] = useState("");
+  const [embeddingAPIKeyMasked, setEmbeddingAPIKeyMasked] = useState("");
+  const [embeddingAPIKeyConfigured, setEmbeddingAPIKeyConfigured] = useState(false);
+  const [embeddingBaseURL, setEmbeddingBaseURL] = useState("");
+  const [embeddingModel, setEmbeddingModel] = useState("");
   const [articleRetentionDays, setArticleRetentionDays] = useState("90");
   const [scriptFeedID, setScriptFeedID] = useState<number | null>(null);
   const [scriptContent, setScriptContent] = useState("");
@@ -25,6 +30,11 @@ export function useSettingsState() {
     aiBaseURL,
     aiModel,
     aiTargetLang,
+    embeddingAPIKey,
+    embeddingAPIKeyMasked,
+    embeddingAPIKeyConfigured,
+    embeddingBaseURL,
+    embeddingModel,
     articleRetentionDays,
     scriptFeedID,
     scriptContent,
@@ -38,6 +48,11 @@ export function useSettingsState() {
     setAIBaseURL,
     setAIModel,
     setAITargetLang,
+    setEmbeddingAPIKey,
+    setEmbeddingAPIKeyMasked,
+    setEmbeddingAPIKeyConfigured,
+    setEmbeddingBaseURL,
+    setEmbeddingModel,
     setArticleRetentionDays,
     setScriptFeedID,
     setScriptContent,

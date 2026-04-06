@@ -590,7 +590,10 @@ func TestAISettingsGetAndPatch(t *testing.T) {
 		"api_key":"test-ai-key",
 		"base_url":"https://example-ai.local/v1",
 		"model":"test-model",
-		"target_lang":"ja"
+		"target_lang":"ja",
+		"embedding_api_key":"embed-key",
+		"embedding_base_url":"https://example-embed.local/v1",
+		"embedding_model":"text-embedding-test"
 	}`)))
 	rrPatch := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rrPatch, reqPatch)
@@ -614,12 +617,43 @@ func TestAISettingsGetAndPatch(t *testing.T) {
 		BaseURL          string `json:"base_url"`
 		Model            string `json:"model"`
 		TargetLang       string `json:"target_lang"`
+		EmbeddingAPIKey  string `json:"embedding_api_key"`
+		EmbeddingMasked  string `json:"embedding_api_key_masked"`
+		EmbeddingHasKey  bool   `json:"embedding_api_key_configured"`
+		EmbeddingBaseURL string `json:"embedding_base_url"`
+		EmbeddingModel   string `json:"embedding_model"`
 	}
 	if err := json.Unmarshal(rrGet2.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal ai settings response error = %v", err)
 	}
-	if resp.Protocol != "openai" || resp.APIKey != "" || resp.APIKeyMasked == "" || !resp.APIKeyConfigured || resp.BaseURL != "https://example-ai.local/v1" || resp.Model != "test-model" || resp.TargetLang != "ja" {
+	if resp.Protocol != "openai" || resp.APIKey != "" || resp.APIKeyMasked == "" || !resp.APIKeyConfigured || resp.BaseURL != "https://example-ai.local/v1" || resp.Model != "test-model" || resp.TargetLang != "ja" || resp.EmbeddingAPIKey != "" || resp.EmbeddingMasked == "" || !resp.EmbeddingHasKey || resp.EmbeddingBaseURL != "https://example-embed.local/v1" || resp.EmbeddingModel != "text-embedding-test" {
 		t.Fatalf("ai settings response mismatch: %+v", resp)
+	}
+}
+
+func TestEmbeddingSettingsFallbackToChatSettings(t *testing.T) {
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	if err := repo.SetSetting(settingKeyAIApiKey, "chat-key"); err != nil {
+		t.Fatalf("SetSetting(ai_api_key) error = %v", err)
+	}
+	if err := repo.SetSetting(settingKeyAIBaseURL, "https://example-ai.local/v1"); err != nil {
+		t.Fatalf("SetSetting(ai_base_url) error = %v", err)
+	}
+	if err := repo.SetSetting(settingKeyAIModel, "chat-model"); err != nil {
+		t.Fatalf("SetSetting(ai_model) error = %v", err)
+	}
+
+	server := NewServer(repo, t.TempDir(), WithVectorRepository(&repository.PostgresVectorRepository{}))
+
+	cfg, err := server.loadEmbeddingSettings()
+	if err != nil {
+		t.Fatalf("loadEmbeddingSettings() error = %v", err)
+	}
+	if cfg.APIKey != "chat-key" || cfg.BaseURL != "https://example-ai.local/v1" || cfg.Model != "chat-model" {
+		t.Fatalf("embedding fallback mismatch: %+v", cfg)
 	}
 }
 
@@ -855,6 +889,130 @@ func TestArticleReadabilityRejectPDF(t *testing.T) {
 	if !strings.Contains(rrReadable.Body.String(), "unsupported readability content type: pdf") {
 		t.Fatalf("readability error body = %q, want pdf unsupported error", rrReadable.Body.String())
 	}
+}
+
+func TestArticleReadabilityKeepsSourcePayload(t *testing.T) {
+	articleHTML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html><html><body><article><p>Readable service content</p></article></body></html>`))
+	}))
+	defer articleHTML.Close()
+
+	feedXML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>HN-like Feed</title>
+    <item>
+      <title>Example story</title>
+      <link>` + articleHTML.URL + `</link>
+      <description><![CDATA[<p>Original RSS summary</p>]]></description>
+      <pubDate>Wed, 25 Feb 2026 11:00:00 GMT</pubDate>
+      <comments>https://news.ycombinator.com/item?id=1</comments>
+      <dc:creator>pg</dc:creator>
+      <content:encoded><![CDATA[<p>Encoded body</p>]]></content:encoded>
+    </item>
+  </channel>
+</rss>`))
+	}))
+	defer feedXML.Close()
+
+	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	createBody, _ := json.Marshal(map[string]string{"url": feedXML.URL})
+	reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/feeds", bytes.NewReader(createBody))
+	rrCreate := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrCreate, reqCreate)
+	if rrCreate.Code != http.StatusCreated {
+		t.Fatalf("POST /api/v1/feeds status = %d, want %d", rrCreate.Code, http.StatusCreated)
+	}
+
+	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/articles", nil)
+	rrList := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrList, reqList)
+	if rrList.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles status = %d, want %d", rrList.Code, http.StatusOK)
+	}
+	var listResp struct {
+		Articles []struct {
+			ID int64 `json:"id"`
+		} `json:"articles"`
+	}
+	if err := json.Unmarshal(rrList.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("unmarshal list response error = %v", err)
+	}
+	if len(listResp.Articles) != 1 {
+		t.Fatalf("articles len = %d, want 1", len(listResp.Articles))
+	}
+
+	articleID := listResp.Articles[0].ID
+	reqReadable := httptest.NewRequest(http.MethodPost, "/api/v1/articles/"+strconv.FormatInt(articleID, 10)+"/readability", nil)
+	rrReadable := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrReadable, reqReadable)
+	if rrReadable.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/articles/:id/readability status = %d, want %d, body=%s", rrReadable.Code, http.StatusOK, rrReadable.Body.String())
+	}
+
+	var detailResp struct {
+		FullContent   string `json:"full_content"`
+		SourcePayload *struct {
+			Summary string `json:"summary"`
+			Fields  []struct {
+				Key       string `json:"key"`
+				Value     string `json:"value"`
+				ValueHTML string `json:"value_html"`
+			} `json:"fields"`
+		} `json:"source_payload"`
+	}
+	if err := json.Unmarshal(rrReadable.Body.Bytes(), &detailResp); err != nil {
+		t.Fatalf("unmarshal readability response error = %v", err)
+	}
+	if !strings.Contains(detailResp.FullContent, "Readable service content") {
+		t.Fatalf("full_content = %q, want readability content", detailResp.FullContent)
+	}
+	if detailResp.SourcePayload == nil {
+		t.Fatalf("source_payload = nil, want non-nil")
+	}
+	if !strings.Contains(detailResp.SourcePayload.Summary, "Original RSS summary") {
+		t.Fatalf("source_payload.summary = %q, want rss summary", detailResp.SourcePayload.Summary)
+	}
+	if !handlerHasSourceField(detailResp.SourcePayload.Fields, "comments", "https://news.ycombinator.com/item?id=1") {
+		t.Fatalf("source_payload.fields = %+v, want comments field", detailResp.SourcePayload.Fields)
+	}
+	if !handlerHasSourceHTMLField(detailResp.SourcePayload.Fields, "encoded", "<p>Encoded body</p>") {
+		t.Fatalf("source_payload.fields = %+v, want encoded html field", detailResp.SourcePayload.Fields)
+	}
+}
+
+func handlerHasSourceField(fields []struct {
+	Key       string `json:"key"`
+	Value     string `json:"value"`
+	ValueHTML string `json:"value_html"`
+}, key string, value string) bool {
+	for _, field := range fields {
+		if field.Key == key && field.Value == value {
+			return true
+		}
+	}
+	return false
+}
+
+func handlerHasSourceHTMLField(fields []struct {
+	Key       string `json:"key"`
+	Value     string `json:"value"`
+	ValueHTML string `json:"value_html"`
+}, key string, html string) bool {
+	for _, field := range fields {
+		if field.Key == key && field.ValueHTML == html {
+			return true
+		}
+	}
+	return false
 }
 
 func TestArticleRefreshCache(t *testing.T) {

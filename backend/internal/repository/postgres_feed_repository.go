@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -459,6 +460,7 @@ func (s *PostgresFeedRepository) UpdateFeedAfterRefresh(feedID int64, title stri
 
 func pgScanFullArticle(scanner interface{ Scan(dest ...any) error }) (model.Article, error) {
 	var article model.Article
+	var sourcePayload string
 	var readFlag int
 	var favoriteFlag int
 	var scores model.RecommendationScores
@@ -467,7 +469,7 @@ func pgScanFullArticle(scanner interface{ Scan(dest ...any) error }) (model.Arti
 	var featureVersion sql.NullInt64
 	var scoredAt sql.NullString
 	if err := scanner.Scan(
-		&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
+		&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &sourcePayload, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
 		&article.DisplaySummary, &article.DisplaySummaryStatus, &article.DisplaySummaryAt, &article.FullContent, &article.CoverURL, &article.PublishedAt,
 		&readFlag, &favoriteFlag, &article.FavoritedAt, &scores.Quality, &scores.Relevance, &scores.Novelty, &scores.Composite, &article.CreatedAt,
 		&gateStatus, &features.Quality, &features.Relevance, &features.Depth, &features.Freshness, &features.Novelty, &features.Composite, &features.ContentFingerprint, &featureVersion, &scoredAt,
@@ -476,6 +478,7 @@ func pgScanFullArticle(scanner interface{ Scan(dest ...any) error }) (model.Arti
 	}
 	article.IsRead = readFlag == 1
 	article.IsFavorite = favoriteFlag == 1
+	article.SourcePayload = pgDecodeSourcePayload(sourcePayload)
 	article.RecommendationScores = &scores
 	if gateStatus.Valid {
 		features.GateStatus = model.ArticleGateStatus(gateStatus.String)
@@ -490,7 +493,7 @@ func pgScanFullArticle(scanner interface{ Scan(dest ...any) error }) (model.Arti
 
 const fullArticleSelectSQL = `
 	SELECT
-		e.id, e.feed_id, e.title, e.link, e.summary, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
+		e.id, e.feed_id, e.title, e.link, e.summary, e.source_payload, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
 		e.display_summary, e.display_summary_status, e.display_summary_updated_at, e.full_content, e.cover_url, e.published_at,
 		e.is_read, e.is_favorite, e.favorited_at, e.quality_score, e.relevance_score, e.novelty_score, e.composite_score, e.created_at,
 		af.gate_status, COALESCE(af.quality_score, 0), COALESCE(af.relevance_score, 0), COALESCE(af.depth_score, 0), COALESCE(af.freshness_score, 0), COALESCE(af.novelty_score, 0), COALESCE(af.composite_score, 0), COALESCE(af.content_fingerprint, ''), COALESCE(af.feature_version, 0), COALESCE(af.scored_at, '')
@@ -576,7 +579,7 @@ func (s *PostgresFeedRepository) ListArticlesMissingDisplaySummary(feedID int64,
 		limit = 100
 	}
 	rows, err := s.db.Query(
-		`SELECT id, feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at
+		`SELECT id, feed_id, title, link, summary, source_payload, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at
 		 FROM entries
 		 WHERE feed_id = $1 AND display_summary = ''
 		 ORDER BY id DESC
@@ -591,11 +594,12 @@ func (s *PostgresFeedRepository) ListArticlesMissingDisplaySummary(feedID int64,
 	articles := make([]model.Article, 0)
 	for rows.Next() {
 		var article model.Article
+		var sourcePayload string
 		var readFlag int
 		var favoriteFlag int
 		if err := rows.Scan(
 			&article.ID, &article.FeedID, &article.Title, &article.Link,
-			&article.Summary, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
+			&article.Summary, &sourcePayload, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
 			&article.DisplaySummary, &article.DisplaySummaryStatus, &article.DisplaySummaryAt,
 			&article.FullContent, &article.CoverURL, &article.PublishedAt,
 			&readFlag, &favoriteFlag, &article.FavoritedAt, &article.CreatedAt,
@@ -604,6 +608,7 @@ func (s *PostgresFeedRepository) ListArticlesMissingDisplaySummary(feedID int64,
 		}
 		article.IsRead = readFlag == 1
 		article.IsFavorite = favoriteFlag == 1
+		article.SourcePayload = pgDecodeSourcePayload(sourcePayload)
 		articles = append(articles, article)
 	}
 	return articles
@@ -857,9 +862,9 @@ func (s *PostgresFeedRepository) insertEntriesTx(tx *sql.Tx, feedID int64, items
 
 		var articleID int64
 		err := tx.QueryRow(
-			`INSERT INTO entries(feed_id, title, link, summary, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, quality_score, relevance_score, novelty_score, composite_score, created_at, updated_at)
-			 VALUES($1, $2, $3, $4, '', '', '', '', '', '', $5, $6, $7, 0, 0, '', $8, $9, $10, $11, $12, $13) RETURNING id`,
-			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, cleaned.FullContent, cleaned.CoverURL, cleaned.PublishedAt, scores.Quality, scores.Relevance, scores.Novelty, scores.Composite, now, now,
+			`INSERT INTO entries(feed_id, title, link, summary, source_payload, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, quality_score, relevance_score, novelty_score, composite_score, created_at, updated_at)
+			 VALUES($1, $2, $3, $4, $5, '', '', '', '', '', '', $6, $7, $8, 0, 0, '', $9, $10, $11, $12, $13, $14) RETURNING id`,
+			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, pgEncodeSourcePayload(cleaned.SourcePayload), cleaned.FullContent, cleaned.CoverURL, cleaned.PublishedAt, scores.Quality, scores.Relevance, scores.Novelty, scores.Composite, now, now,
 		).Scan(&articleID)
 		if err != nil {
 			return insertedCount, err
@@ -936,7 +941,69 @@ func pgCleanSeed(seed ArticleSeed) ArticleSeed {
 	seed.FullContent = strings.TrimSpace(seed.FullContent)
 	seed.CoverURL = strings.TrimSpace(seed.CoverURL)
 	seed.PublishedAt = strings.TrimSpace(seed.PublishedAt)
+	seed.SourcePayload = pgCleanSourcePayload(seed.SourcePayload)
 	return seed
+}
+
+func pgCleanSourcePayload(payload *model.ArticleSourcePayload) *model.ArticleSourcePayload {
+	if payload == nil {
+		return nil
+	}
+	cleaned := &model.ArticleSourcePayload{
+		FeedType:    strings.TrimSpace(payload.FeedType),
+		Title:       strings.TrimSpace(payload.Title),
+		Link:        strings.TrimSpace(payload.Link),
+		Summary:     strings.TrimSpace(payload.Summary),
+		PublishedAt: strings.TrimSpace(payload.PublishedAt),
+	}
+	for _, field := range payload.Fields {
+		key := strings.TrimSpace(field.Key)
+		value := strings.TrimSpace(field.Value)
+		valueHTML := pgUnwrapSourceCDATA(strings.TrimSpace(field.ValueHTML))
+		if key == "" || (value == "" && valueHTML == "") {
+			continue
+		}
+		cleaned.Fields = append(cleaned.Fields, model.ArticleSourceField{
+			Key:       key,
+			Value:     value,
+			ValueHTML: valueHTML,
+		})
+	}
+	if cleaned.FeedType == "" && cleaned.Title == "" && cleaned.Link == "" && cleaned.Summary == "" && cleaned.PublishedAt == "" && len(cleaned.Fields) == 0 {
+		return nil
+	}
+	return cleaned
+}
+
+func pgEncodeSourcePayload(payload *model.ArticleSourcePayload) string {
+	cleaned := pgCleanSourcePayload(payload)
+	if cleaned == nil {
+		return ""
+	}
+	raw, err := json.Marshal(cleaned)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+func pgDecodeSourcePayload(raw string) *model.ArticleSourcePayload {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var payload model.ArticleSourcePayload
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return nil
+	}
+	return pgCleanSourcePayload(&payload)
+}
+
+func pgUnwrapSourceCDATA(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if strings.HasPrefix(trimmed, "<![CDATA[") && strings.HasSuffix(trimmed, "]]>") {
+		return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(trimmed, "<![CDATA["), "]]>"))
+	}
+	return trimmed
 }
 
 func (s *PostgresFeedRepository) UpdateFeedScript(id int64, script string, lang string) (model.Feed, bool, error) {

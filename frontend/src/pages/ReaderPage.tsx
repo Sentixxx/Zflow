@@ -87,6 +87,11 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     aiBaseURL,
     aiModel,
     aiTargetLang,
+    embeddingAPIKey,
+    embeddingAPIKeyMasked,
+    embeddingAPIKeyConfigured,
+    embeddingBaseURL,
+    embeddingModel,
     articleRetentionDays,
     scriptFeedID,
     scriptContent,
@@ -100,6 +105,11 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     setAIBaseURL,
     setAIModel,
     setAITargetLang,
+    setEmbeddingAPIKey,
+    setEmbeddingAPIKeyMasked,
+    setEmbeddingAPIKeyConfigured,
+    setEmbeddingBaseURL,
+    setEmbeddingModel,
     setArticleRetentionDays,
     setScriptFeedID,
     setScriptContent,
@@ -340,6 +350,9 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     aiBaseURL,
     aiModel,
     aiTargetLang,
+    embeddingAPIKey,
+    embeddingBaseURL,
+    embeddingModel,
     articleRetentionDays,
     scriptFeedID,
     scriptContent,
@@ -352,6 +365,11 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     setAIBaseURL,
     setAIModel,
     setAITargetLang,
+    setEmbeddingAPIKey,
+    setEmbeddingAPIKeyMasked,
+    setEmbeddingAPIKeyConfigured,
+    setEmbeddingBaseURL,
+    setEmbeddingModel,
     setArticleRetentionDays,
     setScriptFeedID,
     setScriptContent,
@@ -1111,11 +1129,19 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
         aiBaseURL={aiBaseURL}
         aiModel={aiModel}
         aiTargetLang={aiTargetLang}
+        embeddingAPIKey={embeddingAPIKey}
+        embeddingAPIKeyMasked={embeddingAPIKeyMasked}
+        embeddingAPIKeyConfigured={embeddingAPIKeyConfigured}
+        embeddingBaseURL={embeddingBaseURL}
+        embeddingModel={embeddingModel}
         onAIProtocolChange={setAIProtocol}
         onAIAPIKeyChange={setAIAPIKey}
         onAIBaseURLChange={setAIBaseURL}
         onAIModelChange={setAIModel}
         onAITargetLangChange={setAITargetLang}
+        onEmbeddingAPIKeyChange={setEmbeddingAPIKey}
+        onEmbeddingBaseURLChange={setEmbeddingBaseURL}
+        onEmbeddingModelChange={setEmbeddingModel}
         onSaveAISettings={saveAISettings}
         articleRetentionDays={articleRetentionDays}
         selectedArticleID={selectedArticle?.id ?? null}

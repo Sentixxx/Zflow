@@ -56,6 +56,11 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 		if apiKey == "" || (maskedCurrent != "" && apiKey == maskedCurrent) {
 			apiKey = current.APIKey
 		}
+		embeddingAPIKey := strings.TrimSpace(req.EmbeddingAPIKey)
+		maskedEmbeddingCurrent := maskAPIKey(current.Embedding.APIKey)
+		if embeddingAPIKey == "" || (maskedEmbeddingCurrent != "" && embeddingAPIKey == maskedEmbeddingCurrent) {
+			embeddingAPIKey = current.Embedding.APIKey
+		}
 
 		cfg := aiSettings{
 			Protocol:   protocol,
@@ -63,11 +68,22 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 			BaseURL:    strings.TrimSpace(req.BaseURL),
 			Model:      strings.TrimSpace(req.Model),
 			TargetLang: strings.TrimSpace(req.TargetLang),
+			Embedding: embeddingSettings{
+				APIKey:  embeddingAPIKey,
+				BaseURL: strings.TrimSpace(req.EmbeddingBaseURL),
+				Model:   strings.TrimSpace(req.EmbeddingModel),
+			},
 		}
-		if cfg.BaseURL != "" {
-			parsed, err := url.Parse(cfg.BaseURL)
+		for field, raw := range map[string]string{
+			"base_url":           cfg.BaseURL,
+			"embedding_base_url": cfg.Embedding.BaseURL,
+		} {
+			if raw == "" {
+				continue
+			}
+			parsed, err := url.Parse(raw)
 			if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "base_url is invalid"})
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": field + " is invalid"})
 				return
 			}
 		}
@@ -95,6 +111,18 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save ai settings"})
 			return
 		}
+		if err := s.store.SetSetting(settingKeyEmbeddingAPIKey, cfg.Embedding.APIKey); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save ai settings"})
+			return
+		}
+		if err := s.store.SetSetting(settingKeyEmbeddingBaseURL, cfg.Embedding.BaseURL); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save ai settings"})
+			return
+		}
+		if err := s.store.SetSetting(settingKeyEmbeddingModel, cfg.Embedding.Model); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save ai settings"})
+			return
+		}
 
 		writeJSON(w, http.StatusOK, maskAISettings(cfg))
 	default:
@@ -116,13 +144,18 @@ func maskAPIKey(raw string) string {
 func maskAISettings(cfg aiSettings) map[string]any {
 	masked := maskAPIKey(cfg.APIKey)
 	return map[string]any{
-		"protocol":           cfg.Protocol,
-		"api_key":            "",
-		"api_key_masked":     masked,
-		"api_key_configured": strings.TrimSpace(cfg.APIKey) != "",
-		"base_url":           cfg.BaseURL,
-		"model":              cfg.Model,
-		"target_lang":        cfg.TargetLang,
+		"protocol":                     cfg.Protocol,
+		"api_key":                      "",
+		"api_key_masked":               masked,
+		"api_key_configured":           strings.TrimSpace(cfg.APIKey) != "",
+		"base_url":                     cfg.BaseURL,
+		"model":                        cfg.Model,
+		"target_lang":                  cfg.TargetLang,
+		"embedding_api_key":            "",
+		"embedding_api_key_masked":     maskAPIKey(cfg.Embedding.APIKey),
+		"embedding_api_key_configured": strings.TrimSpace(cfg.Embedding.APIKey) != "",
+		"embedding_base_url":           cfg.Embedding.BaseURL,
+		"embedding_model":              cfg.Embedding.Model,
 	}
 }
 
@@ -543,7 +576,67 @@ func (s *Server) loadAISettings() (aiSettings, error) {
 		targetLang = defaultAITargetLang
 	}
 
-	return aiSettings{Protocol: normalizeAIProtocol(protocol), APIKey: apiKey, BaseURL: baseURL, Model: model, TargetLang: targetLang}, nil
+	embedding, err := s.loadEmbeddingSettings()
+	if err != nil {
+		return aiSettings{}, err
+	}
+
+	return aiSettings{
+		Protocol:   normalizeAIProtocol(protocol),
+		APIKey:     apiKey,
+		BaseURL:    baseURL,
+		Model:      model,
+		TargetLang: targetLang,
+		Embedding:  embedding,
+	}, nil
+}
+
+func (s *Server) loadEmbeddingSettings() (embeddingSettings, error) {
+	get := func(key string) (string, error) {
+		value, ok, err := s.store.GetSetting(key)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			return strings.TrimSpace(value), nil
+		}
+		return "", nil
+	}
+
+	apiKey, err := get(settingKeyEmbeddingAPIKey)
+	if err != nil {
+		return embeddingSettings{}, err
+	}
+	baseURL, err := get(settingKeyEmbeddingBaseURL)
+	if err != nil {
+		return embeddingSettings{}, err
+	}
+	model, err := get(settingKeyEmbeddingModel)
+	if err != nil {
+		return embeddingSettings{}, err
+	}
+	if apiKey == "" {
+		apiKey, err = get(settingKeyAIApiKey)
+		if err != nil {
+			return embeddingSettings{}, err
+		}
+	}
+	if baseURL == "" {
+		baseURL, err = get(settingKeyAIBaseURL)
+		if err != nil {
+			return embeddingSettings{}, err
+		}
+	}
+	if model == "" {
+		model, err = get(settingKeyAIModel)
+		if err != nil {
+			return embeddingSettings{}, err
+		}
+	}
+	if baseURL == "" {
+		baseURL = defaultAIBaseURL
+	}
+	return embeddingSettings{APIKey: apiKey, BaseURL: baseURL, Model: model}, nil
 }
 
 func normalizeAIProtocol(raw string) string {

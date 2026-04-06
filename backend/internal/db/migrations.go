@@ -187,6 +187,13 @@ CREATE TABLE IF NOT EXISTS topic_briefs (
 CREATE INDEX IF NOT EXISTS idx_topic_briefs_level ON topic_briefs(level, period_start);
 `,
 	},
+	{
+		Version:     4,
+		Description: "article source payload appendix",
+		SQL: `
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS source_payload TEXT NOT NULL DEFAULT '';
+`,
+	},
 }
 
 func RunMigrations(ctx context.Context, db *sql.DB) error {

@@ -323,6 +323,11 @@ export class ApiClient {
     base_url?: string;
     model?: string;
     target_lang?: string;
+    embedding_api_key?: string;
+    embedding_api_key_masked?: string;
+    embedding_api_key_configured?: boolean;
+    embedding_base_url?: string;
+    embedding_model?: string;
   }> {
     return this.request<{
       protocol?: "openai" | "anthropic";
@@ -332,6 +337,11 @@ export class ApiClient {
       base_url?: string;
       model?: string;
       target_lang?: string;
+      embedding_api_key?: string;
+      embedding_api_key_masked?: string;
+      embedding_api_key_configured?: boolean;
+      embedding_base_url?: string;
+      embedding_model?: string;
     }>("/api/v1/settings/ai");
   }
 
@@ -352,7 +362,16 @@ export class ApiClient {
     });
   }
 
-  async updateAISettings(payload: { protocol: "openai" | "anthropic"; api_key: string; base_url: string; model: string; target_lang: string }): Promise<{
+  async updateAISettings(payload: {
+    protocol: "openai" | "anthropic";
+    api_key: string;
+    base_url: string;
+    model: string;
+    target_lang: string;
+    embedding_api_key: string;
+    embedding_base_url: string;
+    embedding_model: string;
+  }): Promise<{
     protocol?: "openai" | "anthropic";
     api_key?: string;
     api_key_masked?: string;
@@ -360,6 +379,11 @@ export class ApiClient {
     base_url?: string;
     model?: string;
     target_lang?: string;
+    embedding_api_key?: string;
+    embedding_api_key_masked?: string;
+    embedding_api_key_configured?: boolean;
+    embedding_base_url?: string;
+    embedding_model?: string;
   }> {
     return this.request<{
       protocol?: "openai" | "anthropic";
@@ -369,6 +393,11 @@ export class ApiClient {
       base_url?: string;
       model?: string;
       target_lang?: string;
+      embedding_api_key?: string;
+      embedding_api_key_masked?: string;
+      embedding_api_key_configured?: boolean;
+      embedding_base_url?: string;
+      embedding_model?: string;
     }>("/api/v1/settings/ai", {
       method: "PATCH",
       body: JSON.stringify(payload),

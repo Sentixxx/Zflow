@@ -4,7 +4,10 @@ import (
 	"encoding/xml"
 	"errors"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"github.com/Sentixxx/Zflow/backend/internal/model"
 )
 
 var ErrUnsupportedFeed = errors.New("unsupported feed format")
@@ -47,6 +50,7 @@ type ParsedItem struct {
 	Summary     string
 	CoverURL    string
 	PublishedAt string
+	SourcePayload *model.ArticleSourcePayload
 }
 
 type ParsedFeed struct {
@@ -80,11 +84,12 @@ func parseRSS(raw []byte) (ParsedFeed, error) {
 	items := make([]ParsedItem, 0, len(parsed.Channel.Items))
 	for _, it := range parsed.Channel.Items {
 		items = append(items, ParsedItem{
-			Title:       strings.TrimSpace(it.Title),
-			Link:        strings.TrimSpace(it.Link),
-			Summary:     strings.TrimSpace(it.Description),
-			CoverURL:    extractMediaCoverURL(it.RawXML),
-			PublishedAt: strings.TrimSpace(it.PubDate),
+			Title:         strings.TrimSpace(it.Title),
+			Link:          strings.TrimSpace(it.Link),
+			Summary:       strings.TrimSpace(it.Description),
+			CoverURL:      extractMediaCoverURL(it.RawXML),
+			PublishedAt:   strings.TrimSpace(it.PubDate),
+			SourcePayload: buildSourcePayload("rss", strings.TrimSpace(it.Title), strings.TrimSpace(it.Link), strings.TrimSpace(it.Description), strings.TrimSpace(it.PubDate), it.RawXML),
 		})
 	}
 
@@ -110,11 +115,12 @@ func parseAtom(raw []byte) (ParsedFeed, error) {
 		}
 
 		items = append(items, ParsedItem{
-			Title:       strings.TrimSpace(entry.Title),
-			Link:        link,
-			Summary:     strings.TrimSpace(entry.Summary),
-			CoverURL:    extractMediaCoverURL(entry.RawXML),
-			PublishedAt: published,
+			Title:         strings.TrimSpace(entry.Title),
+			Link:          link,
+			Summary:       strings.TrimSpace(entry.Summary),
+			CoverURL:      extractMediaCoverURL(entry.RawXML),
+			PublishedAt:   published,
+			SourcePayload: buildSourcePayload("atom", strings.TrimSpace(entry.Title), link, strings.TrimSpace(entry.Summary), published, entry.RawXML),
 		})
 	}
 
@@ -168,6 +174,7 @@ var (
 	reImageURL = regexp.MustCompile(`(?is)<image\b[^>]*>.*?<url>([^<]+)</url>.*?</image>`)
 	reLinkIcon = regexp.MustCompile(`(?is)<(?:itunes:)?image\b[^>]*>`)
 	reHrefAttr = regexp.MustCompile(`(?is)\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>` + "`" + `]+))`)
+	reStripTag = regexp.MustCompile(`(?s)<[^>]+>`)
 )
 
 func extractMediaCoverURL(rawItem string) string {
@@ -232,6 +239,119 @@ func extractFeedIconHints(raw []byte) []string {
 		}
 	}
 	return uniqueStrings(hints)
+}
+
+type rawField struct {
+	XMLName xml.Name
+	Inner   string `xml:",innerxml"`
+}
+
+func buildSourcePayload(feedType string, title string, link string, summary string, publishedAt string, rawInnerXML string) *model.ArticleSourcePayload {
+	payload := &model.ArticleSourcePayload{
+		FeedType:    strings.TrimSpace(feedType),
+		Title:       strings.TrimSpace(title),
+		Link:        strings.TrimSpace(link),
+		Summary:     strings.TrimSpace(summary),
+		PublishedAt: strings.TrimSpace(publishedAt),
+		Fields:      extractSourceFields(rawInnerXML),
+	}
+	if payload.Title == "" && payload.Link == "" && payload.Summary == "" && payload.PublishedAt == "" && len(payload.Fields) == 0 {
+		return nil
+	}
+	return payload
+}
+
+func extractSourceFields(rawInnerXML string) []model.ArticleSourceField {
+	trimmed := strings.TrimSpace(rawInnerXML)
+	if trimmed == "" {
+		return nil
+	}
+
+	decoder := xml.NewDecoder(strings.NewReader("<root>" + trimmed + "</root>"))
+	fields := make([]model.ArticleSourceField, 0, 8)
+	seen := make(map[string]int)
+	depth := 0
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			break
+		}
+
+		switch typed := token.(type) {
+		case xml.StartElement:
+			if depth == 0 && typed.Name.Local == "root" {
+				depth++
+				continue
+			}
+			if depth != 1 {
+				depth++
+				continue
+			}
+
+			var element rawField
+			if err := decoder.DecodeElement(&element, &typed); err != nil {
+				depth++
+				continue
+			}
+
+			key := strings.ToLower(strings.TrimSpace(typed.Name.Local))
+			depth = 1
+			if shouldSkipSourceField(key) {
+				continue
+			}
+
+			textValue := strings.TrimSpace(stripMarkup(element.Inner))
+			htmlValue := unwrapCDATA(strings.TrimSpace(element.Inner))
+			field := model.ArticleSourceField{Key: key}
+			if looksLikeHTML(htmlValue) {
+				field.ValueHTML = htmlValue
+			} else {
+				field.Value = textValue
+			}
+			if field.Value == "" && field.ValueHTML == "" {
+				continue
+			}
+
+			seen[key]++
+			if seen[key] > 1 {
+				field.Key = key + "_" + strconv.Itoa(seen[key])
+			}
+			fields = append(fields, field)
+		case xml.EndElement:
+			if depth > 0 {
+				depth--
+			}
+		}
+	}
+
+	return fields
+}
+
+func shouldSkipSourceField(key string) bool {
+	switch key {
+	case "title", "link", "description", "summary", "pubdate", "published", "updated":
+		return true
+	default:
+		return false
+	}
+}
+
+func looksLikeHTML(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	return strings.Contains(trimmed, "<") && strings.Contains(trimmed, ">")
+}
+
+func stripMarkup(raw string) string {
+	return strings.Join(strings.Fields(reStripTag.ReplaceAllString(raw, " ")), " ")
+}
+
+func unwrapCDATA(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if strings.HasPrefix(trimmed, "<![CDATA[") && strings.HasSuffix(trimmed, "]]>") {
+		return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(trimmed, "<![CDATA["), "]]>"))
+	}
+	return trimmed
 }
 
 func uniqueStrings(values []string) []string {

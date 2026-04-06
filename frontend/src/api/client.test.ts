@@ -43,3 +43,30 @@ describe("listArticlesPage", () => {
     expect(result.hasMore).toBe(true);
   });
 });
+
+describe("updateAISettings", () => {
+  it("sends separated embedding fields", async () => {
+    const client = new ApiClient("http://example.com");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ protocol: "openai" }), { status: 200 }),
+    );
+
+    await client.updateAISettings({
+      protocol: "openai",
+      api_key: "chat-key",
+      base_url: "https://chat.example/v1",
+      model: "chat-model",
+      target_lang: "zh-CN",
+      embedding_api_key: "embed-key",
+      embedding_base_url: "https://embed.example/v1",
+      embedding_model: "text-embedding-3-small",
+    });
+
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      embedding_api_key: "embed-key",
+      embedding_base_url: "https://embed.example/v1",
+      embedding_model: "text-embedding-3-small",
+    });
+  });
+});

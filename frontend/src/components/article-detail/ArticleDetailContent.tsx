@@ -1,6 +1,7 @@
 import type { Article } from "@/types";
 import { useMemo, useRef } from "react";
 import { formatRecommendationSummary } from "@/lib/article-list";
+import { sanitizeRichHTML } from "@/lib/sanitize";
 import { renderTranslatedHTML, splitTranslatedTextBlocks } from "@/lib/translation";
 import { ArticleDetailTopBar } from "./ArticleDetailTopBar";
 import { ArticleFloatingActions } from "./ArticleFloatingActions";
@@ -16,6 +17,32 @@ function getSummaryStatusMeta(status: string | undefined): { label: string; tone
     default:
       return { label: "摘要", tone: "neutral" };
   }
+}
+
+function buildAppendixPayload(article: Article | null) {
+  if (!article) {
+    return null;
+  }
+  const payload = article.source_payload;
+  if (payload) {
+    return payload;
+  }
+
+  const summary = (article.summary || "").trim();
+  const publishedAt = (article.published_at || "").trim();
+  const link = (article.link || "").trim();
+  const title = (article.title || "").trim();
+  if (!summary && !publishedAt && !link && !title) {
+    return null;
+  }
+
+  return {
+    title,
+    link,
+    summary,
+    published_at: publishedAt,
+    fields: [],
+  };
 }
 
 type ArticleDetailContentProps = {
@@ -94,9 +121,22 @@ export function ArticleDetailContent({
   const showReadableContent = hasUsableFullContent && !showTranslation;
   const hasSummaryCard = Boolean((sanitizedSummaryHTML || "").trim());
   const summaryStatusMeta = getSummaryStatusMeta(article?.display_summary_status);
+  const appendixPayload = useMemo(() => buildAppendixPayload(article), [article]);
   const renderedTranslatedHTML = useMemo(
     () => renderTranslatedHTML(translationTemplateHTML, translationParagraphs, isTranslatingArticle),
     [translationTemplateHTML, translationParagraphs, isTranslatingArticle],
+  );
+  const appendixSummaryHTML = useMemo(() => sanitizeRichHTML(appendixPayload?.summary), [appendixPayload?.summary]);
+  const appendixFields = appendixPayload?.fields || [];
+  const hasSourceAppendix = Boolean(
+    appendixPayload &&
+      (
+        (appendixPayload.title || "").trim() ||
+        (appendixPayload.link || "").trim() ||
+        (appendixPayload.published_at || "").trim() ||
+        appendixSummaryHTML ||
+        appendixFields.length > 0
+      ),
   );
 
   return (
@@ -240,6 +280,78 @@ export function ArticleDetailContent({
               </p>
             ) : (
               <p className="text-sm text-muted-foreground italic">(暂无内容)</p>
+            )}
+
+            {hasSourceAppendix && (
+              <section
+                className="mt-10 border-t border-dashed border-border/70 pt-5 text-sm text-muted-foreground"
+                aria-label="原始条目附录"
+              >
+                <div className="mb-3 flex items-center gap-3">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground/80">
+                    原始条目附录
+                  </span>
+                  <div className="h-px flex-1 bg-border/50" />
+                </div>
+
+                <div className="space-y-3">
+                  {appendixPayload?.title && (
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground/70">标题</div>
+                      <div className="text-foreground/85">{appendixPayload.title}</div>
+                    </div>
+                  )}
+
+                  {appendixPayload?.link && (
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground/70">链接</div>
+                      <a
+                        href={appendixPayload.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="break-all text-primary/80 underline underline-offset-2"
+                      >
+                        {appendixPayload.link}
+                      </a>
+                    </div>
+                  )}
+
+                  {appendixPayload?.published_at && (
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground/70">发布时间</div>
+                      <div>{appendixPayload.published_at}</div>
+                    </div>
+                  )}
+
+                  {appendixSummaryHTML && (
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground/70">摘要</div>
+                      <div
+                        className="prose-article max-w-none text-sm opacity-90"
+                        dangerouslySetInnerHTML={{ __html: appendixSummaryHTML }}
+                      />
+                    </div>
+                  )}
+
+                  {appendixFields.length > 0 && (
+                    <div className="space-y-3">
+                      {appendixFields.map((field, index) => (
+                        <div key={`${field.key}-${index}`}>
+                          <div className="text-[11px] uppercase tracking-wide text-muted-foreground/70">{field.key}</div>
+                          {field.value_html ? (
+                            <div
+                              className="prose-article max-w-none text-sm opacity-90"
+                              dangerouslySetInnerHTML={{ __html: sanitizeRichHTML(field.value_html) }}
+                            />
+                          ) : (
+                            <div className="break-words [overflow-wrap:anywhere]">{field.value || "-"}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
             )}
           </div>
         )}

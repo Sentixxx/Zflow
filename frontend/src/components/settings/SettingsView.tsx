@@ -47,11 +47,19 @@ export type SettingsViewProps = {
   aiBaseURL: string;
   aiModel: string;
   aiTargetLang: string;
+  embeddingAPIKey: string;
+  embeddingAPIKeyMasked: string;
+  embeddingAPIKeyConfigured: boolean;
+  embeddingBaseURL: string;
+  embeddingModel: string;
   onAIProtocolChange: (value: "openai" | "anthropic") => void;
   onAIAPIKeyChange: (value: string) => void;
   onAIBaseURLChange: (value: string) => void;
   onAIModelChange: (value: string) => void;
   onAITargetLangChange: (value: string) => void;
+  onEmbeddingAPIKeyChange: (value: string) => void;
+  onEmbeddingBaseURLChange: (value: string) => void;
+  onEmbeddingModelChange: (value: string) => void;
   onSaveAISettings: () => void;
   articleRetentionDays: string;
   selectedArticleID: number | null;
@@ -169,11 +177,19 @@ export function SettingsView(props: SettingsViewProps) {
             aiBaseURL={rest.aiBaseURL}
             aiModel={rest.aiModel}
             aiTargetLang={rest.aiTargetLang}
+            embeddingAPIKey={rest.embeddingAPIKey}
+            embeddingAPIKeyMasked={rest.embeddingAPIKeyMasked}
+            embeddingAPIKeyConfigured={rest.embeddingAPIKeyConfigured}
+            embeddingBaseURL={rest.embeddingBaseURL}
+            embeddingModel={rest.embeddingModel}
             onAIProtocolChange={rest.onAIProtocolChange}
             onAIAPIKeyChange={rest.onAIAPIKeyChange}
             onAIBaseURLChange={rest.onAIBaseURLChange}
             onAIModelChange={rest.onAIModelChange}
             onAITargetLangChange={rest.onAITargetLangChange}
+            onEmbeddingAPIKeyChange={rest.onEmbeddingAPIKeyChange}
+            onEmbeddingBaseURLChange={rest.onEmbeddingBaseURLChange}
+            onEmbeddingModelChange={rest.onEmbeddingModelChange}
             onSaveAISettings={rest.onSaveAISettings}
           />
         )}

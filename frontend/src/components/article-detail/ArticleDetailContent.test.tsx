@@ -174,4 +174,121 @@ describe("ArticleDetailContent", () => {
     expect(container.textContent).toContain("Second paragraph");
     expect(container.textContent).toContain("第二段译文");
   });
+
+  it("renders source appendix at the bottom without replacing readable content", () => {
+    const globalWithAct = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    globalWithAct.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <TooltipProvider>
+          <ArticleDetailContent
+            article={{
+              ...makeArticle(),
+              summary: "<p>Original RSS summary</p>",
+              source_payload: {
+                title: "Original RSS title",
+                link: "https://news.ycombinator.com/item?id=1",
+                summary: "<p>Original RSS summary</p>",
+                published_at: "2026-04-07T00:00:00Z",
+                fields: [
+                  { key: "comments", value: "https://news.ycombinator.com/item?id=1" },
+                  { key: "encoded", value_html: "<p>Encoded body</p>" },
+                ],
+              },
+            }}
+            sanitizedSummaryHTML="<p>Summary</p>"
+            sanitizedFullContentHTML="<p>Readable body</p>"
+            translationTemplateHTML={buildTranslationTemplate("<p>Readable body</p>").html}
+            canMarkUnread={false}
+            canToggleFavorite={false}
+            isFavorite={false}
+            canOpenSourceSite={false}
+            canExtractReadable={false}
+            isExtractingReadable={false}
+            canRefreshArticleCache={false}
+            isRefreshingArticleCache={false}
+            isTranslatingArticle={false}
+            isTranslationVisible={false}
+            sourceSiteURL=""
+            detailProgressText=""
+            canGoPrev={false}
+            canGoNext={false}
+            translationParagraphs={[]}
+            onMarkUnread={() => undefined}
+            onToggleFavorite={() => undefined}
+            onOpenSourceSite={() => undefined}
+            onExtractReadable={() => undefined}
+            onRefreshArticleCache={() => undefined}
+            onTranslateArticle={() => undefined}
+            onGoPrev={() => undefined}
+            onGoNext={() => undefined}
+          />
+        </TooltipProvider>,
+      );
+    });
+
+    expect(container.textContent).toContain("Readable body");
+    expect(container.textContent).toContain("原始条目附录");
+    expect(container.textContent).toContain("Original RSS title");
+    expect(container.textContent).toContain("https://news.ycombinator.com/item?id=1");
+    expect(container.textContent).toContain("Encoded body");
+  });
+
+  it("falls back to article core fields when source payload is missing", () => {
+    const globalWithAct = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    globalWithAct.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <TooltipProvider>
+          <ArticleDetailContent
+            article={{
+              ...makeArticle(),
+              title: "Music for Programming",
+              link: "https://news.ycombinator.com/item?id=123",
+              summary: "<p>HN comment thread</p>",
+              published_at: "2026-04-07T00:00:00Z",
+              source_payload: undefined,
+            }}
+            sanitizedSummaryHTML=""
+            sanitizedFullContentHTML=""
+            translationTemplateHTML=""
+            canMarkUnread={false}
+            canToggleFavorite={false}
+            isFavorite={false}
+            canOpenSourceSite={false}
+            canExtractReadable={false}
+            isExtractingReadable={false}
+            canRefreshArticleCache={false}
+            isRefreshingArticleCache={false}
+            isTranslatingArticle={false}
+            isTranslationVisible={false}
+            sourceSiteURL=""
+            detailProgressText=""
+            canGoPrev={false}
+            canGoNext={false}
+            translationParagraphs={[]}
+            onMarkUnread={() => undefined}
+            onToggleFavorite={() => undefined}
+            onOpenSourceSite={() => undefined}
+            onExtractReadable={() => undefined}
+            onRefreshArticleCache={() => undefined}
+            onTranslateArticle={() => undefined}
+            onGoPrev={() => undefined}
+            onGoNext={() => undefined}
+          />
+        </TooltipProvider>,
+      );
+    });
+
+    expect(container.textContent).toContain("原始条目附录");
+    expect(container.textContent).toContain("Music for Programming");
+    expect(container.textContent).toContain("https://news.ycombinator.com/item?id=123");
+    expect(container.textContent).toContain("HN comment thread");
+  });
 });

@@ -34,6 +34,11 @@ type UseSettingsActionsParams = {
   aiBaseURL: string;
   aiModel: string;
   aiTargetLang: string;
+  embeddingAPIKey: string;
+  setEmbeddingAPIKeyMasked: Dispatch<SetStateAction<string>>;
+  setEmbeddingAPIKeyConfigured: Dispatch<SetStateAction<boolean>>;
+  embeddingBaseURL: string;
+  embeddingModel: string;
   articleRetentionDays: string;
   scriptFeedID: number | null;
   scriptContent: string;
@@ -44,6 +49,9 @@ type UseSettingsActionsParams = {
   setAIBaseURL: Dispatch<SetStateAction<string>>;
   setAIModel: Dispatch<SetStateAction<string>>;
   setAITargetLang: Dispatch<SetStateAction<string>>;
+  setEmbeddingAPIKey: Dispatch<SetStateAction<string>>;
+  setEmbeddingBaseURL: Dispatch<SetStateAction<string>>;
+  setEmbeddingModel: Dispatch<SetStateAction<string>>;
   setArticleRetentionDays: Dispatch<SetStateAction<string>>;
   setScriptFeedID: Dispatch<SetStateAction<number | null>>;
   setScriptContent: Dispatch<SetStateAction<string>>;
@@ -69,6 +77,9 @@ export function useSettingsActions({
   aiBaseURL,
   aiModel,
   aiTargetLang,
+  embeddingAPIKey,
+  embeddingBaseURL,
+  embeddingModel,
   articleRetentionDays,
   scriptFeedID,
   scriptContent,
@@ -81,6 +92,11 @@ export function useSettingsActions({
   setAIBaseURL,
   setAIModel,
   setAITargetLang,
+  setEmbeddingAPIKey,
+  setEmbeddingAPIKeyMasked,
+  setEmbeddingAPIKeyConfigured,
+  setEmbeddingBaseURL,
+  setEmbeddingModel,
   setArticleRetentionDays,
   setScriptFeedID,
   setScriptContent,
@@ -175,6 +191,11 @@ export function useSettingsActions({
       setAIBaseURL((data.base_url || "").trim());
       setAIModel((data.model || "").trim());
       setAITargetLang((data.target_lang || "zh-CN").trim() || "zh-CN");
+      setEmbeddingAPIKey((data.embedding_api_key || "").trim());
+      setEmbeddingAPIKeyMasked((data.embedding_api_key_masked || "").trim());
+      setEmbeddingAPIKeyConfigured(Boolean(data.embedding_api_key_configured));
+      setEmbeddingBaseURL((data.embedding_base_url || "").trim());
+      setEmbeddingModel((data.embedding_model || "").trim());
     } catch (e) {
       setMessage((e as Error).message, true);
     }
@@ -188,6 +209,9 @@ export function useSettingsActions({
         base_url: aiBaseURL.trim(),
         model: aiModel.trim(),
         target_lang: aiTargetLang.trim() || "zh-CN",
+        embedding_api_key: embeddingAPIKey.trim(),
+        embedding_base_url: embeddingBaseURL.trim(),
+        embedding_model: embeddingModel.trim(),
       });
       const savedProtocol = data.protocol === "anthropic" ? "anthropic" : "openai";
       if (savedProtocol !== aiProtocol) {
@@ -201,6 +225,11 @@ export function useSettingsActions({
       setAIBaseURL((data.base_url || "").trim());
       setAIModel((data.model || "").trim());
       setAITargetLang((data.target_lang || "zh-CN").trim() || "zh-CN");
+      setEmbeddingAPIKey((data.embedding_api_key || "").trim());
+      setEmbeddingAPIKeyMasked((data.embedding_api_key_masked || "").trim());
+      setEmbeddingAPIKeyConfigured(Boolean(data.embedding_api_key_configured));
+      setEmbeddingBaseURL((data.embedding_base_url || "").trim());
+      setEmbeddingModel((data.embedding_model || "").trim());
       setMessage("AI 设置已保存");
     } catch (e) {
       setMessage((e as Error).message, true);
