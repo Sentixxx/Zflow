@@ -14,4 +14,5 @@ type VectorRepository interface {
 	FindSimilarToSource(ctx context.Context, sourceType string, sourceID int64, threshold float64, limit int) ([]VectorMatch, error)
 	DeleteEmbedding(ctx context.Context, sourceType string, sourceID int64) error
 	HasEmbedding(ctx context.Context, sourceType string, sourceID int64) (bool, error)
+	GetEmbedding(ctx context.Context, sourceType string, sourceID int64) ([]float32, error)
 }

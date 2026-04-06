@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -22,6 +25,7 @@ import (
 type Server struct {
 	store          repository.FeedRepository
 	vectorStore    repository.VectorRepository
+	agentStore     repository.AgentRepository
 	client         *http.Client
 	clientMu       sync.RWMutex
 	iconDir        string
@@ -194,6 +198,104 @@ func (s *Server) EmbeddingService() *service.EmbeddingService {
 	return s.embeddingUC
 }
 
+func WithAgentRepository(ar repository.AgentRepository) ServerOption {
+	return func(s *Server) {
+		s.agentStore = ar
+	}
+}
+
+func (s *Server) AgentRepository() repository.AgentRepository {
+	return s.agentStore
+}
+
+func (s *Server) VectorRepository() repository.VectorRepository {
+	return s.vectorStore
+}
+
+func (s *Server) FeedRepository() repository.FeedRepository {
+	return s.store
+}
+
+// LLMCallFunc returns a function that calls the LLM chat completions API.
+func (s *Server) LLMCallFunc() func(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	return func(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+		cfg, err := s.loadAISettings()
+		if err != nil {
+			return "", err
+		}
+		if cfg.APIKey == "" {
+			return "", errors.New("AI API key not configured")
+		}
+		return s.callChatCompletion(ctx, cfg, systemPrompt, userPrompt)
+	}
+}
+
+func (s *Server) callChatCompletion(ctx context.Context, cfg aiSettings, systemPrompt, userPrompt string) (string, error) {
+	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+	if baseURL == "" {
+		baseURL = defaultAIBaseURL
+	}
+	model := strings.TrimSpace(cfg.Model)
+	if model == "" {
+		model = defaultAIModel
+	}
+
+	type chatMessage struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	payload := struct {
+		Model    string        `json:"model"`
+		Messages []chatMessage `json:"messages"`
+	}{
+		Model: model,
+		Messages: []chatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+
+	resp, err := s.httpClientForAI().Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("chat API returned %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", fmt.Errorf("parse chat response: %w", err)
+	}
+	if len(result.Choices) == 0 {
+		return "", errors.New("chat API returned no choices")
+	}
+	return result.Choices[0].Message.Content, nil
+}
+
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/feeds", s.handleFeeds)
 	mux.HandleFunc("/api/v1/feeds/", s.handleFeedByID)
@@ -211,6 +313,14 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/settings/ai", s.handleAISettings)
 	mux.HandleFunc("/api/v1/settings/data", s.handleDataSettings)
 	mux.HandleFunc("/api/v1/settings/data/regenerate-summaries", s.handleSummaryRegeneration)
+	mux.HandleFunc("/api/v1/topics", s.handleTopics)
+	mux.HandleFunc("/api/v1/topics/", s.handleTopicByID)
+	mux.HandleFunc("/api/v1/briefs", s.handleBriefs)
+	mux.HandleFunc("/api/v1/briefs/", s.handleBriefByID)
+	mux.HandleFunc("/api/v1/interests", s.handleInterests)
+	mux.HandleFunc("/api/v1/interests/", s.handleInterestByID)
+	mux.HandleFunc("/api/v1/agents/runs", s.handleAgentRuns)
+	mux.HandleFunc("/api/v1/agents/trigger/", s.handleAgentTrigger)
 	mux.HandleFunc("/healthz", s.handleHealth)
 }
 

@@ -1,4 +1,4 @@
-import type { Article, Feed, Folder } from "@/types";
+import type { Article, Feed, Folder, TopicCluster, TopicClusterMember, TopicBrief, InterestProfile, AgentRun } from "@/types";
 import { createLogger } from "@/lib/logger";
 import type { SortMode } from "@/lib/article-list";
 import { buildArticleListQuery } from "./article-query";
@@ -372,5 +372,77 @@ export class ApiClient {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
+  }
+
+  // --- Topics (clusters) ---
+
+  async listTopics(): Promise<TopicCluster[]> {
+    const data = await this.request<{ data?: TopicCluster[] }>("/api/v1/topics");
+    return data.data ?? [];
+  }
+
+  async getTopic(id: number): Promise<{ cluster: TopicCluster; members: TopicClusterMember[] }> {
+    const data = await this.request<{ data?: { cluster: TopicCluster; members: TopicClusterMember[] } }>(`/api/v1/topics/${id}`);
+    return data.data ?? { cluster: { id: 0, title: "", summary: "", article_count: 0, status: "", created_at: "", updated_at: "" }, members: [] };
+  }
+
+  async getArticleCluster(articleId: number): Promise<TopicCluster | null> {
+    try {
+      const topics = await this.listTopics();
+      for (const t of topics) {
+        const detail = await this.getTopic(t.id);
+        if (detail.members.some((m) => m.article_id === articleId)) {
+          return t;
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  // --- Briefs ---
+
+  async listBriefs(level: "daily" | "weekly" | "monthly" = "daily", limit = 20): Promise<TopicBrief[]> {
+    const data = await this.request<{ data?: TopicBrief[] }>(`/api/v1/briefs?level=${level}&limit=${limit}`);
+    return data.data ?? [];
+  }
+
+  async getBrief(id: number): Promise<TopicBrief | null> {
+    const data = await this.request<{ data?: TopicBrief }>(`/api/v1/briefs/${id}`);
+    return data.data ?? null;
+  }
+
+  // --- Interests ---
+
+  async listInterests(): Promise<InterestProfile[]> {
+    const data = await this.request<{ data?: InterestProfile[] }>("/api/v1/interests");
+    return data.data ?? [];
+  }
+
+  async updateInterestWeight(id: number, weight: number): Promise<InterestProfile> {
+    const data = await this.request<{ data?: InterestProfile }>(`/api/v1/interests/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ weight }),
+    });
+    return data.data!;
+  }
+
+  async deleteInterest(id: number): Promise<void> {
+    await this.request(`/api/v1/interests/${id}`, { method: "DELETE" });
+  }
+
+  // --- Agent runs ---
+
+  async listAgentRuns(agentType?: string, limit = 20): Promise<AgentRun[]> {
+    const params = new URLSearchParams();
+    if (agentType) params.set("type", agentType);
+    params.set("limit", String(limit));
+    const data = await this.request<{ data?: AgentRun[] }>(`/api/v1/agents/runs?${params}`);
+    return data.data ?? [];
+  }
+
+  async triggerAgent(agentType: string): Promise<void> {
+    await this.request(`/api/v1/agents/trigger/${agentType}`, { method: "POST" });
   }
 }

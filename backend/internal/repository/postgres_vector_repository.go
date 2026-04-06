@@ -94,6 +94,38 @@ func (r *PostgresVectorRepository) HasEmbedding(ctx context.Context, sourceType 
 	return exists, nil
 }
 
+func (r *PostgresVectorRepository) GetEmbedding(ctx context.Context, sourceType string, sourceID int64) ([]float32, error) {
+	var vecStr string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT embedding::text FROM embeddings WHERE source_type = $1 AND source_id = $2 LIMIT 1`,
+		sourceType, sourceID,
+	).Scan(&vecStr)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return parseVectorLiteral(vecStr), nil
+}
+
+func parseVectorLiteral(s string) []float32 {
+	s = strings.TrimSpace(s)
+	if len(s) < 2 {
+		return nil
+	}
+	s = s[1 : len(s)-1] // strip [ ]
+	parts := strings.Split(s, ",")
+	result := make([]float32, 0, len(parts))
+	for _, p := range parts {
+		var f float64
+		if _, err := fmt.Sscanf(strings.TrimSpace(p), "%g", &f); err == nil {
+			result = append(result, float32(f))
+		}
+	}
+	return result
+}
+
 func scanVectorMatches(rows *sql.Rows) ([]VectorMatch, error) {
 	var matches []VectorMatch
 	for rows.Next() {

@@ -36,6 +36,7 @@ type atom struct {
 		RawXML    string `xml:",innerxml"`
 		Link      []struct {
 			Href string `xml:"href,attr"`
+			Rel  string `xml:"rel,attr"`
 		} `xml:"link"`
 	} `xml:"entry"`
 }
@@ -102,10 +103,7 @@ func parseAtom(raw []byte) (ParsedFeed, error) {
 
 	items := make([]ParsedItem, 0, len(parsed.Entry))
 	for _, entry := range parsed.Entry {
-		link := ""
-		if len(entry.Link) > 0 {
-			link = strings.TrimSpace(entry.Link[0].Href)
-		}
+		link := atomBestLink(entry.Link)
 		published := strings.TrimSpace(entry.Published)
 		if published == "" {
 			published = strings.TrimSpace(entry.Updated)
@@ -125,6 +123,39 @@ func parseAtom(raw []byte) (ParsedFeed, error) {
 		Items:     items,
 		IconHints: extractFeedIconHints(raw),
 	}, nil
+}
+
+// atomBestLink picks the best link from Atom <link> elements.
+// Prefers rel="alternate" (the article page), then links with no rel
+// (default is alternate per Atom spec), then falls back to the first link.
+func atomBestLink(links []struct {
+	Href string `xml:"href,attr"`
+	Rel  string `xml:"rel,attr"`
+}) string {
+	var fallback string
+	for _, l := range links {
+		href := strings.TrimSpace(l.Href)
+		if href == "" {
+			continue
+		}
+		rel := strings.ToLower(strings.TrimSpace(l.Rel))
+		if rel == "alternate" {
+			return href
+		}
+		if rel == "" && fallback == "" {
+			fallback = href
+		}
+	}
+	if fallback != "" {
+		return fallback
+	}
+	// Last resort: first non-empty href
+	for _, l := range links {
+		if href := strings.TrimSpace(l.Href); href != "" {
+			return href
+		}
+	}
+	return ""
 }
 
 var (

@@ -1,3 +1,3 @@
 export type ScriptLang = "shell" | "python" | "javascript";
 
-export type SettingsTab = "connection" | "subscription" | "script" | "ai" | "data";
+export type SettingsTab = "connection" | "subscription" | "script" | "ai" | "data" | "interests" | "agents";
