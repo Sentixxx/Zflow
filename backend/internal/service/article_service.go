@@ -15,6 +15,7 @@ import (
 
 	"github.com/Sentixxx/Zflow/backend/internal/model"
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
+	logpkg "github.com/Sentixxx/Zflow/backend/pkg/logger"
 	readability "github.com/go-shiori/go-readability"
 )
 
@@ -42,12 +43,29 @@ var articleTokenPattern = regexp.MustCompile(`[[:alnum:]]{2,}`)
 type ArticleService struct {
 	store             repository.FeedRepository
 	readabilityClient func() *http.Client
+	aiClient          func() *http.Client
+	loadScoringAI     func() (ScoringAIConfig, error)
+	logger            *logpkg.ModuleLogger
 }
 
-func NewArticleService(store repository.FeedRepository, readabilityClient func() *http.Client) *ArticleService {
-	return &ArticleService{
+func NewArticleService(store repository.FeedRepository, readabilityClient func() *http.Client, opts ...ArticleServiceOption) *ArticleService {
+	svc := &ArticleService{
 		store:             store,
 		readabilityClient: readabilityClient,
+		logger:            logpkg.NewModuleFromEnv("service"),
+	}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
+}
+
+type ArticleServiceOption func(*ArticleService)
+
+func WithScoringAI(aiClient func() *http.Client, loadConfig func() (ScoringAIConfig, error)) ArticleServiceOption {
+	return func(s *ArticleService) {
+		s.aiClient = aiClient
+		s.loadScoringAI = loadConfig
 	}
 }
 
@@ -241,13 +259,50 @@ func (u *ArticleService) RefreshStaleScores(ctx context.Context, limit int) (int
 		return 0, nil
 	}
 	features := scoreArticles(articles)
+
+	// Try to load AI config for LLM-enhanced scoring
+	var aiCfg *ScoringAIConfig
+	var aiClient *http.Client
+	if u.loadScoringAI != nil && u.aiClient != nil {
+		cfg, err := u.loadScoringAI()
+		if err == nil && cfg.APIKey != "" && cfg.Model != "" {
+			aiCfg = &cfg
+			aiClient = u.aiClient()
+		}
+	}
+
 	refreshed := 0
 	for i := range articles {
 		if err := ctx.Err(); err != nil {
 			return refreshed, err
 		}
-		scores := recommendationScoresFromFeatures(features[i])
-		if err := u.store.UpdateArticleFeatures(articles[i].ID, features[i]); err != nil {
+		feat := features[i]
+
+		// LLM enhancement: only for valid/degraded articles with enough content
+		if aiCfg != nil && feat.GateStatus != model.ArticleGateInvalid {
+			llmResult, err := callLLMForScoring(ctx, aiClient, *aiCfg, articles[i], u.logger)
+			if err != nil {
+				u.logger.Debug("scoring", "llm", "failed", "LLM scoring failed, using rule-based", "article_id", articles[i].ID, "error", err.Error())
+			} else {
+				feat = blendLLMScores(feat, llmResult)
+				// Recompute composite with blended scores
+				composite := int(float64(feat.Quality)*0.33 +
+					float64(feat.Relevance)*0.27 +
+					float64(feat.Depth)*0.20 +
+					float64(feat.Freshness)*0.08 +
+					float64(feat.Novelty)*0.12)
+				switch feat.GateStatus {
+				case model.ArticleGateInvalid:
+					composite = min(composite, 30)
+				case model.ArticleGateDegraded:
+					composite = min(composite, 70)
+				}
+				feat.Composite = clampScore(composite)
+			}
+		}
+
+		scores := recommendationScoresFromFeatures(feat)
+		if err := u.store.UpdateArticleFeatures(articles[i].ID, feat); err != nil {
 			return refreshed, err
 		}
 		if err := u.store.UpdateArticleScores(articles[i].ID, scores); err != nil {

@@ -153,7 +153,20 @@ func NewServer(feedStore repository.FeedRepository, dataDir string, opts ...Serv
 		server.logger.Warn("settings", "network", "failed", "apply initial network proxy failed", "proxy_url", proxyURL, "error", err.Error())
 		_ = server.applyNetworkProxy("")
 	}
-	server.articleUC = service.NewArticleService(feedStore, server.httpClientForReadability)
+	server.articleUC = service.NewArticleService(feedStore, server.httpClientForReadability,
+		service.WithScoringAI(server.httpClientForAI, func() (service.ScoringAIConfig, error) {
+			cfg, err := server.loadAISettings()
+			if err != nil {
+				return service.ScoringAIConfig{}, err
+			}
+			return service.ScoringAIConfig{
+				Protocol: cfg.Protocol,
+				APIKey:   cfg.APIKey,
+				BaseURL:  cfg.BaseURL,
+				Model:    cfg.Model,
+			}, nil
+		}),
+	)
 	server.summaryUC = service.NewArticleSummaryService(
 		feedStore,
 		server.httpClientForAI,
