@@ -1,6 +1,25 @@
 package repository
 
-import "github.com/Sentixxx/Zflow/backend/internal/model"
+import (
+	"errors"
+
+	"github.com/Sentixxx/Zflow/backend/internal/model"
+)
+
+var ErrFeedExists = errors.New("feed already exists")
+var ErrFolderNameEmpty = errors.New("folder name is required")
+
+type ArticleSeed struct {
+	Title                string
+	Link                 string
+	Summary              string
+	FullContent          string
+	SourcePayload        *model.ArticleSourcePayload
+	CoverURL             string
+	PublishedAt          string
+	RecommendationScores *model.RecommendationScores
+	ArticleFeatures      *model.ArticleFeatures
+}
 
 type ArticleListQuery struct {
 	Page    int

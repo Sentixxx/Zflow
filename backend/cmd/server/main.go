@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Sentixxx/Zflow/backend/internal/agent"
 	"github.com/Sentixxx/Zflow/backend/internal/config"
 	"github.com/Sentixxx/Zflow/backend/internal/db"
 	"github.com/Sentixxx/Zflow/backend/internal/handler"
@@ -28,9 +27,9 @@ func main() {
 
 	l := logger.NewModuleFromEnv("http")
 
-	dbConn, err := db.OpenPostgres(cfg.PostgresDSN)
+	dbConn, err := db.OpenSQLite(cfg.DBPath)
 	if err != nil {
-		l.Error("create", "database", "failed", "failed to connect to postgres", "dsn", cfg.PostgresDSN, "error", err.Error())
+		l.Error("create", "database", "failed", "failed to open sqlite", "path", cfg.DBPath, "error", err.Error())
 		os.Exit(1)
 	}
 	defer dbConn.Close()
@@ -40,13 +39,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	feedStore := repository.NewPostgresFeedRepository(dbConn)
-	vectorStore := repository.NewPostgresVectorRepository(dbConn)
-	agentStore := repository.NewPostgresAgentRepository(dbConn)
+	feedStore := repository.NewSQLiteFeedRepository(dbConn)
+	vectorStore := repository.NewSQLiteVectorRepository(dbConn)
 
 	srv := handler.NewServer(feedStore, cfg.DataDir,
 		handler.WithVectorRepository(vectorStore),
-		handler.WithAgentRepository(agentStore),
 	)
 	refreshScheduler := scheduler.NewFeedRefreshScheduler(srv.FeedRefreshService(), cfg.RefreshInterval)
 	go refreshScheduler.Start(rootCtx)
@@ -55,21 +52,6 @@ func main() {
 	if embSvc := srv.EmbeddingService(); embSvc != nil {
 		embeddingScheduler := scheduler.NewEmbeddingRefreshScheduler(embSvc, 5*time.Minute, 20)
 		go embeddingScheduler.Start(rootCtx)
-	}
-
-	// Agent schedulers: interest profiling + topic clustering + briefs
-	if srv.AgentRepository() != nil && srv.VectorRepository() != nil {
-		agentDeps := agent.Deps{
-			AgentRepo:  srv.AgentRepository(),
-			FeedRepo:   srv.FeedRepository(),
-			VectorRepo: srv.VectorRepository(),
-			LLMCall:    srv.LLMCallFunc(),
-		}
-		agentSched := scheduler.NewAgentScheduler(agentDeps, scheduler.DefaultAgentSchedulerConfig())
-		go agentSched.Start(rootCtx)
-		briefSched := scheduler.NewBriefScheduler(agentDeps, 2)
-		go briefSched.Start(rootCtx)
-		l.Info("create", "agent", "ok", "agent schedulers started")
 	}
 
 	httpServer := &http.Server{
@@ -93,7 +75,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	l.Info("request", "http", "ok", "server started", "addr", cfg.Addr, "data_dir", cfg.DataDir, "refresh_interval", cfg.RefreshInterval.String())
+	l.Info("request", "http", "ok", "server started", "addr", cfg.Addr, "data_dir", cfg.DataDir, "db_path", cfg.DBPath, "refresh_interval", cfg.RefreshInterval.String())
 	if err := httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		l.Error("request", "http", "failed", "server stopped", "error", err.Error())
 		os.Exit(1)

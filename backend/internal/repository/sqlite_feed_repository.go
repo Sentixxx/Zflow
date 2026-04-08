@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -14,22 +14,22 @@ import (
 	"github.com/Sentixxx/Zflow/backend/internal/model"
 )
 
-type PostgresFeedRepository struct {
+type SQLiteFeedRepository struct {
 	db *sql.DB
 }
 
-func NewPostgresFeedRepository(db *sql.DB) *PostgresFeedRepository {
-	return &PostgresFeedRepository{db: db}
+func NewSQLiteFeedRepository(db *sql.DB) *SQLiteFeedRepository {
+	return &SQLiteFeedRepository{db: db}
 }
 
-func (s *PostgresFeedRepository) Close() error {
+func (s *SQLiteFeedRepository) Close() error {
 	if s.db == nil {
 		return nil
 	}
 	return s.db.Close()
 }
 
-func pgScanArticleListRow(scanner interface{ Scan(dest ...any) error }) (model.Article, error) {
+func scanArticleListRow(scanner interface{ Scan(dest ...any) error }) (model.Article, error) {
 	var article model.Article
 	var readFlag int
 	var favoriteFlag int
@@ -58,10 +58,9 @@ func pgScanArticleListRow(scanner interface{ Scan(dest ...any) error }) (model.A
 	return article, nil
 }
 
-func pgBuildArticleListQuerySQL(query ArticleListQuery) (string, []any) {
+func buildArticleListQuerySQL(query ArticleListQuery) (string, []any) {
 	whereParts := make([]string, 0, 1)
 	args := make([]any, 0, len(query.FeedIDs)+2)
-	argIdx := 1
 
 	if query.Scoped && len(query.FeedIDs) == 0 {
 		whereParts = append(whereParts, "1 = 0")
@@ -69,9 +68,8 @@ func pgBuildArticleListQuerySQL(query ArticleListQuery) (string, []any) {
 	if len(query.FeedIDs) > 0 {
 		placeholders := make([]string, 0, len(query.FeedIDs))
 		for _, id := range query.FeedIDs {
-			placeholders = append(placeholders, fmt.Sprintf("$%d", argIdx))
+			placeholders = append(placeholders, "?")
 			args = append(args, id)
-			argIdx++
 		}
 		whereParts = append(whereParts, fmt.Sprintf("e.feed_id IN (%s)", strings.Join(placeholders, ",")))
 	}
@@ -104,20 +102,18 @@ func pgBuildArticleListQuerySQL(query ArticleListQuery) (string, []any) {
 	}
 
 	if query.Limit > 0 {
-		queryText += fmt.Sprintf("\nLIMIT $%d", argIdx)
+		queryText += " LIMIT ?"
 		args = append(args, query.Limit+1)
-		argIdx++
 		if query.Page > 1 {
-			queryText += fmt.Sprintf(" OFFSET $%d", argIdx)
+			queryText += " OFFSET ?"
 			args = append(args, (query.Page-1)*query.Limit)
-			argIdx++
 		}
 	}
 
 	return queryText, args
 }
 
-func (s *PostgresFeedRepository) List() []model.Feed {
+func (s *SQLiteFeedRepository) List() []model.Feed {
 	rows, err := s.db.Query(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds ORDER BY id DESC`)
 	if err != nil {
 		return []model.Feed{}
@@ -129,21 +125,10 @@ func (s *PostgresFeedRepository) List() []model.Feed {
 		var feed model.Feed
 		var folderID sql.NullInt64
 		if err := rows.Scan(
-			&feed.ID,
-			&feed.URL,
-			&feed.Title,
-			&folderID,
-			&feed.CustomScript,
-			&feed.CustomScriptLang,
-			&feed.IconPath,
-			&feed.IconFetchedAt,
-			&feed.ItemCount,
-			&feed.LastFetchedAt,
-			&feed.LastFetchStatus,
-			&feed.LastFetchError,
-			&feed.ETag,
-			&feed.LastModified,
-			&feed.CreatedAt,
+			&feed.ID, &feed.URL, &feed.Title, &folderID,
+			&feed.CustomScript, &feed.CustomScriptLang, &feed.IconPath, &feed.IconFetchedAt,
+			&feed.ItemCount, &feed.LastFetchedAt, &feed.LastFetchStatus, &feed.LastFetchError,
+			&feed.ETag, &feed.LastModified, &feed.CreatedAt,
 		); err != nil {
 			continue
 		}
@@ -159,7 +144,7 @@ func (s *PostgresFeedRepository) List() []model.Feed {
 	return feeds
 }
 
-func (s *PostgresFeedRepository) ListFolders() []model.Folder {
+func (s *SQLiteFeedRepository) ListFolders() []model.Folder {
 	rows, err := s.db.Query(`SELECT id, name, parent_id, created_at, updated_at FROM folders ORDER BY id ASC`)
 	if err != nil {
 		return []model.Folder{}
@@ -182,31 +167,34 @@ func (s *PostgresFeedRepository) ListFolders() []model.Folder {
 	return folders
 }
 
-func (s *PostgresFeedRepository) CreateFolder(name string, parentID *int64) (model.Folder, error) {
+func (s *SQLiteFeedRepository) CreateFolder(name string, parentID *int64) (model.Folder, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return model.Folder{}, ErrFolderNameEmpty
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	var id int64
-	err := s.db.QueryRow(
-		`INSERT INTO folders(name, parent_id, created_at, updated_at) VALUES($1, $2, $3, $4) RETURNING id`,
-		name, pgNullableInt(parentID), now, now,
-	).Scan(&id)
+	res, err := s.db.Exec(
+		`INSERT INTO folders(name, parent_id, created_at, updated_at) VALUES(?, ?, ?, ?)`,
+		name, nullableInt(parentID), now, now,
+	)
+	if err != nil {
+		return model.Folder{}, err
+	}
+	id, err := res.LastInsertId()
 	if err != nil {
 		return model.Folder{}, err
 	}
 	return model.Folder{ID: id, Name: name, ParentID: parentID, CreatedAt: now, UpdatedAt: now}, nil
 }
 
-func (s *PostgresFeedRepository) UpdateFolder(id int64, name string, parentID *int64) (model.Folder, bool, error) {
+func (s *SQLiteFeedRepository) UpdateFolder(id int64, name string, parentID *int64) (model.Folder, bool, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return model.Folder{}, false, ErrFolderNameEmpty
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := s.db.Exec(`UPDATE folders SET name = $1, parent_id = $2, updated_at = $3 WHERE id = $4`, name, pgNullableInt(parentID), now, id)
+	res, err := s.db.Exec(`UPDATE folders SET name = ?, parent_id = ?, updated_at = ? WHERE id = ?`, name, nullableInt(parentID), now, id)
 	if err != nil {
 		return model.Folder{}, false, err
 	}
@@ -217,8 +205,8 @@ func (s *PostgresFeedRepository) UpdateFolder(id int64, name string, parentID *i
 	return model.Folder{ID: id, Name: name, ParentID: parentID, UpdatedAt: now}, true, nil
 }
 
-func (s *PostgresFeedRepository) DeleteFolder(id int64) (bool, error) {
-	res, err := s.db.Exec(`DELETE FROM folders WHERE id = $1`, id)
+func (s *SQLiteFeedRepository) DeleteFolder(id int64) (bool, error) {
+	res, err := s.db.Exec(`DELETE FROM folders WHERE id = ?`, id)
 	if err != nil {
 		return false, err
 	}
@@ -226,7 +214,7 @@ func (s *PostgresFeedRepository) DeleteFolder(id int64) (bool, error) {
 	return affected > 0, nil
 }
 
-func (s *PostgresFeedRepository) AddInFolder(url, title string, items []ArticleSeed, fetchErr string, folderID *int64, etag string, lastModified string) (model.Feed, error) {
+func (s *SQLiteFeedRepository) AddInFolder(url, title string, items []ArticleSeed, fetchErr string, folderID *int64, etag string, lastModified string) (model.Feed, error) {
 	url = strings.TrimSpace(url)
 	title = strings.TrimSpace(title)
 	if title == "" {
@@ -253,16 +241,19 @@ func (s *PostgresFeedRepository) AddInFolder(url, title string, items []ArticleS
 	}
 	defer tx.Rollback()
 
-	var feedID int64
-	err = tx.QueryRow(
+	res, err := tx.Exec(
 		`INSERT INTO feeds(url, title, folder_id, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at, updated_at)
-		 VALUES($1, $2, $3, 0, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
-		url, title, pgNullableInt(folderID), now, status, fetchErr, etag, lastModified, now, now,
-	).Scan(&feedID)
+		 VALUES(?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+		url, title, nullableInt(folderID), now, status, fetchErr, etag, lastModified, now, now,
+	)
 	if err != nil {
-		if pgIsUniqueViolation(err) {
+		if isUniqueViolation(err) {
 			return model.Feed{}, ErrFeedExists
 		}
+		return model.Feed{}, err
+	}
+	feedID, err := res.LastInsertId()
+	if err != nil {
 		return model.Feed{}, err
 	}
 
@@ -270,7 +261,7 @@ func (s *PostgresFeedRepository) AddInFolder(url, title string, items []ArticleS
 	if err != nil {
 		return model.Feed{}, err
 	}
-	if _, err := tx.Exec(`UPDATE feeds SET item_count = $1 WHERE id = $2`, insertedCount, feedID); err != nil {
+	if _, err := tx.Exec(`UPDATE feeds SET item_count = ? WHERE id = ?`, insertedCount, feedID); err != nil {
 		return model.Feed{}, err
 	}
 
@@ -297,9 +288,9 @@ func (s *PostgresFeedRepository) AddInFolder(url, title string, items []ArticleS
 	}, nil
 }
 
-func (s *PostgresFeedRepository) UpdateFeedFolder(id int64, folderID *int64) (model.Feed, bool, error) {
+func (s *SQLiteFeedRepository) UpdateFeedFolder(id int64, folderID *int64) (model.Feed, bool, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := s.db.Exec(`UPDATE feeds SET folder_id = $1, updated_at = $2 WHERE id = $3`, pgNullableInt(folderID), now, id)
+	res, err := s.db.Exec(`UPDATE feeds SET folder_id = ?, updated_at = ? WHERE id = ?`, nullableInt(folderID), now, id)
 	if err != nil {
 		return model.Feed{}, false, err
 	}
@@ -314,8 +305,8 @@ func (s *PostgresFeedRepository) UpdateFeedFolder(id int64, folderID *int64) (mo
 	return feed, ok, nil
 }
 
-func (s *PostgresFeedRepository) DeleteFeed(id int64) (bool, error) {
-	res, err := s.db.Exec(`DELETE FROM feeds WHERE id = $1`, id)
+func (s *SQLiteFeedRepository) DeleteFeed(id int64) (bool, error) {
+	res, err := s.db.Exec(`DELETE FROM feeds WHERE id = ?`, id)
 	if err != nil {
 		return false, err
 	}
@@ -323,8 +314,8 @@ func (s *PostgresFeedRepository) DeleteFeed(id int64) (bool, error) {
 	return affected > 0, nil
 }
 
-func (s *PostgresFeedRepository) GetFeed(id int64) (model.Feed, bool, error) {
-	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE id = $1`, id)
+func (s *SQLiteFeedRepository) GetFeed(id int64) (model.Feed, bool, error) {
+	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE id = ?`, id)
 	var feed model.Feed
 	var folderID sql.NullInt64
 	if err := row.Scan(
@@ -348,8 +339,8 @@ func (s *PostgresFeedRepository) GetFeed(id int64) (model.Feed, bool, error) {
 	return feed, true, nil
 }
 
-func (s *PostgresFeedRepository) GetFeedByURL(rawURL string) (model.Feed, bool, error) {
-	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE url = $1`, strings.TrimSpace(rawURL))
+func (s *SQLiteFeedRepository) GetFeedByURL(rawURL string) (model.Feed, bool, error) {
+	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE url = ?`, strings.TrimSpace(rawURL))
 	var feed model.Feed
 	var folderID sql.NullInt64
 	if err := row.Scan(
@@ -373,7 +364,7 @@ func (s *PostgresFeedRepository) GetFeedByURL(rawURL string) (model.Feed, bool, 
 	return feed, true, nil
 }
 
-func (s *PostgresFeedRepository) CreateFeedPlaceholder(url string, title string, folderID *int64) (model.Feed, error) {
+func (s *SQLiteFeedRepository) CreateFeedPlaceholder(url string, title string, folderID *int64) (model.Feed, error) {
 	url = strings.TrimSpace(url)
 	title = strings.TrimSpace(title)
 	if url == "" {
@@ -391,16 +382,19 @@ func (s *PostgresFeedRepository) CreateFeedPlaceholder(url string, title string,
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	var id int64
-	err = s.db.QueryRow(
+	res, err := s.db.Exec(
 		`INSERT INTO feeds(url, title, folder_id, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at, updated_at)
-		 VALUES($1, $2, $3, 0, $4, 'idle', '', '', '', $5, $6) RETURNING id`,
-		url, title, pgNullableInt(folderID), now, now, now,
-	).Scan(&id)
+		 VALUES(?, ?, ?, 0, ?, 'idle', '', '', '', ?, ?)`,
+		url, title, nullableInt(folderID), now, now, now,
+	)
 	if err != nil {
-		if pgIsUniqueViolation(err) {
+		if isUniqueViolation(err) {
 			return model.Feed{}, ErrFeedExists
 		}
+		return model.Feed{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
 		return model.Feed{}, err
 	}
 	return model.Feed{
@@ -422,7 +416,7 @@ func (s *PostgresFeedRepository) CreateFeedPlaceholder(url string, title string,
 	}, nil
 }
 
-func (s *PostgresFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string, items []ArticleSeed, fetchErr, etag, lastModified string) error {
+func (s *SQLiteFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string, items []ArticleSeed, fetchErr, etag, lastModified string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	status := "ok"
 	if fetchErr != "" {
@@ -444,12 +438,12 @@ func (s *PostgresFeedRepository) UpdateFeedAfterRefresh(feedID int64, title stri
 	}
 
 	if title == "" {
-		if err := tx.QueryRow(`SELECT title FROM feeds WHERE id = $1`, feedID).Scan(&title); err != nil {
+		if err := tx.QueryRow(`SELECT title FROM feeds WHERE id = ?`, feedID).Scan(&title); err != nil {
 			return err
 		}
 	}
 	if _, err := tx.Exec(
-		`UPDATE feeds SET title = $1, item_count = item_count + $2, last_fetched_at = $3, last_fetch_status = $4, last_fetch_error = $5, etag = $6, last_modified = $7, updated_at = $8 WHERE id = $9`,
+		`UPDATE feeds SET title = ?, item_count = item_count + ?, last_fetched_at = ?, last_fetch_status = ?, last_fetch_error = ?, etag = ?, last_modified = ?, updated_at = ? WHERE id = ?`,
 		title, inserted, now, status, fetchErr, etag, lastModified, now, feedID,
 	); err != nil {
 		return err
@@ -458,7 +452,7 @@ func (s *PostgresFeedRepository) UpdateFeedAfterRefresh(feedID int64, title stri
 	return tx.Commit()
 }
 
-func pgScanFullArticle(scanner interface{ Scan(dest ...any) error }) (model.Article, error) {
+func scanFullArticle(scanner interface{ Scan(dest ...any) error }) (model.Article, error) {
 	var article model.Article
 	var sourcePayload string
 	var readFlag int
@@ -478,7 +472,7 @@ func pgScanFullArticle(scanner interface{ Scan(dest ...any) error }) (model.Arti
 	}
 	article.IsRead = readFlag == 1
 	article.IsFavorite = favoriteFlag == 1
-	article.SourcePayload = pgDecodeSourcePayload(sourcePayload)
+	article.SourcePayload = decodeSourcePayload(sourcePayload)
 	article.RecommendationScores = &scores
 	if gateStatus.Valid {
 		features.GateStatus = model.ArticleGateStatus(gateStatus.String)
@@ -500,7 +494,7 @@ const fullArticleSelectSQL = `
 	FROM entries e
 	LEFT JOIN article_features af ON af.article_id = e.id`
 
-func (s *PostgresFeedRepository) ListArticles() []model.Article {
+func (s *SQLiteFeedRepository) ListArticles() []model.Article {
 	rows, err := s.db.Query(fullArticleSelectSQL + ` ORDER BY e.id DESC`)
 	if err != nil {
 		return []model.Article{}
@@ -509,7 +503,7 @@ func (s *PostgresFeedRepository) ListArticles() []model.Article {
 
 	articles := make([]model.Article, 0)
 	for rows.Next() {
-		article, err := pgScanFullArticle(rows)
+		article, err := scanFullArticle(rows)
 		if err != nil {
 			continue
 		}
@@ -518,11 +512,11 @@ func (s *PostgresFeedRepository) ListArticles() []model.Article {
 	return articles
 }
 
-func (s *PostgresFeedRepository) ListArticleListItems(query ArticleListQuery) ([]model.Article, bool) {
+func (s *SQLiteFeedRepository) ListArticleListItems(query ArticleListQuery) ([]model.Article, bool) {
 	if query.Page < 1 {
 		query.Page = 1
 	}
-	sqlText, args := pgBuildArticleListQuerySQL(query)
+	sqlText, args := buildArticleListQuerySQL(query)
 	rows, err := s.db.Query(sqlText, args...)
 	if err != nil {
 		return []model.Article{}, false
@@ -531,7 +525,7 @@ func (s *PostgresFeedRepository) ListArticleListItems(query ArticleListQuery) ([
 
 	articles := make([]model.Article, 0)
 	for rows.Next() {
-		article, err := pgScanArticleListRow(rows)
+		article, err := scanArticleListRow(rows)
 		if err != nil {
 			continue
 		}
@@ -547,15 +541,15 @@ func (s *PostgresFeedRepository) ListArticleListItems(query ArticleListQuery) ([
 	return articles, hasMore
 }
 
-func (s *PostgresFeedRepository) ListArticlesNeedingScoreRefresh(featureVersion int, limit int) []model.Article {
+func (s *SQLiteFeedRepository) ListArticlesNeedingScoreRefresh(featureVersion int, limit int) []model.Article {
 	if limit <= 0 {
 		limit = 50
 	}
 	rows, err := s.db.Query(
 		fullArticleSelectSQL+`
-		WHERE af.article_id IS NULL OR COALESCE(af.feature_version, 0) < $1
+		WHERE af.article_id IS NULL OR COALESCE(af.feature_version, 0) < ?
 		ORDER BY e.id ASC
-		LIMIT $2`,
+		LIMIT ?`,
 		featureVersion, limit,
 	)
 	if err != nil {
@@ -565,7 +559,7 @@ func (s *PostgresFeedRepository) ListArticlesNeedingScoreRefresh(featureVersion 
 
 	articles := make([]model.Article, 0)
 	for rows.Next() {
-		article, err := pgScanFullArticle(rows)
+		article, err := scanFullArticle(rows)
 		if err != nil {
 			continue
 		}
@@ -574,16 +568,16 @@ func (s *PostgresFeedRepository) ListArticlesNeedingScoreRefresh(featureVersion 
 	return articles
 }
 
-func (s *PostgresFeedRepository) ListArticlesMissingDisplaySummary(feedID int64, limit int) []model.Article {
+func (s *SQLiteFeedRepository) ListArticlesMissingDisplaySummary(feedID int64, limit int) []model.Article {
 	if limit <= 0 {
 		limit = 100
 	}
 	rows, err := s.db.Query(
 		`SELECT id, feed_id, title, link, summary, source_payload, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, created_at
 		 FROM entries
-		 WHERE feed_id = $1 AND display_summary = ''
+		 WHERE feed_id = ? AND display_summary = ''
 		 ORDER BY id DESC
-		 LIMIT $2`,
+		 LIMIT ?`,
 		feedID, limit,
 	)
 	if err != nil {
@@ -608,14 +602,14 @@ func (s *PostgresFeedRepository) ListArticlesMissingDisplaySummary(feedID int64,
 		}
 		article.IsRead = readFlag == 1
 		article.IsFavorite = favoriteFlag == 1
-		article.SourcePayload = pgDecodeSourcePayload(sourcePayload)
+		article.SourcePayload = decodeSourcePayload(sourcePayload)
 		articles = append(articles, article)
 	}
 	return articles
 }
 
-func (s *PostgresFeedRepository) DeleteArticle(id int64) (bool, error) {
-	res, err := s.db.Exec(`DELETE FROM entries WHERE id = $1`, id)
+func (s *SQLiteFeedRepository) DeleteArticle(id int64) (bool, error) {
+	res, err := s.db.Exec(`DELETE FROM entries WHERE id = ?`, id)
 	if err != nil {
 		return false, err
 	}
@@ -623,27 +617,27 @@ func (s *PostgresFeedRepository) DeleteArticle(id int64) (bool, error) {
 	return affected > 0, nil
 }
 
-func (s *PostgresFeedRepository) GetArticle(id int64) (model.Article, bool) {
-	row := s.db.QueryRow(fullArticleSelectSQL+` WHERE e.id = $1`, id)
-	article, err := pgScanFullArticle(row)
+func (s *SQLiteFeedRepository) GetArticle(id int64) (model.Article, bool) {
+	row := s.db.QueryRow(fullArticleSelectSQL+` WHERE e.id = ?`, id)
+	article, err := scanFullArticle(row)
 	if err != nil {
 		return model.Article{}, false
 	}
 	return article, true
 }
 
-func (s *PostgresFeedRepository) UpdateArticleFullContent(id int64, content string) error {
-	_, err := s.db.Exec(`UPDATE entries SET full_content = $1, updated_at = $2 WHERE id = $3`, strings.TrimSpace(content), time.Now().UTC().Format(time.RFC3339), id)
+func (s *SQLiteFeedRepository) UpdateArticleFullContent(id int64, content string) error {
+	_, err := s.db.Exec(`UPDATE entries SET full_content = ?, updated_at = ? WHERE id = ?`, strings.TrimSpace(content), time.Now().UTC().Format(time.RFC3339), id)
 	return err
 }
 
-func (s *PostgresFeedRepository) UpdateArticleSummaryState(id int64, aiSummary string, aiStatus string, displaySummary string, displayStatus string) error {
+func (s *SQLiteFeedRepository) UpdateArticleSummaryState(id int64, aiSummary string, aiStatus string, displaySummary string, displayStatus string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.Exec(
 		`UPDATE entries
-		 SET ai_summary = $1, ai_summary_status = $2, ai_summary_updated_at = $3,
-		     display_summary = $4, display_summary_status = $5, display_summary_updated_at = $6, updated_at = $7
-		 WHERE id = $8`,
+		 SET ai_summary = ?, ai_summary_status = ?, ai_summary_updated_at = ?,
+		     display_summary = ?, display_summary_status = ?, display_summary_updated_at = ?, updated_at = ?
+		 WHERE id = ?`,
 		strings.TrimSpace(aiSummary),
 		strings.TrimSpace(aiStatus),
 		now,
@@ -656,25 +650,25 @@ func (s *PostgresFeedRepository) UpdateArticleSummaryState(id int64, aiSummary s
 	return err
 }
 
-func (s *PostgresFeedRepository) UpdateArticleScores(id int64, scores model.RecommendationScores) error {
+func (s *SQLiteFeedRepository) UpdateArticleScores(id int64, scores model.RecommendationScores) error {
 	_, err := s.db.Exec(
-		`UPDATE entries SET quality_score = $1, relevance_score = $2, novelty_score = $3, composite_score = $4, updated_at = $5 WHERE id = $6`,
+		`UPDATE entries SET quality_score = ?, relevance_score = ?, novelty_score = ?, composite_score = ?, updated_at = ? WHERE id = ?`,
 		scores.Quality, scores.Relevance, scores.Novelty, scores.Composite,
 		time.Now().UTC().Format(time.RFC3339), id,
 	)
 	return err
 }
 
-func (s *PostgresFeedRepository) UpdateArticleDisplaySummary(id int64, summary string, status string) error {
+func (s *SQLiteFeedRepository) UpdateArticleDisplaySummary(id int64, summary string, status string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.Exec(
-		`UPDATE entries SET display_summary = $1, display_summary_status = $2, display_summary_updated_at = $3, updated_at = $4 WHERE id = $5`,
+		`UPDATE entries SET display_summary = ?, display_summary_status = ?, display_summary_updated_at = ?, updated_at = ? WHERE id = ?`,
 		strings.TrimSpace(summary), strings.TrimSpace(status), now, now, id,
 	)
 	return err
 }
 
-func (s *PostgresFeedRepository) UpdateArticleFeatures(id int64, features model.ArticleFeatures) error {
+func (s *SQLiteFeedRepository) UpdateArticleFeatures(id int64, features model.ArticleFeatures) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	scoredAt := strings.TrimSpace(features.ScoredAt)
 	if scoredAt == "" {
@@ -682,19 +676,19 @@ func (s *PostgresFeedRepository) UpdateArticleFeatures(id int64, features model.
 	}
 	_, err := s.db.Exec(
 		`INSERT INTO article_features(article_id, gate_status, quality_score, relevance_score, depth_score, freshness_score, novelty_score, composite_score, content_fingerprint, feature_version, scored_at, updated_at)
-		 VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(article_id) DO UPDATE SET
-		 gate_status = EXCLUDED.gate_status,
-		 quality_score = EXCLUDED.quality_score,
-		 relevance_score = EXCLUDED.relevance_score,
-		 depth_score = EXCLUDED.depth_score,
-		 freshness_score = EXCLUDED.freshness_score,
-		 novelty_score = EXCLUDED.novelty_score,
-		 composite_score = EXCLUDED.composite_score,
-		 content_fingerprint = EXCLUDED.content_fingerprint,
-		 feature_version = EXCLUDED.feature_version,
-		 scored_at = EXCLUDED.scored_at,
-		 updated_at = EXCLUDED.updated_at`,
+		 gate_status = excluded.gate_status,
+		 quality_score = excluded.quality_score,
+		 relevance_score = excluded.relevance_score,
+		 depth_score = excluded.depth_score,
+		 freshness_score = excluded.freshness_score,
+		 novelty_score = excluded.novelty_score,
+		 composite_score = excluded.composite_score,
+		 content_fingerprint = excluded.content_fingerprint,
+		 feature_version = excluded.feature_version,
+		 scored_at = excluded.scored_at,
+		 updated_at = excluded.updated_at`,
 		id,
 		string(features.GateStatus),
 		features.Quality,
@@ -711,12 +705,12 @@ func (s *PostgresFeedRepository) UpdateArticleFeatures(id int64, features model.
 	return err
 }
 
-func (s *PostgresFeedRepository) MarkArticleRead(id int64, read bool) (model.Article, bool, error) {
+func (s *SQLiteFeedRepository) MarkArticleRead(id int64, read bool) (model.Article, bool, error) {
 	flag := 0
 	if read {
 		flag = 1
 	}
-	res, err := s.db.Exec(`UPDATE entries SET is_read = $1, updated_at = $2 WHERE id = $3`, flag, time.Now().UTC().Format(time.RFC3339), id)
+	res, err := s.db.Exec(`UPDATE entries SET is_read = ?, updated_at = ? WHERE id = ?`, flag, time.Now().UTC().Format(time.RFC3339), id)
 	if err != nil {
 		return model.Article{}, false, err
 	}
@@ -728,14 +722,14 @@ func (s *PostgresFeedRepository) MarkArticleRead(id int64, read bool) (model.Art
 	return article, ok, nil
 }
 
-func (s *PostgresFeedRepository) MarkArticleFavorite(id int64, favorite bool) (model.Article, bool, error) {
+func (s *SQLiteFeedRepository) MarkArticleFavorite(id int64, favorite bool) (model.Article, bool, error) {
 	flag := 0
 	favoritedAt := ""
 	if favorite {
 		flag = 1
 		favoritedAt = time.Now().UTC().Format(time.RFC3339)
 	}
-	res, err := s.db.Exec(`UPDATE entries SET is_favorite = $1, favorited_at = $2, updated_at = $3 WHERE id = $4`, flag, favoritedAt, time.Now().UTC().Format(time.RFC3339), id)
+	res, err := s.db.Exec(`UPDATE entries SET is_favorite = ?, favorited_at = ?, updated_at = ? WHERE id = ?`, flag, favoritedAt, time.Now().UTC().Format(time.RFC3339), id)
 	if err != nil {
 		return model.Article{}, false, err
 	}
@@ -747,7 +741,7 @@ func (s *PostgresFeedRepository) MarkArticleFavorite(id int64, favorite bool) (m
 	return article, ok, nil
 }
 
-func (s *PostgresFeedRepository) PurgeExpiredArticles(retentionDays int) (int, error) {
+func (s *SQLiteFeedRepository) PurgeExpiredArticles(retentionDays int) (int, error) {
 	if retentionDays <= 0 {
 		return 0, nil
 	}
@@ -766,7 +760,7 @@ func (s *PostgresFeedRepository) PurgeExpiredArticles(retentionDays int) (int, e
 		if err := rows.Scan(&id, &publishedAt, &createdAt); err != nil {
 			continue
 		}
-		ts, ok := pgParseArticleTimestamp(publishedAt, createdAt)
+		ts, ok := parseArticleTimestamp(publishedAt, createdAt)
 		if !ok {
 			continue
 		}
@@ -786,7 +780,7 @@ func (s *PostgresFeedRepository) PurgeExpiredArticles(retentionDays int) (int, e
 
 	deleted := 0
 	for _, id := range expiredIDs {
-		res, err := tx.Exec(`DELETE FROM entries WHERE id = $1`, id)
+		res, err := tx.Exec(`DELETE FROM entries WHERE id = ?`, id)
 		if err != nil {
 			return deleted, err
 		}
@@ -801,8 +795,8 @@ func (s *PostgresFeedRepository) PurgeExpiredArticles(retentionDays int) (int, e
 	return deleted, nil
 }
 
-func (s *PostgresFeedRepository) GetSetting(key string) (string, bool, error) {
-	row := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = $1`, strings.TrimSpace(key))
+func (s *SQLiteFeedRepository) GetSetting(key string) (string, bool, error) {
+	row := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = ?`, strings.TrimSpace(key))
 	var value string
 	if err := row.Scan(&value); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -813,18 +807,75 @@ func (s *PostgresFeedRepository) GetSetting(key string) (string, bool, error) {
 	return value, true, nil
 }
 
-func (s *PostgresFeedRepository) SetSetting(key, value string) error {
+func (s *SQLiteFeedRepository) SetSetting(key, value string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.Exec(
-		`INSERT INTO app_settings(key, value, updated_at) VALUES($1, $2, $3)
-		 ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
+		`INSERT INTO app_settings(key, value, updated_at) VALUES(?, ?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
 		strings.TrimSpace(key), strings.TrimSpace(value), now,
 	)
 	return err
 }
 
-func (s *PostgresFeedRepository) feedExists(url string) (bool, error) {
-	row := s.db.QueryRow(`SELECT 1 FROM feeds WHERE url = $1 LIMIT 1`, url)
+func (s *SQLiteFeedRepository) UpdateFeedScript(id int64, script string, lang string) (model.Feed, bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(`UPDATE feeds SET custom_script = ?, custom_script_lang = ?, updated_at = ? WHERE id = ?`, strings.TrimSpace(script), strings.TrimSpace(lang), now, id)
+	if err != nil {
+		return model.Feed{}, false, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return model.Feed{}, false, nil
+	}
+	feed, ok, err := s.GetFeed(id)
+	if err != nil {
+		return model.Feed{}, false, err
+	}
+	return feed, ok, nil
+}
+
+func (s *SQLiteFeedRepository) UpdateFeedTitle(id int64, title string) (model.Feed, bool, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return model.Feed{}, false, errors.New("title is required")
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(`UPDATE feeds SET title = ?, updated_at = ? WHERE id = ?`, title, now, id)
+	if err != nil {
+		return model.Feed{}, false, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return model.Feed{}, false, nil
+	}
+	feed, ok, err := s.GetFeed(id)
+	if err != nil {
+		return model.Feed{}, false, err
+	}
+	return feed, ok, nil
+}
+
+func (s *SQLiteFeedRepository) UpdateFeedIcon(id int64, iconPath string) (model.Feed, bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(`UPDATE feeds SET icon_path = ?, icon_fetched_at = ?, updated_at = ? WHERE id = ?`, strings.TrimSpace(iconPath), now, now, id)
+	if err != nil {
+		return model.Feed{}, false, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return model.Feed{}, false, nil
+	}
+	feed, ok, err := s.GetFeed(id)
+	if err != nil {
+		return model.Feed{}, false, err
+	}
+	return feed, ok, nil
+}
+
+// --- internal helpers ---
+
+func (s *SQLiteFeedRepository) feedExists(url string) (bool, error) {
+	row := s.db.QueryRow(`SELECT 1 FROM feeds WHERE url = ? LIMIT 1`, url)
 	var one int
 	err := row.Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -836,20 +887,20 @@ func (s *PostgresFeedRepository) feedExists(url string) (bool, error) {
 	return true, nil
 }
 
-func (s *PostgresFeedRepository) insertEntriesTx(tx *sql.Tx, feedID int64, items []ArticleSeed, now string) (int, error) {
-	existingKeys, err := pgLoadDedupKeysTx(tx)
+func (s *SQLiteFeedRepository) insertEntriesTx(tx *sql.Tx, feedID int64, items []ArticleSeed, now string) (int, error) {
+	existingKeys, err := loadDedupKeysTx(tx, feedID)
 	if err != nil {
 		return 0, err
 	}
 	insertedCount := 0
 
 	for _, item := range items {
-		cleaned := pgCleanSeed(item)
+		cleaned := cleanSeed(item)
 		if cleaned.Title == "" && cleaned.Link == "" {
 			continue
 		}
 
-		key := pgDedupKey(cleaned)
+		key := dedupKey(cleaned)
 		if _, exists := existingKeys[key]; exists {
 			continue
 		}
@@ -860,17 +911,20 @@ func (s *PostgresFeedRepository) insertEntriesTx(tx *sql.Tx, feedID int64, items
 			scores = &model.RecommendationScores{}
 		}
 
-		var articleID int64
-		err := tx.QueryRow(
+		res, err := tx.Exec(
 			`INSERT INTO entries(feed_id, title, link, summary, source_payload, ai_summary, ai_summary_status, ai_summary_updated_at, display_summary, display_summary_status, display_summary_updated_at, full_content, cover_url, published_at, is_read, is_favorite, favorited_at, quality_score, relevance_score, novelty_score, composite_score, created_at, updated_at)
-			 VALUES($1, $2, $3, $4, $5, '', '', '', '', '', '', $6, $7, $8, 0, 0, '', $9, $10, $11, $12, $13, $14) RETURNING id`,
-			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, pgEncodeSourcePayload(cleaned.SourcePayload), cleaned.FullContent, cleaned.CoverURL, cleaned.PublishedAt, scores.Quality, scores.Relevance, scores.Novelty, scores.Composite, now, now,
-		).Scan(&articleID)
+			 VALUES(?, ?, ?, ?, ?, '', '', '', '', '', '', ?, ?, ?, 0, 0, '', ?, ?, ?, ?, ?, ?)`,
+			feedID, cleaned.Title, cleaned.Link, cleaned.Summary, encodeSourcePayload(cleaned.SourcePayload), cleaned.FullContent, cleaned.CoverURL, cleaned.PublishedAt, scores.Quality, scores.Relevance, scores.Novelty, scores.Composite, now, now,
+		)
 		if err != nil {
 			return insertedCount, err
 		}
 		if cleaned.ArticleFeatures != nil {
-			if err := pgUpsertArticleFeaturesTx(tx, articleID, *cleaned.ArticleFeatures, now); err != nil {
+			articleID, err := res.LastInsertId()
+			if err != nil {
+				return insertedCount, err
+			}
+			if err := upsertArticleFeaturesTx(tx, articleID, *cleaned.ArticleFeatures, now); err != nil {
 				return insertedCount, err
 			}
 		}
@@ -880,26 +934,26 @@ func (s *PostgresFeedRepository) insertEntriesTx(tx *sql.Tx, feedID int64, items
 	return insertedCount, nil
 }
 
-func pgUpsertArticleFeaturesTx(tx *sql.Tx, articleID int64, features model.ArticleFeatures, now string) error {
+func upsertArticleFeaturesTx(tx *sql.Tx, articleID int64, features model.ArticleFeatures, now string) error {
 	scoredAt := strings.TrimSpace(features.ScoredAt)
 	if scoredAt == "" {
 		scoredAt = now
 	}
 	_, err := tx.Exec(
 		`INSERT INTO article_features(article_id, gate_status, quality_score, relevance_score, depth_score, freshness_score, novelty_score, composite_score, content_fingerprint, feature_version, scored_at, updated_at)
-		 VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(article_id) DO UPDATE SET
-		 gate_status = EXCLUDED.gate_status,
-		 quality_score = EXCLUDED.quality_score,
-		 relevance_score = EXCLUDED.relevance_score,
-		 depth_score = EXCLUDED.depth_score,
-		 freshness_score = EXCLUDED.freshness_score,
-		 novelty_score = EXCLUDED.novelty_score,
-		 composite_score = EXCLUDED.composite_score,
-		 content_fingerprint = EXCLUDED.content_fingerprint,
-		 feature_version = EXCLUDED.feature_version,
-		 scored_at = EXCLUDED.scored_at,
-		 updated_at = EXCLUDED.updated_at`,
+		 gate_status = excluded.gate_status,
+		 quality_score = excluded.quality_score,
+		 relevance_score = excluded.relevance_score,
+		 depth_score = excluded.depth_score,
+		 freshness_score = excluded.freshness_score,
+		 novelty_score = excluded.novelty_score,
+		 composite_score = excluded.composite_score,
+		 content_fingerprint = excluded.content_fingerprint,
+		 feature_version = excluded.feature_version,
+		 scored_at = excluded.scored_at,
+		 updated_at = excluded.updated_at`,
 		articleID,
 		string(features.GateStatus),
 		features.Quality,
@@ -916,8 +970,8 @@ func pgUpsertArticleFeaturesTx(tx *sql.Tx, articleID int64, features model.Artic
 	return err
 }
 
-func pgLoadDedupKeysTx(tx *sql.Tx) (map[string]struct{}, error) {
-	rows, err := tx.Query(`SELECT title, link, summary FROM entries`)
+func loadDedupKeysTx(tx *sql.Tx, feedID int64) (map[string]struct{}, error) {
+	rows, err := tx.Query(`SELECT title, link, summary FROM entries WHERE feed_id = ?`, feedID)
 	if err != nil {
 		return nil, err
 	}
@@ -929,23 +983,23 @@ func pgLoadDedupKeysTx(tx *sql.Tx) (map[string]struct{}, error) {
 		if err := rows.Scan(&title, &link, &summary); err != nil {
 			continue
 		}
-		keys[pgDedupKey(ArticleSeed{Title: title, Link: link, Summary: summary})] = struct{}{}
+		keys[dedupKey(ArticleSeed{Title: title, Link: link, Summary: summary})] = struct{}{}
 	}
 	return keys, nil
 }
 
-func pgCleanSeed(seed ArticleSeed) ArticleSeed {
+func cleanSeed(seed ArticleSeed) ArticleSeed {
 	seed.Title = strings.TrimSpace(seed.Title)
 	seed.Link = strings.TrimSpace(seed.Link)
 	seed.Summary = strings.TrimSpace(seed.Summary)
 	seed.FullContent = strings.TrimSpace(seed.FullContent)
 	seed.CoverURL = strings.TrimSpace(seed.CoverURL)
 	seed.PublishedAt = strings.TrimSpace(seed.PublishedAt)
-	seed.SourcePayload = pgCleanSourcePayload(seed.SourcePayload)
+	seed.SourcePayload = cleanSourcePayload(seed.SourcePayload)
 	return seed
 }
 
-func pgCleanSourcePayload(payload *model.ArticleSourcePayload) *model.ArticleSourcePayload {
+func cleanSourcePayload(payload *model.ArticleSourcePayload) *model.ArticleSourcePayload {
 	if payload == nil {
 		return nil
 	}
@@ -959,7 +1013,7 @@ func pgCleanSourcePayload(payload *model.ArticleSourcePayload) *model.ArticleSou
 	for _, field := range payload.Fields {
 		key := strings.TrimSpace(field.Key)
 		value := strings.TrimSpace(field.Value)
-		valueHTML := pgUnwrapSourceCDATA(strings.TrimSpace(field.ValueHTML))
+		valueHTML := unwrapSourceCDATA(strings.TrimSpace(field.ValueHTML))
 		if key == "" || (value == "" && valueHTML == "") {
 			continue
 		}
@@ -975,8 +1029,8 @@ func pgCleanSourcePayload(payload *model.ArticleSourcePayload) *model.ArticleSou
 	return cleaned
 }
 
-func pgEncodeSourcePayload(payload *model.ArticleSourcePayload) string {
-	cleaned := pgCleanSourcePayload(payload)
+func encodeSourcePayload(payload *model.ArticleSourcePayload) string {
+	cleaned := cleanSourcePayload(payload)
 	if cleaned == nil {
 		return ""
 	}
@@ -987,7 +1041,7 @@ func pgEncodeSourcePayload(payload *model.ArticleSourcePayload) string {
 	return string(raw)
 }
 
-func pgDecodeSourcePayload(raw string) *model.ArticleSourcePayload {
+func decodeSourcePayload(raw string) *model.ArticleSourcePayload {
 	if strings.TrimSpace(raw) == "" {
 		return nil
 	}
@@ -995,10 +1049,10 @@ func pgDecodeSourcePayload(raw string) *model.ArticleSourcePayload {
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return nil
 	}
-	return pgCleanSourcePayload(&payload)
+	return cleanSourcePayload(&payload)
 }
 
-func pgUnwrapSourceCDATA(raw string) string {
+func unwrapSourceCDATA(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if strings.HasPrefix(trimmed, "<![CDATA[") && strings.HasSuffix(trimmed, "]]>") {
 		return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(trimmed, "<![CDATA["), "]]>"))
@@ -1006,72 +1060,17 @@ func pgUnwrapSourceCDATA(raw string) string {
 	return trimmed
 }
 
-func (s *PostgresFeedRepository) UpdateFeedScript(id int64, script string, lang string) (model.Feed, bool, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := s.db.Exec(`UPDATE feeds SET custom_script = $1, custom_script_lang = $2, updated_at = $3 WHERE id = $4`, strings.TrimSpace(script), strings.TrimSpace(lang), now, id)
-	if err != nil {
-		return model.Feed{}, false, err
-	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		return model.Feed{}, false, nil
-	}
-	feed, ok, err := s.GetFeed(id)
-	if err != nil {
-		return model.Feed{}, false, err
-	}
-	return feed, ok, nil
-}
-
-func (s *PostgresFeedRepository) UpdateFeedTitle(id int64, title string) (model.Feed, bool, error) {
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return model.Feed{}, false, errors.New("title is required")
-	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := s.db.Exec(`UPDATE feeds SET title = $1, updated_at = $2 WHERE id = $3`, title, now, id)
-	if err != nil {
-		return model.Feed{}, false, err
-	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		return model.Feed{}, false, nil
-	}
-	feed, ok, err := s.GetFeed(id)
-	if err != nil {
-		return model.Feed{}, false, err
-	}
-	return feed, ok, nil
-}
-
-func (s *PostgresFeedRepository) UpdateFeedIcon(id int64, iconPath string) (model.Feed, bool, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := s.db.Exec(`UPDATE feeds SET icon_path = $1, icon_fetched_at = $2, updated_at = $3 WHERE id = $4`, strings.TrimSpace(iconPath), now, now, id)
-	if err != nil {
-		return model.Feed{}, false, err
-	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		return model.Feed{}, false, nil
-	}
-	feed, ok, err := s.GetFeed(id)
-	if err != nil {
-		return model.Feed{}, false, err
-	}
-	return feed, ok, nil
-}
-
-func pgDedupKey(seed ArticleSeed) string {
-	normalizedLink := pgNormalizeForKey(seed.Link)
+func dedupKey(seed ArticleSeed) string {
+	normalizedLink := normalizeForKey(seed.Link)
 	if normalizedLink != "" {
-		return pgHashText("link:" + normalizedLink)
+		return hashText("link:" + normalizedLink)
 	}
-	normalizedTitle := pgNormalizeForKey(seed.Title)
-	normalizedSummary := pgNormalizeForKey(seed.Summary)
-	return pgHashText("text:" + normalizedTitle + "|" + normalizedSummary)
+	normalizedTitle := normalizeForKey(seed.Title)
+	normalizedSummary := normalizeForKey(seed.Summary)
+	return hashText("text:" + normalizedTitle + "|" + normalizedSummary)
 }
 
-func pgNormalizeForKey(v string) string {
+func normalizeForKey(v string) string {
 	v = strings.ToLower(strings.TrimSpace(v))
 	if v == "" {
 		return ""
@@ -1079,19 +1078,19 @@ func pgNormalizeForKey(v string) string {
 	return strings.Join(strings.Fields(v), " ")
 }
 
-func pgHashText(v string) string {
+func hashText(v string) string {
 	sum := sha256.Sum256([]byte(v))
 	return hex.EncodeToString(sum[:])
 }
 
-func pgNullableInt(v *int64) any {
+func nullableInt(v *int64) any {
 	if v == nil {
 		return nil
 	}
 	return *v
 }
 
-func pgParseArticleTimestamp(publishedAt string, createdAt string) (time.Time, bool) {
+func parseArticleTimestamp(publishedAt string, createdAt string) (time.Time, bool) {
 	publishedAt = strings.TrimSpace(publishedAt)
 	if publishedAt != "" {
 		formats := []string{
@@ -1118,11 +1117,10 @@ func pgParseArticleTimestamp(publishedAt string, createdAt string) (time.Time, b
 	return time.Time{}, false
 }
 
-func pgIsUniqueViolation(err error) bool {
+func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "23505") || strings.Contains(msg, "unique_violation") ||
-		strings.Contains(strings.ToLower(msg), "unique") || strings.Contains(strings.ToLower(msg), "duplicate key")
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique") || strings.Contains(msg, "duplicate")
 }

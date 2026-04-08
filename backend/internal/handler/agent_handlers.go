@@ -1,14 +1,12 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/Sentixxx/Zflow/backend/internal/agent"
 	"github.com/Sentixxx/Zflow/backend/internal/model"
 )
 
@@ -300,48 +298,8 @@ func (s *Server) handleAgentTrigger(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	if s.agentStore == nil || s.vectorStore == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "agent system not available"})
-		return
-	}
-
-	agentType := strings.TrimPrefix(r.URL.Path, "/api/v1/agents/trigger/")
-	agentType = strings.TrimRight(agentType, "/")
-	if agentType == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent type required"})
-		return
-	}
-
-	deps := agent.Deps{
-		AgentRepo:  s.agentStore,
-		FeedRepo:   s.store,
-		VectorRepo: s.vectorStore,
-		LLMCall:    s.LLMCallFunc(),
-	}
-
-	var a agent.Agent
-	switch agentType {
-	case "interest_profile":
-		a = agent.NewInterestProfileAgent(deps)
-	case "topic_cluster":
-		a = agent.NewTopicClusterAgent(deps)
-	case "topic_brief_daily":
-		a = agent.NewTopicBriefAgent(deps, "daily")
-	case "topic_brief_weekly":
-		a = agent.NewTopicBriefAgent(deps, "weekly")
-	case "topic_brief_monthly":
-		a = agent.NewTopicBriefAgent(deps, "monthly")
-	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown agent type: " + agentType})
-		return
-	}
-
-	runner := agent.NewRunner(deps)
-	go func() {
-		_ = runner.RunAgent(context.Background(), a)
-	}()
-
-	writeJSON(w, http.StatusAccepted, map[string]any{"data": "agent triggered", "agent_type": agentType})
+	// Agent system is shelved — will be re-enabled in a future release.
+	writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "agent system not available"})
 }
 
 // --- Helpers ---

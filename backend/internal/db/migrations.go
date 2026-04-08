@@ -19,19 +19,19 @@ var migrations = []migration{
 		Description: "initial schema",
 		SQL: `
 CREATE TABLE IF NOT EXISTS folders (
-	id BIGSERIAL PRIMARY KEY,
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	name TEXT NOT NULL,
-	parent_id BIGINT,
+	parent_id INTEGER,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL,
 	FOREIGN KEY(parent_id) REFERENCES folders(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS feeds (
-	id BIGSERIAL PRIMARY KEY,
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	url TEXT NOT NULL UNIQUE,
 	title TEXT NOT NULL,
-	folder_id BIGINT,
+	folder_id INTEGER,
 	custom_script TEXT NOT NULL DEFAULT '',
 	custom_script_lang TEXT NOT NULL DEFAULT 'shell',
 	icon_path TEXT NOT NULL DEFAULT '',
@@ -48,8 +48,8 @@ CREATE TABLE IF NOT EXISTS feeds (
 );
 
 CREATE TABLE IF NOT EXISTS entries (
-	id BIGSERIAL PRIMARY KEY,
-	feed_id BIGINT NOT NULL,
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	feed_id INTEGER NOT NULL,
 	title TEXT NOT NULL,
 	link TEXT NOT NULL DEFAULT '',
 	summary TEXT NOT NULL DEFAULT '',
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS entries (
 );
 
 CREATE TABLE IF NOT EXISTS article_features (
-	article_id BIGINT PRIMARY KEY,
+	article_id INTEGER PRIMARY KEY,
 	gate_status TEXT NOT NULL DEFAULT '',
 	quality_score INTEGER NOT NULL DEFAULT 0,
 	relevance_score INTEGER NOT NULL DEFAULT 0,
@@ -104,94 +104,30 @@ CREATE INDEX IF NOT EXISTS idx_article_features_scored_at ON article_features(sc
 	},
 	{
 		Version:     2,
-		Description: "embeddings table for vector search",
+		Description: "embeddings table and vec0 virtual table for vector search",
 		SQL: `
 CREATE TABLE IF NOT EXISTS embeddings (
-	id BIGSERIAL PRIMARY KEY,
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	source_type TEXT NOT NULL,
-	source_id BIGINT NOT NULL,
+	source_id INTEGER NOT NULL,
 	model TEXT NOT NULL DEFAULT '',
-	embedding vector(1536),
 	dimensions INTEGER NOT NULL DEFAULT 1536,
-	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	created_at TEXT NOT NULL DEFAULT '',
 	UNIQUE(source_type, source_id, model)
 );
 
 CREATE INDEX IF NOT EXISTS idx_embeddings_source ON embeddings(source_type, source_id);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS vec_embeddings USING vec0(
+	embedding float[1536]
+);
 `,
 	},
 	{
 		Version:     3,
-		Description: "agent infrastructure tables",
+		Description: "article source payload",
 		SQL: `
-CREATE TABLE IF NOT EXISTS agent_runs (
-	id BIGSERIAL PRIMARY KEY,
-	agent_type TEXT NOT NULL,
-	status TEXT NOT NULL DEFAULT 'running',
-	input_summary TEXT NOT NULL DEFAULT '',
-	output_summary TEXT NOT NULL DEFAULT '',
-	items_processed INTEGER NOT NULL DEFAULT 0,
-	items_created INTEGER NOT NULL DEFAULT 0,
-	error TEXT NOT NULL DEFAULT '',
-	started_at TIMESTAMPTZ NOT NULL,
-	completed_at TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS idx_agent_runs_type ON agent_runs(agent_type);
-
-CREATE TABLE IF NOT EXISTS user_interest_profiles (
-	id BIGSERIAL PRIMARY KEY,
-	label TEXT NOT NULL DEFAULT '',
-	interest_embedding vector(1536),
-	weight REAL NOT NULL DEFAULT 1.0,
-	source_article_ids BIGINT[] DEFAULT '{}',
-	last_reinforced_at TIMESTAMPTZ,
-	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS topic_clusters (
-	id BIGSERIAL PRIMARY KEY,
-	title TEXT NOT NULL,
-	summary TEXT NOT NULL DEFAULT '',
-	centroid_embedding vector(1536),
-	article_count INTEGER NOT NULL DEFAULT 0,
-	status TEXT NOT NULL DEFAULT 'active',
-	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS topic_cluster_members (
-	cluster_id BIGINT NOT NULL REFERENCES topic_clusters(id) ON DELETE CASCADE,
-	article_id BIGINT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
-	similarity REAL NOT NULL DEFAULT 0,
-	is_representative BOOLEAN NOT NULL DEFAULT FALSE,
-	added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	PRIMARY KEY(cluster_id, article_id)
-);
-CREATE INDEX IF NOT EXISTS idx_cluster_members_article ON topic_cluster_members(article_id);
-
-CREATE TABLE IF NOT EXISTS topic_briefs (
-	id BIGSERIAL PRIMARY KEY,
-	title TEXT NOT NULL,
-	slug TEXT NOT NULL UNIQUE,
-	content TEXT NOT NULL DEFAULT '',
-	level TEXT NOT NULL DEFAULT 'daily',
-	period_start DATE NOT NULL,
-	period_end DATE NOT NULL,
-	source_cluster_ids BIGINT[] DEFAULT '{}',
-	source_article_ids BIGINT[] DEFAULT '{}',
-	parent_brief_id BIGINT REFERENCES topic_briefs(id),
-	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_topic_briefs_level ON topic_briefs(level, period_start);
-`,
-	},
-	{
-		Version:     4,
-		Description: "article source payload appendix",
-		SQL: `
-ALTER TABLE entries ADD COLUMN IF NOT EXISTS source_payload TEXT NOT NULL DEFAULT '';
+ALTER TABLE entries ADD COLUMN source_payload TEXT NOT NULL DEFAULT '';
 `,
 	},
 }
@@ -215,10 +151,6 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 	copy(sorted, migrations)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Version < sorted[j].Version })
 
-	// Try to create pgvector extension; ignore errors if not superuser
-	// (extension should be pre-created by DBA in production).
-	_, _ = db.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
-
 	for _, m := range sorted {
 		if applied[m.Version] {
 			continue
@@ -226,8 +158,9 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		if _, err := db.ExecContext(ctx, m.SQL); err != nil {
 			return fmt.Errorf("migration v%d (%s): %w", m.Version, m.Description, err)
 		}
+		now := "datetime('now')"
 		if _, err := db.ExecContext(ctx,
-			`INSERT INTO schema_migrations(version, applied_at) VALUES($1, NOW()::TEXT)`,
+			`INSERT INTO schema_migrations(version, applied_at) VALUES(?, `+now+`)`,
 			m.Version,
 		); err != nil {
 			return fmt.Errorf("record migration v%d: %w", m.Version, err)

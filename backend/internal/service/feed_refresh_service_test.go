@@ -13,7 +13,7 @@ import (
 )
 
 func TestFeedRefreshServiceFetchAndParseHonorsCancelledContext(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -53,7 +53,7 @@ func TestFeedRefreshServiceRefreshFeedFallsBackToRawItemsWhenScriptFails(t *test
   </channel>
 </rss>`)
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -109,7 +109,7 @@ func TestFeedRefreshServiceRefreshAllFeedsPurgesExpiredArticles(t *testing.T) {
   </channel>
 </rss>`)
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}

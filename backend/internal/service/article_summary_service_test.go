@@ -95,7 +95,7 @@ func TestExtractSummarySourceBlocksSkipsImageNoise(t *testing.T) {
 }
 
 func TestArticleSummaryServiceBackfillFeed(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -140,7 +140,7 @@ func TestArticleSummaryServiceUsesAIWhenConfigured(t *testing.T) {
 	}))
 	defer aiMock.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -193,7 +193,7 @@ func TestArticleSummaryServiceDoesNotTruncateFinalAISummary(t *testing.T) {
 	}))
 	defer aiMock.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -278,7 +278,7 @@ func TestArticleSummaryServiceRewritesVerboseFinalAISummary(t *testing.T) {
 	}))
 	defer aiMock.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -319,7 +319,7 @@ func TestArticleSummaryServiceRewritesVerboseFinalAISummary(t *testing.T) {
 }
 
 func TestArticleSummaryServiceRefreshRecentArticlesClearsOldSummaryBeforeRegeneration(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -370,7 +370,7 @@ func TestArticleSummaryServiceRefreshRecentArticlesClearsOldSummaryBeforeRegener
 }
 
 func TestArticleSummaryServiceClearArticleAIFallsBackToRawSummary(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -447,7 +447,7 @@ func TestArticleSummaryServiceChunksLongContentForAI(t *testing.T) {
 	}))
 	defer aiMock.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -513,7 +513,7 @@ func TestArticleSummaryServicePromptIncludesBodyBeyondOpening(t *testing.T) {
 	}))
 	defer aiMock.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -588,7 +588,7 @@ func TestArticleSummaryServiceUsesAnthropicWhenConfigured(t *testing.T) {
 	}))
 	defer aiMock.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}

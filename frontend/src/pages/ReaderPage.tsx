@@ -858,18 +858,6 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
 
           {/* Sidebar footer */}
           <div className="shrink-0 border-t border-border p-2 mt-auto space-y-0.5">
-            <a
-              href="/briefs"
-              className={cn(
-                "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors",
-                sidebarCollapsed && "justify-center"
-              )}
-              title="知识简报"
-              aria-label="查看知识简报"
-            >
-              <span className="text-base leading-none">📋</span>
-              {!sidebarCollapsed && <span>知识简报</span>}
-            </a>
             <button
               className={cn(
                 "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors",

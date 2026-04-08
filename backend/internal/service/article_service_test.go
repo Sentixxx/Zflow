@@ -13,12 +13,12 @@ import (
 
 	"github.com/Sentixxx/Zflow/backend/internal/model"
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
-	_ "modernc.org/sqlite"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func createArticleServiceFixture(t *testing.T) (*ArticleService, repository.FeedRepository) {
 	t.Helper()
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -30,7 +30,7 @@ func createArticleServiceFixture(t *testing.T) (*ArticleService, repository.Feed
 func createArticleServiceFixtureWithPath(t *testing.T) (*ArticleService, repository.FeedRepository, string) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "feeds.db")
-	repo, err := repository.NewSQLiteFeedRepository(dbPath)
+	repo, err := repository.NewTestSQLiteFeedRepository(dbPath)
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -249,7 +249,7 @@ func TestArticleServiceGetDoesNotBackfillLegacyScoresAndFeatures(t *testing.T) {
 		t.Fatalf("ListArticles len = %d, want 1", len(articles))
 	}
 
-	legacyDB, err := sql.Open("sqlite", "file:"+dbPath)
+	legacyDB, err := sql.Open("sqlite3", "file:"+dbPath)
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
 	}
@@ -305,7 +305,7 @@ func TestArticleServiceRefreshStaleScoresBackfillsLegacyScoresAndFeatures(t *tes
 		t.Fatalf("ListArticles len = %d, want 1", len(articles))
 	}
 
-	legacyDB, err := sql.Open("sqlite", "file:"+dbPath)
+	legacyDB, err := sql.Open("sqlite3", "file:"+dbPath)
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
 	}
@@ -406,7 +406,7 @@ func TestArticleServiceExtractReadableSlowBody(t *testing.T) {
 	}))
 	defer articleHTML.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}

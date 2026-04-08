@@ -16,7 +16,7 @@ import (
 
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
 	"github.com/Sentixxx/Zflow/backend/internal/service"
-	_ "modernc.org/sqlite"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func scoreHandlerTestSeeds(items []repository.ArticleSeed) []repository.ArticleSeed {
@@ -41,7 +41,7 @@ func TestCreateFeedAndList(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -84,7 +84,7 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -172,7 +172,7 @@ func TestArticleListDetailAndMarkRead(t *testing.T) {
 }
 
 func TestArticleListOmitsHeavyFields(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -246,7 +246,7 @@ func TestArticleListOmitsHeavyFields(t *testing.T) {
 }
 
 func TestArticleListSortByRecommend(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -302,7 +302,7 @@ func TestArticleListSortByRecommend(t *testing.T) {
 }
 
 func TestArticleListRejectInvalidSort(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -317,7 +317,7 @@ func TestArticleListRejectInvalidSort(t *testing.T) {
 }
 
 func TestArticleListSupportsFeedAndFolderScope(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -420,7 +420,7 @@ func TestArticleListSupportsFeedAndFolderScope(t *testing.T) {
 
 func TestArticleDetailDoesNotBackfillLegacyScores(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "feeds.db")
-	repo, err := repository.NewSQLiteFeedRepository(dbPath)
+	repo, err := repository.NewTestSQLiteFeedRepository(dbPath)
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -444,7 +444,7 @@ func TestArticleDetailDoesNotBackfillLegacyScores(t *testing.T) {
 		t.Fatalf("ListArticles len = %d, want 1", len(articles))
 	}
 
-	legacyDB, err := sql.Open("sqlite", "file:"+dbPath)
+	legacyDB, err := sql.Open("sqlite3", "file:"+dbPath)
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
 	}
@@ -489,7 +489,7 @@ func TestArticleDetailDoesNotBackfillLegacyScores(t *testing.T) {
 }
 
 func TestCORSPreflightAndHeaders(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -533,7 +533,7 @@ func TestCORSPreflightAndHeaders(t *testing.T) {
 func TestCORSAllowsConfiguredOrigins(t *testing.T) {
 	t.Setenv("ZFLOW_ALLOWED_ORIGINS", "https://app.example.com, https://admin.example.com")
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -552,7 +552,7 @@ func TestCORSAllowsConfiguredOrigins(t *testing.T) {
 }
 
 func TestCORSAllowsSameHostLanOrigin(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -572,7 +572,7 @@ func TestCORSAllowsSameHostLanOrigin(t *testing.T) {
 }
 
 func TestAISettingsGetAndPatch(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -632,7 +632,7 @@ func TestAISettingsGetAndPatch(t *testing.T) {
 }
 
 func TestEmbeddingSettingsFallbackToChatSettings(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -646,7 +646,7 @@ func TestEmbeddingSettingsFallbackToChatSettings(t *testing.T) {
 		t.Fatalf("SetSetting(ai_model) error = %v", err)
 	}
 
-	server := NewServer(repo, t.TempDir(), WithVectorRepository(&repository.PostgresVectorRepository{}))
+	server := NewServer(repo, t.TempDir(), WithVectorRepository(&repository.SQLiteVectorRepository{}))
 
 	cfg, err := server.loadEmbeddingSettings()
 	if err != nil {
@@ -658,7 +658,7 @@ func TestEmbeddingSettingsFallbackToChatSettings(t *testing.T) {
 }
 
 func TestAISettingsPersistsAnthropicProtocol(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -697,7 +697,7 @@ func TestAISettingsPersistsAnthropicProtocol(t *testing.T) {
 }
 
 func TestAISettingsInfersAnthropicProtocolFromBaseURL(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -759,7 +759,7 @@ func TestArticleReadabilityExtraction(t *testing.T) {
 	}))
 	defer feedXML.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -846,7 +846,7 @@ func TestArticleReadabilityRejectPDF(t *testing.T) {
 	}))
 	defer feedXML.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -918,7 +918,7 @@ func TestArticleReadabilityKeepsSourcePayload(t *testing.T) {
 	}))
 	defer feedXML.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -1039,7 +1039,7 @@ func TestArticleRefreshCache(t *testing.T) {
 	}))
 	defer feedXML.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -1130,7 +1130,7 @@ func TestArticleTranslateByAI(t *testing.T) {
 	}))
 	defer feedXML.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -1224,7 +1224,7 @@ func TestArticleTranslateStreamByParagraph(t *testing.T) {
 	}))
 	defer feedXML.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -1349,7 +1349,7 @@ func TestArticleFavoriteToggle(t *testing.T) {
 	}))
 	defer feedXML.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -1421,7 +1421,7 @@ func TestDataSettingsAndRetentionCleanupKeepFavorites(t *testing.T) {
 	}))
 	defer feedXML.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -1489,7 +1489,7 @@ func TestDataSettingsAndRetentionCleanupKeepFavorites(t *testing.T) {
 }
 
 func TestRegenerateSummariesEndpoint(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -1528,7 +1528,7 @@ func TestRegenerateSummariesEndpoint(t *testing.T) {
 }
 
 func TestClearCurrentArticleAISummaryEndpoint(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -1583,7 +1583,7 @@ func TestRefreshCurrentArticleAISummaryEndpoint(t *testing.T) {
 	}))
 	defer aiMock.Close()
 
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}
@@ -1664,7 +1664,7 @@ func TestRefreshCurrentArticleAISummaryEndpoint(t *testing.T) {
 }
 
 func TestClearRecentAISummariesEndpoint(t *testing.T) {
-	repo, err := repository.NewSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
 	}

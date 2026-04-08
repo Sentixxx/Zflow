@@ -5,8 +5,6 @@ import { ScriptSettingsCard } from "./ScriptSettingsCard";
 import { ConnectionSettingsCard } from "./ConnectionSettingsCard";
 import { AISettingsCard } from "./AISettingsCard";
 import { DataSettingsCard } from "./DataSettingsCard";
-import { InterestSettingsCard } from "./InterestSettingsCard";
-import { AgentSettingsCard } from "./AgentSettingsCard";
 import type { ScriptLang, SettingsTab } from "./types";
 import { cn } from "@/lib/utils";
 
@@ -83,8 +81,6 @@ const TAB_OPTIONS: Array<{ value: SettingsTab; label: string }> = [
   { value: "connection", label: "连接设置" },
   { value: "ai", label: "AI 设置" },
   { value: "data", label: "数据管理" },
-  { value: "interests", label: "兴趣画像" },
-  { value: "agents", label: "Agent" },
 ];
 
 export function SettingsView(props: SettingsViewProps) {
@@ -211,8 +207,6 @@ export function SettingsView(props: SettingsViewProps) {
             onImportOPML={rest.onImportOPML}
           />
         )}
-        {settingsTab === "interests" && <InterestSettingsCard />}
-        {settingsTab === "agents" && <AgentSettingsCard />}
       </section>
     </div>
   );
