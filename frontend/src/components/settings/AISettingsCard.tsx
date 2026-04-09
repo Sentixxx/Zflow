@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 
 type AISettingsCardProps = {
   aiProtocol: "openai" | "anthropic";
@@ -24,6 +25,7 @@ type AISettingsCardProps = {
   onEmbeddingBaseURLChange: (value: string) => void;
   onEmbeddingModelChange: (value: string) => void;
   onSaveAISettings: () => void;
+  isSavingAISettings?: boolean;
 };
 
 export function AISettingsCard({
@@ -48,6 +50,7 @@ export function AISettingsCard({
   onEmbeddingBaseURLChange,
   onEmbeddingModelChange,
   onSaveAISettings,
+  isSavingAISettings = false,
 }: AISettingsCardProps) {
   return (
     <div className="space-y-6">
@@ -164,7 +167,10 @@ export function AISettingsCard({
           </div>
 
           <div>
-            <Button variant="outline" onClick={onSaveAISettings}>保存 AI 设置</Button>
+            <Button variant="outline" onClick={onSaveAISettings} disabled={isSavingAISettings}>
+              {isSavingAISettings && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+              保存 AI 设置
+            </Button>
           </div>
         </div>
       </div>

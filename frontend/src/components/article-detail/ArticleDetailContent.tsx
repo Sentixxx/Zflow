@@ -78,6 +78,7 @@ type ArticleDetailContentProps = {
   onTranslateArticle: () => void;
   onGoPrev: () => void;
   onGoNext: () => void;
+  isNarrow?: boolean;
 };
 
 export function ArticleDetailContent({
@@ -108,6 +109,7 @@ export function ArticleDetailContent({
   onTranslateArticle,
   onGoPrev,
   onGoNext,
+  isNarrow = false,
 }: ArticleDetailContentProps) {
   const detailRef = useRef<HTMLDivElement | null>(null);
   const normalizedFull = (sanitizedFullContentHTML || "").trim();
@@ -370,6 +372,7 @@ export function ArticleDetailContent({
           isTranslating={isTranslatingArticle}
           hasTranslation={hasTranslation}
           isTranslationVisible={isTranslationVisible}
+          isNarrow={isNarrow}
         />
       )}
     </>

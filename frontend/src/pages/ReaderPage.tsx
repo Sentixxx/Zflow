@@ -696,6 +696,15 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     [],
   );
 
+  // Lock body scroll when modal dialogs are open
+  useEffect(() => {
+    const hasDialog = pendingDeleteFeed != null || manageCategoryFeed != null;
+    if (hasDialog) {
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = ""; };
+    }
+  }, [pendingDeleteFeed, manageCategoryFeed]);
+
   const triggerListBounce = () => {
     setListBounce(true);
     if (bounceTimerRef.current != null) {
@@ -753,6 +762,13 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background">
+      {/* Skip to content link for keyboard accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[60] focus:bg-background focus:px-4 focus:py-2 focus:rounded-md focus:ring-2 focus:ring-ring focus:text-foreground"
+      >
+        跳转到主要内容
+      </a>
       {/* Top bar */}
       <div className="px-3 pt-3 pb-0 shrink-0">
         <TopBar
@@ -768,7 +784,8 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
 
       {/* Three-column resizable layout */}
       <main
-        className={cn("flex-1 min-h-0 grid overflow-hidden", isNarrow && "!grid-cols-[1fr]")}
+        id="main-content"
+        className={cn("flex-1 min-h-0 grid overflow-hidden", isNarrow && "!grid-cols-[1fr] pb-12")}
         style={layoutStyle}
       >
         {/* Sidebar */}
@@ -777,6 +794,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
             "flex flex-col h-full overflow-hidden border-r border-border",
             isNarrow && mobilePane !== "nav" && "hidden"
           )}
+          aria-label="订阅源导航"
         >
           {/* Sidebar header */}
           <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border shrink-0">
@@ -787,7 +805,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
             )}
             {!sidebarCollapsed && (
               <button
-                className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground text-base leading-none transition-colors"
+                className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground text-base leading-none transition-colors cursor-pointer"
                 onClick={openQuickAddFeed}
                 title="快速添加订阅源"
                 aria-label="快速添加订阅源"
@@ -797,7 +815,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
             )}
             {!isNarrow && (
               <button
-                className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors cursor-pointer"
                 onClick={() => setSidebarCollapsed((v) => !v)}
                 aria-label={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
                 title={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
@@ -970,6 +988,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
             onTranslateArticle={translateArticle}
             onGoPrev={() => { if (previousArticleID != null) void selectArticle(previousArticleID); }}
             onGoNext={() => { if (nextArticleID != null) void selectArticle(nextArticleID); }}
+            isNarrow={isNarrow}
           />
         </section>
       </main>
@@ -977,7 +996,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
       {/* Mobile bottom navigation */}
       {isNarrow && (
         <nav
-          className="fixed bottom-0 left-0 right-0 grid grid-cols-3 border-t border-border bg-background/95 backdrop-blur-sm z-40"
+          className="fixed bottom-0 left-0 right-0 grid grid-cols-3 border-t border-border bg-background/95 backdrop-blur-sm z-40 pb-[env(safe-area-inset-bottom)]"
           aria-label="移动端分栏导航"
         >
           {(["nav", "list", "detail"] as const).map((pane) => {
@@ -987,7 +1006,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
               <button
                 key={pane}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 py-2.5 text-xs transition-colors",
+                  "flex flex-col items-center justify-center gap-0.5 py-2.5 text-xs transition-colors cursor-pointer",
                   mobilePane === pane
                     ? "text-primary font-medium"
                     : "text-muted-foreground hover:text-foreground",
@@ -1029,6 +1048,10 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={() => setPendingDeleteFeed(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setPendingDeleteFeed(null); }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="确认删除订阅源"
         >
           <div
             className="bg-background rounded-xl shadow-xl border border-border p-6 w-full max-w-sm space-y-4"
@@ -1049,6 +1072,10 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={() => setManageCategoryFeed(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setManageCategoryFeed(null); }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="修改订阅分类"
         >
           <div
             className="bg-background rounded-xl shadow-xl border border-border p-6 w-full max-w-sm space-y-4"

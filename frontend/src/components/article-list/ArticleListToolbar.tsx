@@ -35,7 +35,7 @@ export function ArticleListToolbar({ readFilter, sortMode, onToggleReadFilter, o
             onClick={onToggleReadFilter}
             aria-label={isUnreadOnly ? "仅显示未读" : "显示全部（含已读）"}
             className={cn(
-              "h-8 w-8",
+              "h-8 w-8 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0",
               isUnreadOnly && "text-primary"
             )}
           >

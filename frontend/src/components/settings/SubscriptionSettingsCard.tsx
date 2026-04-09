@@ -2,6 +2,7 @@ import type { Folder } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 
 type SubscriptionSettingsCardProps = {
   feedURL: string;
@@ -81,6 +82,7 @@ export function SubscriptionSettingsCard({
             onClick={onRefreshFeedsFromNetwork}
             disabled={isRefreshingFeeds || isRefreshingArticles}
           >
+            {isRefreshingFeeds && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
             远端抓取
           </Button>
           <Button
@@ -88,6 +90,7 @@ export function SubscriptionSettingsCard({
             onClick={onRefreshArticles}
             disabled={isRefreshingArticles || isRefreshingFeeds}
           >
+            {isRefreshingArticles && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
             刷新文章
           </Button>
         </div>

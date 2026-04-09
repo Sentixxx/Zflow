@@ -27,7 +27,7 @@ export function TopBar({
     >
       {/* Brand */}
       <div className="flex items-center gap-2.5">
-        <span className="text-lg font-bold text-amber-500 dark:text-amber-400">▸</span>
+        <span className="text-lg font-bold text-brand">▸</span>
         <h1 className="text-xl font-semibold tracking-tight m-0">Zflow</h1>
       </div>
 

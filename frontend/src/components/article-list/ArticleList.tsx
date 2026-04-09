@@ -96,12 +96,12 @@ export function ArticleList({
                         if (fallback) fallback.style.display = "inline-flex";
                       }}
                     />
-                    <span className="hidden w-4 h-4 text-orange-500 flex-shrink-0" aria-hidden="true">
+                    <span className="hidden w-4 h-4 text-brand flex-shrink-0" aria-hidden="true">
                       <RssFallbackIcon />
                     </span>
                   </>
                 ) : (
-                  <span className="inline-flex w-4 h-4 text-orange-500 flex-shrink-0" aria-hidden="true">
+                  <span className="inline-flex w-4 h-4 text-brand flex-shrink-0" aria-hidden="true">
                     <RssFallbackIcon />
                   </span>
                 )}

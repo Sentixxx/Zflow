@@ -32,7 +32,7 @@ export function ToolbarIconButton({
           disabled={disabled || loading}
           aria-label={ariaLabel}
           className={cn(
-            "h-8 w-8",
+            "h-8 w-8 sm:h-8 sm:w-8 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0",
             active && "text-primary bg-primary/10",
             loading && "[&_svg]:animate-spin"
           )}
