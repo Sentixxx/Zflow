@@ -13,6 +13,7 @@ type ArticleFloatingActionsProps = {
   isTranslating: boolean;
   hasTranslation: boolean;
   isTranslationVisible: boolean;
+  isNarrow?: boolean;
 };
 
 export function ArticleFloatingActions({
@@ -25,6 +26,7 @@ export function ArticleFloatingActions({
   isTranslating,
   hasTranslation,
   isTranslationVisible,
+  isNarrow = false,
 }: ArticleFloatingActionsProps) {
   const translateLabel = isTranslating
     ? "翻译中..."
@@ -45,7 +47,7 @@ export function ArticleFloatingActions({
 
   return (
     <aside
-      className="fixed bottom-6 right-6 flex flex-col gap-1.5 z-30"
+      className={cn("fixed right-6 flex flex-col gap-1.5 z-30", isNarrow ? "bottom-16" : "bottom-6")}
       aria-label="文章快捷操作"
     >
       {actions.map((action) => (
@@ -57,7 +59,7 @@ export function ArticleFloatingActions({
               disabled={action.disabled}
               onClick={action.onClick}
               aria-label={action.label}
-              className="rounded-full shadow-md border border-border/60 w-9 h-9"
+              className="rounded-full shadow-md border border-border/60 w-10 h-10"
             >
               {action.icon}
             </Button>

@@ -96,7 +96,7 @@ export function SidebarTree({
       <div key={`feed-${feed.id}`} className="relative group">
         <button
           className={cn(
-            "w-full text-left px-2 py-1.5 text-sm transition-colors border-b border-border/50 pr-8",
+            "w-full text-left px-2 py-1.5 text-sm transition-colors border-b border-border/50 pr-8 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
             isSelected ? "bg-accent text-accent-foreground border-l-2 border-l-primary" : "hover:bg-muted/60",
             isDragging && "opacity-40"
           )}
@@ -133,12 +133,12 @@ export function SidebarTree({
                         if (fallback) fallback.style.display = "inline-flex";
                       }}
                     />
-                    <span className="hidden w-3.5 h-3.5 text-orange-500 flex-shrink-0" aria-hidden="true">
+                    <span className="hidden w-3.5 h-3.5 text-brand flex-shrink-0" aria-hidden="true">
                       <RssFallbackIcon />
                     </span>
                   </>
                 ) : (
-                  <span className="inline-flex w-3.5 h-3.5 text-orange-500 flex-shrink-0" aria-hidden="true">
+                  <span className="inline-flex w-3.5 h-3.5 text-brand flex-shrink-0" aria-hidden="true">
                     <RssFallbackIcon />
                   </span>
                 )}
@@ -153,7 +153,7 @@ export function SidebarTree({
         </button>
         {!isRenaming && (
           <button
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted flex items-center justify-center text-muted-foreground transition-opacity"
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted flex items-center justify-center text-muted-foreground transition-opacity cursor-pointer"
             onClick={(event) => onOpenFeedContextMenu(event, feed)}
             title="管理订阅源"
             aria-label={`管理订阅源 ${feed.title || feed.url}`}
@@ -184,7 +184,7 @@ export function SidebarTree({
         >
           <button
             className={cn(
-              "w-full text-left px-2 py-1.5 text-sm font-semibold border-b border-border/50 pr-8 flex items-center gap-1.5 transition-colors",
+              "w-full text-left px-2 py-1.5 text-sm font-semibold border-b border-border/50 pr-8 flex items-center gap-1.5 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               isSelected ? "bg-accent text-accent-foreground border-l-2 border-l-primary" : "hover:bg-muted/60"
             )}
             style={{ paddingLeft }}
@@ -207,7 +207,7 @@ export function SidebarTree({
             <span className="truncate">{folder.name}</span>
           </button>
           <button
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted flex items-center justify-center text-muted-foreground transition-opacity"
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted flex items-center justify-center text-muted-foreground transition-opacity cursor-pointer"
             onClick={(event) => onOpenFolderContextMenu(event, folder)}
             title="管理分类"
             aria-label={`管理分类 ${folder.name}`}

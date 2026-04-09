@@ -59,6 +59,7 @@ export type SettingsViewProps = {
   onEmbeddingBaseURLChange: (value: string) => void;
   onEmbeddingModelChange: (value: string) => void;
   onSaveAISettings: () => void;
+  isSavingAISettings: boolean;
   articleRetentionDays: string;
   selectedArticleID: number | null;
   selectedArticleTitle: string;
@@ -187,6 +188,7 @@ export function SettingsView(props: SettingsViewProps) {
             onEmbeddingBaseURLChange={rest.onEmbeddingBaseURLChange}
             onEmbeddingModelChange={rest.onEmbeddingModelChange}
             onSaveAISettings={rest.onSaveAISettings}
+            isSavingAISettings={rest.isSavingAISettings}
           />
         )}
         {settingsTab === "data" && (

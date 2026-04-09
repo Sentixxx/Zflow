@@ -25,6 +25,8 @@
     --ring: 172 65% 36%;
     --radius: 0.625rem;
     --topbar-height: 58px;
+    --brand: 36 96% 53%;
+    --brand-foreground: 0 0% 100%;
   }
 
   @media (prefers-color-scheme: dark) {
@@ -48,6 +50,8 @@
       --border: 0 0% 22%;
       --input: 0 0% 22%;
       --ring: 172 58% 44%;
+      --brand: 36 90% 55%;
+      --brand-foreground: 0 0% 8%;
     }
   }
 
