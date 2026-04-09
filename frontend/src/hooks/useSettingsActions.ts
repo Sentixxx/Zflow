@@ -201,7 +201,10 @@ export function useSettingsActions({
     }
   };
 
+  const [isSavingAISettings, setIsSavingAISettings] = useState(false);
+
   const saveAISettings = async () => {
+    setIsSavingAISettings(true);
     try {
       const data = await client.updateAISettings({
         protocol: aiProtocol,
@@ -233,6 +236,8 @@ export function useSettingsActions({
       setMessage("AI 设置已保存");
     } catch (e) {
       setMessage((e as Error).message, true);
+    } finally {
+      setIsSavingAISettings(false);
     }
   };
 
@@ -441,6 +446,7 @@ export function useSettingsActions({
     saveNetworkSettings,
     loadAISettings,
     saveAISettings,
+    isSavingAISettings,
     loadDataSettings,
     saveDataSettings,
     regenerateSummaries,

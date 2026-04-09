@@ -81,6 +81,7 @@ export function SettingsPage() {
     saveNetworkSettings,
     loadAISettings,
     saveAISettings,
+    isSavingAISettings,
     loadDataSettings,
     saveDataSettings,
     regenerateSummaries,
@@ -242,6 +243,7 @@ export function SettingsPage() {
             onEmbeddingBaseURLChange={setEmbeddingBaseURL}
             onEmbeddingModelChange={setEmbeddingModel}
             onSaveAISettings={saveAISettings}
+            isSavingAISettings={isSavingAISettings}
             articleRetentionDays={articleRetentionDays}
             selectedArticleID={null}
             selectedArticleTitle=""

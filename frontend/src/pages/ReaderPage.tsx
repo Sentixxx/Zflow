@@ -323,6 +323,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     saveNetworkSettings,
     loadAISettings,
     saveAISettings,
+    isSavingAISettings,
     loadDataSettings,
     saveDataSettings,
     regenerateSummaries,
@@ -696,13 +697,22 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     [],
   );
 
-  // Lock body scroll when modal dialogs are open
+  // Lock body scroll and handle ESC key when modal dialogs are open
   useEffect(() => {
     const hasDialog = pendingDeleteFeed != null || manageCategoryFeed != null;
-    if (hasDialog) {
-      document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = ""; };
-    }
+    if (!hasDialog) return;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (manageCategoryFeed != null) setManageCategoryFeed(null);
+        else if (pendingDeleteFeed != null) setPendingDeleteFeed(null);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [pendingDeleteFeed, manageCategoryFeed]);
 
   const triggerListBounce = () => {
@@ -1048,7 +1058,6 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={() => setPendingDeleteFeed(null)}
-          onKeyDown={(e) => { if (e.key === "Escape") setPendingDeleteFeed(null); }}
           role="dialog"
           aria-modal="true"
           aria-label="确认删除订阅源"
@@ -1072,7 +1081,6 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={() => setManageCategoryFeed(null)}
-          onKeyDown={(e) => { if (e.key === "Escape") setManageCategoryFeed(null); }}
           role="dialog"
           aria-modal="true"
           aria-label="修改订阅分类"
@@ -1158,6 +1166,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
         onEmbeddingBaseURLChange={setEmbeddingBaseURL}
         onEmbeddingModelChange={setEmbeddingModel}
         onSaveAISettings={saveAISettings}
+        isSavingAISettings={isSavingAISettings}
         articleRetentionDays={articleRetentionDays}
         selectedArticleID={selectedArticle?.id ?? null}
         selectedArticleTitle={selectedArticle?.title || ""}
