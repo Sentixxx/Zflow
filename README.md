@@ -1,3 +1,5 @@
+[中文](README_zh.md) | **English**
+
 # Zflow
 
 Open-source, self-hosted RSS reader with LLM-powered scoring, summarization, and anti-filter-bubble exploration.
