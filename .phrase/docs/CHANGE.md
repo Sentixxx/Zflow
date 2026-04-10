@@ -1,6 +1,10 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change620 日期:2026-04-10 | 文件:.tmp/plan_gitignore_binary_cleanup_20260410.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Add\|Modify | 影响:gitignore 二进制忽略缺口任务追踪 | 说明:按规则新增“gitignore 二进制产物补齐”计划书，并新增完成 task200 记录二进制忽略规则修复与验证命令 | 关联:task200
+- change621 日期:2026-04-10 | 文件:.gitignore | 操作:Modify | 影响:仓库根级忽略规则 | 说明:补充 backend 根目录可执行文件及常见本地测试/动态库产物忽略规则，避免后端构建二进制再次进入版本控制 | 关联:task200
+- change622 日期:2026-04-10 | 文件:backend/server,backend/migrate-sqlite-to-pg | 操作:Delete | 影响:仓库二进制产物清理 | 说明:删除历史误提交的后端可执行文件，避免已跟踪二进制继续污染仓库索引 | 关联:task200
+- change623 日期:2026-04-10 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 gitignore 对 backend 二进制产物的忽略修复、历史二进制清理与验证结果 | 关联:task200
 - change617 日期:2026-04-07 | 文件:backend/internal/handler/server.go,backend/internal/handler/ai_handlers.go,backend/internal/handler/server_test.go,frontend/src/api/client.ts,frontend/src/api/client.test.ts,frontend/src/hooks/useSettingsState.ts,frontend/src/hooks/useSettingsState.test.tsx,frontend/src/hooks/useSettingsActions.ts,frontend/src/components/settings/AISettingsCard.tsx,frontend/src/components/settings/SettingsView.tsx,frontend/src/pages/ReaderPage.tsx,frontend/src/pages/SettingsPage.tsx | 操作:Modify | 影响:AI 设置与 embedding 配置读取 | 说明:拆分 chat 与 embedding 配置字段，后端保存/返回 embedding 专用设置并在未配置时回退到旧 ai_* 字段，前端设置页增加独立的 embedding 配置区 | 关联:task198
 - change618 日期:2026-04-07 | 文件:.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Modify | 影响:task198 | 说明:新增并完成 chat 与 embedding 配置拆分任务，记录后端与前端验证命令 | 关联:task198
 - change619 日期:2026-04-07 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 AI 设置拆分为 chat/embedding 双配置及兼容回退策略的实现结果 | 关联:task198
