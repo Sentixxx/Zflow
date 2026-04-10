@@ -130,6 +130,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_embeddings USING vec0(
 ALTER TABLE entries ADD COLUMN source_payload TEXT NOT NULL DEFAULT '';
 `,
 	},
+	{
+		Version:     4,
+		Description: "feed retention days override",
+		SQL: `
+ALTER TABLE feeds ADD COLUMN retention_days INTEGER NOT NULL DEFAULT 0;
+`,
+	},
 }
 
 func RunMigrations(ctx context.Context, db *sql.DB) error {

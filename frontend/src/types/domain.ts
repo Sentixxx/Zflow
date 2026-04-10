@@ -7,6 +7,7 @@ export interface Feed {
   custom_script_lang?: "shell" | "python" | "javascript";
   icon_url?: string;
   item_count: number;
+  retention_days?: number;
   last_fetched_at: string;
   last_fetch_status: string;
   last_fetch_error?: string;

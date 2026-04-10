@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
@@ -55,20 +56,59 @@ func (s *Server) updateFeed(w http.ResponseWriter, r *http.Request, id int64) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-	var req updateFeedRequest
-	if err := json.Unmarshal(body, &req); err != nil {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-
-	feed, ok, err := s.store.UpdateFeedFolder(id, req.FolderID)
+	feed, ok, err := s.store.GetFeed(id)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update feed"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load feed"})
 		return
 	}
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "feed not found"})
 		return
+	}
+	if rawFolder, exists := raw["folder_id"]; exists {
+		var folderID *int64
+		if string(rawFolder) != "null" {
+			parsed, err := strconv.ParseInt(strings.Trim(string(rawFolder), "\""), 10, 64)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid folder_id"})
+				return
+			}
+			folderID = &parsed
+		}
+		feed, ok, err = s.store.UpdateFeedFolder(id, folderID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update feed"})
+			return
+		}
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "feed not found"})
+			return
+		}
+	}
+	if rawRetention, exists := raw["retention_days"]; exists {
+		var retentionDays int
+		if err := json.Unmarshal(rawRetention, &retentionDays); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid retention_days"})
+			return
+		}
+		if retentionDays < 0 || retentionDays > 3650 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "retention_days must be between 0 and 3650"})
+			return
+		}
+		feed, ok, err = s.store.UpdateFeedRetentionDays(id, retentionDays)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update feed"})
+			return
+		}
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "feed not found"})
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, feed)
 }

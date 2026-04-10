@@ -84,6 +84,7 @@ export function SettingsPage() {
     isSavingAISettings,
     loadDataSettings,
     saveDataSettings,
+    saveFeedRetentionDays,
     regenerateSummaries,
     refreshCurrentArticleAISummary,
     clearCurrentArticleAISummary,
@@ -194,8 +195,10 @@ export function SettingsPage() {
             newFeedFolderID={newFeedFolderID}
             onNewFeedFolderIDChange={setNewFeedFolderID}
             folders={folders}
+            articleRetentionDays={articleRetentionDays}
             onCreateRootFolder={createRootFolder}
             onAddFeed={addFeed}
+            onSaveFeedRetentionDays={saveFeedRetentionDays}
             onRefreshFeeds={handleRefreshFeeds}
             onRefreshFeedsFromNetwork={refreshFeedsFromNetwork}
             onRefreshArticles={handleRefreshArticles}
@@ -244,7 +247,6 @@ export function SettingsPage() {
             onEmbeddingModelChange={setEmbeddingModel}
             onSaveAISettings={saveAISettings}
             isSavingAISettings={isSavingAISettings}
-            articleRetentionDays={articleRetentionDays}
             selectedArticleID={null}
             selectedArticleTitle=""
             isRefreshingCurrentArticleAISummary={isRefreshingCurrentArticleAISummary}

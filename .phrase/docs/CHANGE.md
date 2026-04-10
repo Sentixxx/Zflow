@@ -1,6 +1,9 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change633 日期:2026-04-10 | 文件:.tmp/plan_feed_specific_retention_20260410.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Add\|Modify | 影响:订阅级保留策略任务追踪 | 说明:新增“订阅源独立 retention_days + 0 跟随全局”计划书，并新增完成 task204 记录订阅级保留策略与验证命令 | 关联:task204
+- change634 日期:2026-04-10 | 文件:backend/internal/db/migrations.go,backend/internal/model/feed.go,backend/internal/repository/feed_repository.go,backend/internal/repository/mock/feed_repository.go,backend/internal/repository/sqlite_feed_repository.go,backend/internal/handler/feed_mutation_handlers.go,backend/internal/handler/server_test.go,backend/internal/service/feed_refresh_service_test.go,frontend/src/types/domain.ts,frontend/src/api/client.ts,frontend/src/hooks/useSettingsActions.ts,frontend/src/components/settings/SubscriptionSettingsCard.tsx,frontend/src/components/settings/SettingsView.tsx,frontend/src/pages/ReaderPage.tsx,frontend/src/pages/SettingsPage.tsx | 操作:Modify | 影响:订阅级文章保留设置与清理回退逻辑 | 说明:为 feeds 增加 retention_days 字段，支持设置接口读写订阅级覆盖值并让 0 回退全局，同时在设置页新增单 feed 保留天数编辑入口并补充后端定向回归测试 | 关联:task204
+- change635 日期:2026-04-10 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录订阅源独立文章保留天数、0 跟随全局语义和前后端验证结果 | 关联:task204
 - change630 日期:2026-04-10 | 文件:.tmp/plan_feed_item_count_current_retained_20260410.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Add\|Modify | 影响:feed 侧栏数量语义追踪 | 说明:新增“feed item_count 改为当前保留条数”计划书，并新增完成 task203 记录侧栏文章数量语义收敛与验证命令 | 关联:task203
 - change631 日期:2026-04-10 | 文件:backend/internal/repository/sqlite_feed_repository.go,backend/internal/handler/server_test.go | 操作:Modify | 影响:feed item_count 回写策略 | 说明:将 feed item_count 从刷新累计新增改为按 entries 实际剩余数量回写，并补充清理后订阅列表数量回归测试 | 关联:task203
 - change632 日期:2026-04-10 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 feed 侧栏数量改为当前保留文章数及后端验证结果 | 关联:task203

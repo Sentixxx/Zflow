@@ -267,6 +267,26 @@ export function useSettingsActions({
     }
   };
 
+  const saveFeedRetentionDays = async (feedID: number, retentionDays: number) => {
+    if (!Number.isInteger(retentionDays) || retentionDays < 0 || retentionDays > 3650) {
+      setMessage("订阅源保留天数需为 0-3650 的整数", true);
+      return false;
+    }
+    try {
+      const feed = await client.updateFeedSettings(feedID, { retention_days: retentionDays });
+      await loadFeeds({ silentStatus: true });
+      setMessage(
+        retentionDays > 0
+          ? `已保存订阅源保留策略：${feed.title || feed.url} · ${retentionDays} 天`
+          : `已重置订阅源保留策略：${feed.title || feed.url} · 跟随全局`,
+      );
+      return true;
+    } catch (e) {
+      setMessage((e as Error).message, true);
+      return false;
+    }
+  };
+
   const regenerateSummaries = async () => {
     try {
       const data = await client.regenerateSummaries();
@@ -449,6 +469,7 @@ export function useSettingsActions({
     isSavingAISettings,
     loadDataSettings,
     saveDataSettings,
+    saveFeedRetentionDays,
     regenerateSummaries,
     refreshCurrentArticleAISummary,
     clearCurrentArticleAISummary,
