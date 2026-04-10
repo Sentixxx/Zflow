@@ -53,10 +53,11 @@ describe("article-pages helpers", () => {
   });
 
   it("only hydrates remaining pages after the first page is already visible", () => {
-    expect(shouldHydrateArticlePool({ loadedCount: 20, hasNextPage: true, isFetching: false, isFetchingNextPage: false })).toBe(true);
-    expect(shouldHydrateArticlePool({ loadedCount: 0, hasNextPage: true, isFetching: false, isFetchingNextPage: false })).toBe(false);
-    expect(shouldHydrateArticlePool({ loadedCount: 20, hasNextPage: false, isFetching: false, isFetchingNextPage: false })).toBe(false);
-    expect(shouldHydrateArticlePool({ loadedCount: 20, hasNextPage: true, isFetching: true, isFetchingNextPage: false })).toBe(false);
-    expect(shouldHydrateArticlePool({ loadedCount: 20, hasNextPage: true, isFetching: false, isFetchingNextPage: true })).toBe(false);
+    expect(shouldHydrateArticlePool({ loadedCount: 20, targetCount: 40, hasNextPage: true, isFetching: false, isFetchingNextPage: false })).toBe(true);
+    expect(shouldHydrateArticlePool({ loadedCount: 40, targetCount: 40, hasNextPage: true, isFetching: false, isFetchingNextPage: false })).toBe(false);
+    expect(shouldHydrateArticlePool({ loadedCount: 0, targetCount: 40, hasNextPage: true, isFetching: false, isFetchingNextPage: false })).toBe(false);
+    expect(shouldHydrateArticlePool({ loadedCount: 20, targetCount: 40, hasNextPage: false, isFetching: false, isFetchingNextPage: false })).toBe(false);
+    expect(shouldHydrateArticlePool({ loadedCount: 20, targetCount: 40, hasNextPage: true, isFetching: true, isFetchingNextPage: false })).toBe(false);
+    expect(shouldHydrateArticlePool({ loadedCount: 20, targetCount: 40, hasNextPage: true, isFetching: false, isFetchingNextPage: true })).toBe(false);
   });
 });

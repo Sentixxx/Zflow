@@ -758,6 +758,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     const loadedCount = articles.length;
     if (!shouldHydrateArticlePool({
       loadedCount,
+      targetCount: bufferedCount + PREFETCH_BATCH_SIZE,
       hasNextPage: Boolean(hasNextArticlePage),
       isFetching: articlesInfiniteQuery.isFetching,
       isFetchingNextPage: articlesInfiniteQuery.isFetchingNextPage,
@@ -768,7 +769,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
       void fetchNextArticlePage();
     }, 150);
     return () => window.clearTimeout(timer);
-  }, [articles.length, hasNextArticlePage, articlesInfiniteQuery.isFetching, articlesInfiniteQuery.isFetchingNextPage, fetchNextArticlePage]);
+  }, [articles.length, bufferedCount, hasNextArticlePage, articlesInfiniteQuery.isFetching, articlesInfiniteQuery.isFetchingNextPage, fetchNextArticlePage]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background">

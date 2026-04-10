@@ -1,5 +1,9 @@
 # CHANGES: RSS + LLM Reader (Phase 1)
 
+change624 日期:2026-04-10 | 文件:.tmp/plan_article_prefetch_cap_20260410.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Add\|Modify | 影响:文章列表后台续拉问题追踪 | 说明:新增“文章列表后台续拉上限修复”计划书，并新增完成 task201 记录首屏分页后台预拉不再无限打穿的验证命令 | 关联:task201
+change625 日期:2026-04-10 | 文件:frontend/src/hooks/article-pages.ts,frontend/src/hooks/article-pages.test.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:阅读页文章分页预拉策略 | 说明:为后台续拉增加 targetCount 上限判定，并让阅读页只预拉到当前缓冲窗口前方一段，避免空闲时自动请求所有分页 | 关联:task201
+change626 日期:2026-04-10 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录文章列表后台续拉上限修复与前端验证结果 | 关联:task201
+
 change620 日期:2026-04-10 | 文件:.tmp/plan_gitignore_binary_cleanup_20260410.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Add\|Modify | 影响:gitignore 二进制忽略缺口任务追踪 | 说明:按规则新增“gitignore 二进制产物补齐”计划书，并新增完成 task200 记录二进制忽略规则修复与验证命令 | 关联:task200
 change621 日期:2026-04-10 | 文件:.gitignore | 操作:Modify | 影响:仓库根级忽略规则 | 说明:补充 backend 根目录可执行文件及常见本地测试/动态库产物忽略规则，避免后端构建二进制再次进入版本控制 | 关联:task200
 change622 日期:2026-04-10 | 文件:backend/server,backend/migrate-sqlite-to-pg | 操作:Delete | 影响:仓库二进制产物清理 | 说明:删除历史误提交的后端可执行文件，避免已跟踪二进制继续污染仓库索引 | 关联:task200
