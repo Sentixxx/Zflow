@@ -1,6 +1,9 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change630 日期:2026-04-10 | 文件:.tmp/plan_feed_item_count_current_retained_20260410.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Add\|Modify | 影响:feed 侧栏数量语义追踪 | 说明:新增“feed item_count 改为当前保留条数”计划书，并新增完成 task203 记录侧栏文章数量语义收敛与验证命令 | 关联:task203
+- change631 日期:2026-04-10 | 文件:backend/internal/repository/sqlite_feed_repository.go,backend/internal/handler/server_test.go | 操作:Modify | 影响:feed item_count 回写策略 | 说明:将 feed item_count 从刷新累计新增改为按 entries 实际剩余数量回写，并补充清理后订阅列表数量回归测试 | 关联:task203
+- change632 日期:2026-04-10 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录 feed 侧栏数量改为当前保留文章数及后端验证结果 | 关联:task203
 - change627 日期:2026-04-10 | 文件:.tmp/plan_retention_default_7d_20260410.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Add\|Modify | 影响:默认数据保留期任务追踪 | 说明:新增“默认文章保留期改为 7 天”计划书，并新增完成 task202 记录默认 retention_days 调整与验证命令 | 关联:task202
 - change628 日期:2026-04-10 | 文件:backend/internal/service/feed_refresh_service.go,backend/internal/handler/server.go,backend/internal/handler/server_test.go,frontend/src/hooks/useSettingsState.ts,frontend/src/hooks/useSettingsActions.ts | 操作:Modify | 影响:数据保留默认值 | 说明:将前后端默认文章保留期从 90 天下调到 7 天，并新增后端接口测试锁定未配置实例返回 7 天默认值 | 关联:task202
 - change629 日期:2026-04-10 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录默认文章保留期改为 7 天及其验证结果 | 关联:task202

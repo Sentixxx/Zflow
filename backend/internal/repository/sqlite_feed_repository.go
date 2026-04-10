@@ -113,6 +113,14 @@ func buildArticleListQuerySQL(query ArticleListQuery) (string, []any) {
 	return queryText, args
 }
 
+func countFeedEntriesTx(tx *sql.Tx, feedID int64) (int, error) {
+	var count int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM entries WHERE feed_id = ?`, feedID).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (s *SQLiteFeedRepository) List() []model.Feed {
 	rows, err := s.db.Query(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds ORDER BY id DESC`)
 	if err != nil {
@@ -261,7 +269,11 @@ func (s *SQLiteFeedRepository) AddInFolder(url, title string, items []ArticleSee
 	if err != nil {
 		return model.Feed{}, err
 	}
-	if _, err := tx.Exec(`UPDATE feeds SET item_count = ? WHERE id = ?`, insertedCount, feedID); err != nil {
+	currentCount, err := countFeedEntriesTx(tx, feedID)
+	if err != nil {
+		return model.Feed{}, err
+	}
+	if _, err := tx.Exec(`UPDATE feeds SET item_count = ? WHERE id = ?`, currentCount, feedID); err != nil {
 		return model.Feed{}, err
 	}
 
@@ -429,12 +441,15 @@ func (s *SQLiteFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string
 	}
 	defer tx.Rollback()
 
-	inserted := 0
 	if fetchErr == "" {
-		inserted, err = s.insertEntriesTx(tx, feedID, items, now)
+		_, err = s.insertEntriesTx(tx, feedID, items, now)
 		if err != nil {
 			return err
 		}
+	}
+	currentCount, err := countFeedEntriesTx(tx, feedID)
+	if err != nil {
+		return err
 	}
 
 	if title == "" {
@@ -443,8 +458,8 @@ func (s *SQLiteFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string
 		}
 	}
 	if _, err := tx.Exec(
-		`UPDATE feeds SET title = ?, item_count = item_count + ?, last_fetched_at = ?, last_fetch_status = ?, last_fetch_error = ?, etag = ?, last_modified = ?, updated_at = ? WHERE id = ?`,
-		title, inserted, now, status, fetchErr, etag, lastModified, now, feedID,
+		`UPDATE feeds SET title = ?, item_count = ?, last_fetched_at = ?, last_fetch_status = ?, last_fetch_error = ?, etag = ?, last_modified = ?, updated_at = ? WHERE id = ?`,
+		title, currentCount, now, status, fetchErr, etag, lastModified, now, feedID,
 	); err != nil {
 		return err
 	}
@@ -746,18 +761,20 @@ func (s *SQLiteFeedRepository) PurgeExpiredArticles(retentionDays int) (int, err
 		return 0, nil
 	}
 	cutoff := time.Now().UTC().Add(-time.Duration(retentionDays) * 24 * time.Hour)
-	rows, err := s.db.Query(`SELECT id, published_at, created_at FROM entries WHERE is_favorite = 0`)
+	rows, err := s.db.Query(`SELECT id, feed_id, published_at, created_at FROM entries WHERE is_favorite = 0`)
 	if err != nil {
 		return 0, err
 	}
 	defer rows.Close()
 
 	var expiredIDs []int64
+	affectedFeedIDs := make(map[int64]struct{})
 	for rows.Next() {
 		var id int64
+		var feedID int64
 		var publishedAt string
 		var createdAt string
-		if err := rows.Scan(&id, &publishedAt, &createdAt); err != nil {
+		if err := rows.Scan(&id, &feedID, &publishedAt, &createdAt); err != nil {
 			continue
 		}
 		ts, ok := parseArticleTimestamp(publishedAt, createdAt)
@@ -766,6 +783,7 @@ func (s *SQLiteFeedRepository) PurgeExpiredArticles(retentionDays int) (int, err
 		}
 		if ts.Before(cutoff) {
 			expiredIDs = append(expiredIDs, id)
+			affectedFeedIDs[feedID] = struct{}{}
 		}
 	}
 	if len(expiredIDs) == 0 {
@@ -787,6 +805,15 @@ func (s *SQLiteFeedRepository) PurgeExpiredArticles(retentionDays int) (int, err
 		affected, _ := res.RowsAffected()
 		if affected > 0 {
 			deleted += int(affected)
+		}
+	}
+	for feedID := range affectedFeedIDs {
+		currentCount, err := countFeedEntriesTx(tx, feedID)
+		if err != nil {
+			return deleted, err
+		}
+		if _, err := tx.Exec(`UPDATE feeds SET item_count = ?, updated_at = ? WHERE id = ?`, currentCount, time.Now().UTC().Format(time.RFC3339), feedID); err != nil {
+			return deleted, err
 		}
 	}
 	if err := tx.Commit(); err != nil {

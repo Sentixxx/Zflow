@@ -1486,6 +1486,28 @@ func TestDataSettingsAndRetentionCleanupKeepFavorites(t *testing.T) {
 	if !listResp2.Articles[0].IsFavorite {
 		t.Fatalf("remaining article is_favorite = false, want true")
 	}
+
+	reqFeeds := httptest.NewRequest(http.MethodGet, "/api/v1/feeds", nil)
+	rrFeeds := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrFeeds, reqFeeds)
+	if rrFeeds.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/feeds status = %d, want %d", rrFeeds.Code, http.StatusOK)
+	}
+	var feedsResp struct {
+		Feeds []struct {
+			ID        int64 `json:"id"`
+			ItemCount int   `json:"item_count"`
+		} `json:"feeds"`
+	}
+	if err := json.Unmarshal(rrFeeds.Body.Bytes(), &feedsResp); err != nil {
+		t.Fatalf("unmarshal feeds response error = %v", err)
+	}
+	if len(feedsResp.Feeds) != 1 {
+		t.Fatalf("feeds len = %d, want 1", len(feedsResp.Feeds))
+	}
+	if feedsResp.Feeds[0].ItemCount != 1 {
+		t.Fatalf("feed item_count after cleanup = %d, want 1", feedsResp.Feeds[0].ItemCount)
+	}
 }
 
 func TestDataSettingsDefaultRetentionDays(t *testing.T) {
