@@ -1,6 +1,9 @@
 # CHANGE INDEX
 
 ## phase-rss-llm-reader-20260225
+- change627 日期:2026-04-10 | 文件:.tmp/plan_retention_default_7d_20260410.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Add\|Modify | 影响:默认数据保留期任务追踪 | 说明:新增“默认文章保留期改为 7 天”计划书，并新增完成 task202 记录默认 retention_days 调整与验证命令 | 关联:task202
+- change628 日期:2026-04-10 | 文件:backend/internal/service/feed_refresh_service.go,backend/internal/handler/server.go,backend/internal/handler/server_test.go,frontend/src/hooks/useSettingsState.ts,frontend/src/hooks/useSettingsActions.ts | 操作:Modify | 影响:数据保留默认值 | 说明:将前后端默认文章保留期从 90 天下调到 7 天，并新增后端接口测试锁定未配置实例返回 7 天默认值 | 关联:task202
+- change629 日期:2026-04-10 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录默认文章保留期改为 7 天及其验证结果 | 关联:task202
 - change624 日期:2026-04-10 | 文件:.tmp/plan_article_prefetch_cap_20260410.md,.phrase/phases/phase-rss-llm-reader-20260225/task_rss_llm_reader.md | 操作:Add\|Modify | 影响:文章列表后台续拉问题追踪 | 说明:新增“文章列表后台续拉上限修复”计划书，并新增完成 task201 记录首屏分页后台预拉不再无限打穿的验证命令 | 关联:task201
 - change625 日期:2026-04-10 | 文件:frontend/src/hooks/article-pages.ts,frontend/src/hooks/article-pages.test.ts,frontend/src/pages/ReaderPage.tsx | 操作:Modify | 影响:阅读页文章分页预拉策略 | 说明:为后台续拉增加 targetCount 上限判定，并让阅读页只预拉到当前缓冲窗口前方一段，避免空闲时自动请求所有分页 | 关联:task201
 - change626 日期:2026-04-10 | 文件:.phrase/docs/CHANGE.md | 操作:Modify | 影响:全局变更追踪 | 说明:同步记录文章列表后台续拉上限修复与前端验证结果 | 关联:task201

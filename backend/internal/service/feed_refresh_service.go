@@ -28,7 +28,7 @@ import (
 const (
 	feedRefreshTimeout         = 20 * time.Second
 	feedScriptOutputLimitBytes = 1 << 20
-	defaultRetentionDays       = 90
+	defaultRetentionDays       = 7
 	retentionDaysSettingKey    = "article_retention_days"
 )
 

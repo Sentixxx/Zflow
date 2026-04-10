@@ -1488,6 +1488,31 @@ func TestDataSettingsAndRetentionCleanupKeepFavorites(t *testing.T) {
 	}
 }
 
+func TestDataSettingsDefaultRetentionDays(t *testing.T) {
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/data", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/settings/data status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		RetentionDays int `json:"retention_days"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal data settings response error = %v", err)
+	}
+	if resp.RetentionDays != 7 {
+		t.Fatalf("retention_days = %d, want 7", resp.RetentionDays)
+	}
+}
+
 func TestRegenerateSummariesEndpoint(t *testing.T) {
 	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {

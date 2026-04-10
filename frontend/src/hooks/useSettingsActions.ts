@@ -244,8 +244,8 @@ export function useSettingsActions({
   const loadDataSettings = async () => {
     try {
       const data = await client.getDataSettings();
-      const days = Number(data.retention_days ?? 90);
-      setArticleRetentionDays(String(Number.isFinite(days) && days > 0 ? Math.floor(days) : 90));
+      const days = Number(data.retention_days ?? 7);
+      setArticleRetentionDays(String(Number.isFinite(days) && days > 0 ? Math.floor(days) : 7));
     } catch (e) {
       setMessage((e as Error).message, true);
     }
