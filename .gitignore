@@ -2,6 +2,13 @@
 .tmp
 .worktrees/
 
+# Claude Code internals
+.claude/worktrees/
+.claude/skills/
+
+# Local dev scratch scripts
+frontend/screenshot.mjs
+
 # Local backend build artifacts
 /backend/server
 /backend/migrate-sqlite-to-pg
