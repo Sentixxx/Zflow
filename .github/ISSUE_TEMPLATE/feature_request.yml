@@ -1,0 +1,114 @@
+name: "Feature Request"
+description: "提出新功能或增强建议"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你的贡献！请尽量填写以下信息，帮助维护者和贡献者理解需求全貌。
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概述
+      description: 一段话说明这个功能是什么、解决什么问题
+      placeholder: "用户在 X 场景下遇到 Y 问题，需要 Z 能力……"
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 动机
+      description: 为什么需要这个功能？当前缺失带来了什么影响？
+      placeholder: "当前系统没有……，导致用户无法……"
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: 当前行为
+      description: 现在系统在这个场景下的表现
+      placeholder: "目前用户只能……，没有……"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: 期望行为
+      description: 实现后系统应该怎样表现（按优先级列出）
+      placeholder: |
+        1. 主要行为：……
+        2. 次要行为：……
+        3. 可选扩展：……
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical-approach
+    attributes:
+      label: 技术方案
+      description: |
+        按后端/前端/架构分层描述改动方向。
+        如果涉及数据库变更、新 API 端点或 LLM prompt 修改，请明确说明。
+      placeholder: |
+        ### 后端
+        | 层 | 改动 |
+        |----|------|
+        | Model | …… |
+        | DB 迁移 | …… |
+
+        ### 前端
+        | 层 | 改动 |
+        |----|------|
+        | 类型 | …… |
+        | 组件 | …… |
+
+        ### 架构考量
+        - ……
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: 验收标准
+      description: 可测试的完成条件清单
+      placeholder: |
+        - [ ] ……
+        - [ ] `go test ./...` 通过
+        - [ ] `npm run build` 通过
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依赖
+      description: 前置条件、关联 issue 或阻塞项
+      placeholder: "依赖 #XX；无阻塞依赖"
+    validations:
+      required: false
+
+  - type: textarea
+    id: getting-started
+    attributes:
+      label: 入手指引
+      description: 建议新贡献者首先阅读哪些文件、理解哪些概念
+      placeholder: |
+        | 文件 | 原因 |
+        |------|------|
+        | `backend/internal/...` | …… |
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 来源与参考
+      description: 相关文档、phase task、论文或外部链接
+      placeholder: "`.phrase/phases/.../task_xxx.md` → taskNNN"
+    validations:
+      required: false

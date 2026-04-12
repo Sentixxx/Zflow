@@ -1,0 +1,67 @@
+name: "Bug Report"
+description: "报告一个问题或异常行为"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你的反馈！请尽量填写以下信息，帮助我们快速定位和修复问题。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 简明描述遇到的问题
+      placeholder: "在 X 操作后，出现 Y 现象……"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: 复现步骤
+      description: 最小化的复现路径
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 观察到……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: 期望行为
+      description: 正常情况下应该怎样表现
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: 实际行为
+      description: 实际发生了什么（附截图、日志或错误信息）
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息
+      description: 运行环境
+      placeholder: |
+        - OS: macOS 15.x / Ubuntu 24.04 / Windows 11
+        - Browser: Chrome 130 / Firefox 135 / Safari 18
+        - Go version: 1.23.x
+        - Node version: 22.x
+        - 部署方式: Docker / 本地编译
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 补充信息
+      description: 相关日志、截图、配置或其他上下文
+    validations:
+      required: false
