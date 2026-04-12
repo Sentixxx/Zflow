@@ -1,13 +1,26 @@
 .DS_Store
-.tmp
 .worktrees/
 
-# Claude Code internals
-.claude/worktrees/
-.claude/skills/
+# AI agent working artifacts (memory, sessions, plans, research)
+.claude/memory/
+.claude/sessions/
+.claude/tmp_*
+.claude/research_*
+.claude/commit_message_policy.md
+
+# Temporary working files
+.tmp/
 
 # Local dev scratch (screenshots, debug scripts, etc.)
 .scratch/
+
+# AI-generated ephemeral plans
+Docs/plans/tmp_plan_*
+Docs/plans/.codex_plan_*
+Docs/superpowers/
+
+# Session-level working notes
+tasks/
 
 # Local backend build artifacts
 /backend/server
