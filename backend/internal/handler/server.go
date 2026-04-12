@@ -121,6 +121,14 @@ type translationPair struct {
 	Translated string
 }
 
+// articleContext carries article-level metadata derived from the summary
+// pipeline to give the translator global awareness of the article's topic.
+type articleContext struct {
+	Title     string
+	AISummary string
+	FeedTitle string
+}
+
 type translateStreamEvent struct {
 	Type       string   `json:"type"`
 	ArticleID  int64    `json:"article_id,omitempty"`
