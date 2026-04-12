@@ -318,8 +318,16 @@ func (s *Server) handleArticleByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		artCtx := articleContext{
+			Title:     article.Title,
+			AISummary: article.AISummary,
+		}
+		if feed, ok, _ := s.store.GetFeed(article.FeedID); ok {
+			artCtx.FeedTitle = feed.Title
+		}
+
 		translatedParts := make([]string, 0, len(paragraphs))
-		err = s.translateParagraphs(r.Context(), paragraphs, targetLang, settings, func(_ int, _ int, _ string, translated string) error {
+		err = s.translateParagraphs(r.Context(), paragraphs, targetLang, settings, artCtx, func(_ int, _ int, _ string, translated string) error {
 			translatedParts = append(translatedParts, translated)
 			return nil
 		})

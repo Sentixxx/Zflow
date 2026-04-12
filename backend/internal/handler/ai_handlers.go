@@ -304,7 +304,16 @@ func (s *Server) streamArticleTranslation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	err = s.translateParagraphs(r.Context(), paragraphs, targetLang, settings, func(index int, total int, source string, translated string) error {
+	// Build article-level context from the summary pipeline output.
+	artCtx := articleContext{
+		Title:     article.Title,
+		AISummary: article.AISummary,
+	}
+	if feed, ok, _ := s.store.GetFeed(article.FeedID); ok {
+		artCtx.FeedTitle = feed.Title
+	}
+
+	err = s.translateParagraphs(r.Context(), paragraphs, targetLang, settings, artCtx, func(index int, total int, source string, translated string) error {
 		return emit(translateStreamEvent{Type: "chunk", ArticleID: articleID, TargetLang: targetLang, Total: total, Index: index, Source: source, Translated: translated})
 	})
 	if err != nil {
@@ -325,16 +334,16 @@ func normalizeRequestedTranslationSources(sources []string) []string {
 	return result
 }
 
-func (s *Server) translateTextWithAI(ctx context.Context, text string, targetLang string, settings aiSettings, history []translationPair) (string, error) {
+func (s *Server) translateTextWithAI(ctx context.Context, text string, targetLang string, settings aiSettings, artCtx articleContext, history []translationPair) (string, error) {
 	switch normalizeAIProtocol(settings.Protocol) {
 	case "anthropic":
-		return s.translateTextWithAnthropic(ctx, text, targetLang, settings, history)
+		return s.translateTextWithAnthropic(ctx, text, targetLang, settings, artCtx, history)
 	default:
-		return s.translateTextWithOpenAI(ctx, text, targetLang, settings, history)
+		return s.translateTextWithOpenAI(ctx, text, targetLang, settings, artCtx, history)
 	}
 }
 
-func (s *Server) translateTextWithOpenAI(ctx context.Context, text string, targetLang string, settings aiSettings, history []translationPair) (string, error) {
+func (s *Server) translateTextWithOpenAI(ctx context.Context, text string, targetLang string, settings aiSettings, artCtx articleContext, history []translationPair) (string, error) {
 	apiKey := strings.TrimSpace(settings.APIKey)
 	if apiKey == "" {
 		return "", errors.New("missing AI API key")
@@ -342,6 +351,7 @@ func (s *Server) translateTextWithOpenAI(ctx context.Context, text string, targe
 	baseURL := strings.TrimRight(strings.TrimSpace(firstNonEmpty(settings.BaseURL, defaultAIBaseURL)), "/")
 	model := strings.TrimSpace(firstNonEmpty(settings.Model, defaultAIModel))
 	contextText := buildTranslationContext(history)
+	systemPrompt := buildTranslationSystemPrompt(artCtx)
 
 	type chatMessage struct {
 		Role    string `json:"role"`
@@ -350,7 +360,7 @@ func (s *Server) translateTextWithOpenAI(ctx context.Context, text string, targe
 	reqPayload := map[string]any{
 		"model": model,
 		"messages": []chatMessage{
-			{Role: "system", Content: "You are a precise translator. Keep terminology consistent with prior translated context. Return only translated plain text for the current segment without explanations."},
+			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: fmt.Sprintf(
 				"Translate the CURRENT segment to %s.\nRequirements:\n1) Preserve meaning accurately.\n2) Keep names/terms consistent with prior context.\n3) Output only translated text for CURRENT segment.\n\nPrior translated context (for consistency):\n%s\n\nCURRENT segment:\n%s",
 				targetLang,
@@ -403,7 +413,7 @@ func (s *Server) translateTextWithOpenAI(ctx context.Context, text string, targe
 	return result, nil
 }
 
-func (s *Server) translateTextWithAnthropic(ctx context.Context, text string, targetLang string, settings aiSettings, history []translationPair) (string, error) {
+func (s *Server) translateTextWithAnthropic(ctx context.Context, text string, targetLang string, settings aiSettings, artCtx articleContext, history []translationPair) (string, error) {
 	apiKey := strings.TrimSpace(settings.APIKey)
 	if apiKey == "" {
 		return "", errors.New("missing AI API key")
@@ -411,11 +421,12 @@ func (s *Server) translateTextWithAnthropic(ctx context.Context, text string, ta
 	baseURL := strings.TrimRight(strings.TrimSpace(firstNonEmpty(settings.BaseURL, "https://api.minimaxi.com/anthropic")), "/")
 	model := strings.TrimSpace(firstNonEmpty(settings.Model, defaultAIModel))
 	contextText := buildTranslationContext(history)
+	systemPrompt := buildTranslationSystemPrompt(artCtx)
 
 	reqPayload := map[string]any{
 		"model":      model,
 		"max_tokens": 800,
-		"system":     "You are a precise translator. Keep terminology consistent with prior translated context. Return only translated plain text for the current segment without explanations.",
+		"system":     systemPrompt,
 		"messages": []map[string]any{
 			{
 				"role": "user",
@@ -480,12 +491,13 @@ func (s *Server) translateParagraphs(
 	paragraphs []string,
 	targetLang string,
 	settings aiSettings,
+	artCtx articleContext,
 	onChunk func(index int, total int, source string, translated string) error,
 ) error {
 	total := len(paragraphs)
 	history := make([]translationPair, 0, total)
 	for idx, source := range paragraphs {
-		translated, err := s.translateTextWithAI(ctx, source, targetLang, settings, history)
+		translated, err := s.translateTextWithAI(ctx, source, targetLang, settings, artCtx, history)
 		if err != nil {
 			return err
 		}
@@ -528,6 +540,35 @@ func buildTranslationContext(history []translationPair) string {
 		return text[len(text)-maxChars:]
 	}
 	return text
+}
+
+// buildTranslationSystemPrompt constructs a system prompt enriched with
+// article-level context from the summary pipeline, so the LLM maintains
+// consistent terminology and tone across all paragraphs.
+func buildTranslationSystemPrompt(artCtx articleContext) string {
+	var b strings.Builder
+	b.WriteString("You are a precise translator. Keep terminology consistent with prior translated context. Return only translated plain text for the current segment without explanations.")
+
+	// Append article-level context so the LLM knows the global topic.
+	var parts []string
+	if t := strings.TrimSpace(artCtx.Title); t != "" {
+		parts = append(parts, fmt.Sprintf("Title: %s", t))
+	}
+	if f := strings.TrimSpace(artCtx.FeedTitle); f != "" {
+		parts = append(parts, fmt.Sprintf("Source: %s", f))
+	}
+	if s := strings.TrimSpace(artCtx.AISummary); s != "" {
+		// Truncate overly long summaries to avoid bloating every request.
+		if len(s) > 600 {
+			s = s[:600] + "..."
+		}
+		parts = append(parts, fmt.Sprintf("Summary: %s", s))
+	}
+	if len(parts) > 0 {
+		b.WriteString("\n\nArticle context (use for terminology and style consistency, do NOT translate this):\n")
+		b.WriteString(strings.Join(parts, "\n"))
+	}
+	return b.String()
 }
 
 func (s *Server) loadAISettings() (aiSettings, error) {
