@@ -1,12 +1,8 @@
 .DS_Store
 .worktrees/
 
-# AI agent working artifacts (memory, sessions, plans, research)
-.claude/memory/
-.claude/sessions/
-.claude/tmp_*
-.claude/research_*
-.claude/commit_message_policy.md
+# AI tool internals (context constraints belong in CLAUDE.md / AGENTS.md / .rules)
+.claude/
 
 # Temporary working files
 .tmp/
