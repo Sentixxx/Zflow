@@ -57,5 +57,6 @@ describe("renderTranslatedHTML", () => {
     expect(rendered).toContain("第一段译文");
     expect(rendered).toContain("第二段译文");
     expect(rendered.match(/translation-block/g)?.length).toBe(2);
+    expect(rendered.match(/immersive-translation/g)?.length).toBeGreaterThanOrEqual(2);
   });
 });

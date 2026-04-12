@@ -149,6 +149,31 @@
   }
   .prose-article th { background: hsl(var(--muted)); font-weight: 600; }
   .prose-article hr { border: none; border-top: 1px solid hsl(var(--border)); margin: 2em 0; }
+
+  /* Immersive translation: bilingual inline blocks */
+  .prose-article .immersive-translation {
+    background: hsl(var(--primary) / 0.06);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 6px;
+    margin-bottom: 2px;
+    animation: immersive-fade-in 0.3s ease-out;
+  }
+  .prose-article .immersive-translation > div {
+    font-size: 0.95em;
+    line-height: 1.85;
+    color: hsl(var(--foreground) / 0.88);
+  }
+  .prose-article .immersive-translation > div + div {
+    margin-top: 0.5em;
+  }
+  .prose-article .immersive-translation-pending {
+    background: hsl(var(--primary) / 0.04);
+    border-radius: 6px;
+    padding: 6px 12px;
+    margin-top: 6px;
+    margin-bottom: 2px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -161,4 +186,9 @@
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@keyframes immersive-fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
