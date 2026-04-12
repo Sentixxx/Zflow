@@ -252,6 +252,47 @@ ai_handlers_test.go
 - 使用 `sync.Mutex` 保护捕获的请求列表（handler 可能并发调用）
 - 提取 `patchAI()`、`doRequest()`、`getFirstArticleID()` 三个 helper 避免测试样板代码
 
+### 5.3 LLM Reply 质量评估：Subagent-as-Judge
+
+前两层测试验证"我们的代码对不对"，第三层验证"LLM 表现好不好"。采用 **Claude Code subagent（haiku）作为 judge**，零额外 API 成本：
+
+**工作流**：
+
+```
+改 prompt/窗口逻辑
+  → 跑翻译（真实 LLM 或 mock）
+  → 收集 {source, translation} 对
+  → 启动 haiku subagent 评分
+  → 输出质量报告
+```
+
+**评估维度**（每项 1-5 分）：
+
+| 维度 | 评估内容 |
+|------|----------|
+| faithfulness | 译文是否准确传达原意，无遗漏无添加 |
+| fluency | 中文是否自然通顺，符合母语者阅读习惯 |
+| terminology | 同一概念在全文中是否统一翻译 |
+
+**实际验证效果**：
+
+haiku judge 在测试中成功检出术语漂移问题 — "consensus protocol" 在同一段落中被翻译为"共识协议"和"一致性协议"，判定 terminology 得分 2/5 并给出明确修正建议。这正是滑动窗口首段钉住策略要解决的问题。
+
+**使用方式**：
+
+在 Claude Code 中直接调用，不需要额外工具或脚本：
+
+```
+Agent(model="haiku", prompt="评估以下翻译样本...")
+```
+
+**设计原则**：
+
+- judge 模型与翻译模型不同（避免自评偏差）
+- 不进 CI（非确定性 + 成本），作为开发者按需工具
+- 重点关注 terminology 维度（这是上下文窗口优化的核心指标）
+- 可组合：同时启动多个 haiku agent 并行评估不同样本集
+
 ---
 
 ## 6. 参考文献
