@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
 )
@@ -155,6 +156,74 @@ func TestFeedRefreshServiceRefreshAllFeedsPurgesExpiredArticles(t *testing.T) {
 	}
 	if !after[0].IsFavorite {
 		t.Fatalf("remaining article IsFavorite = false, want true")
+	}
+}
+
+func TestPurgeExpiredArticlesUsesFeedRetentionOverrideAndZeroFallback(t *testing.T) {
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+
+	overrideFeed, err := repo.AddInFolder("https://example.com/override.xml", "Override Feed", []repository.ArticleSeed{{
+		Title:       "Override Old",
+		Link:        "https://example.com/override-old",
+		Summary:     "<p>old summary</p>",
+		PublishedAt: time.Now().UTC().Add(-10 * 24 * time.Hour).Format(time.RFC3339),
+	}}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder(override) error = %v", err)
+	}
+	globalFeed, err := repo.AddInFolder("https://example.com/global.xml", "Global Feed", []repository.ArticleSeed{{
+		Title:       "Global Old",
+		Link:        "https://example.com/global-old",
+		Summary:     "<p>old summary</p>",
+		PublishedAt: time.Now().UTC().Add(-10 * 24 * time.Hour).Format(time.RFC3339),
+	}}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder(global) error = %v", err)
+	}
+	if err := repo.SetSetting("article_retention_days", "1"); err != nil {
+		t.Fatalf("SetSetting() error = %v", err)
+	}
+	if _, ok, err := repo.UpdateFeedRetentionDays(overrideFeed.ID, 30); err != nil || !ok {
+		t.Fatalf("UpdateFeedRetentionDays(override) ok=%v err=%v, want ok", ok, err)
+	}
+	if _, ok, err := repo.UpdateFeedRetentionDays(globalFeed.ID, 0); err != nil || !ok {
+		t.Fatalf("UpdateFeedRetentionDays(global) ok=%v err=%v, want ok", ok, err)
+	}
+
+	deleted, err := repo.PurgeExpiredArticles(1)
+	if err != nil {
+		t.Fatalf("PurgeExpiredArticles() error = %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("deleted = %d, want 1", deleted)
+	}
+
+	articles := repo.ListArticles()
+	if len(articles) != 1 {
+		t.Fatalf("ListArticles() len = %d, want 1", len(articles))
+	}
+	if articles[0].FeedID != overrideFeed.ID {
+		t.Fatalf("remaining article feed_id = %d, want %d", articles[0].FeedID, overrideFeed.ID)
+	}
+
+	gotOverride, ok, err := repo.GetFeed(overrideFeed.ID)
+	if err != nil || !ok {
+		t.Fatalf("GetFeed(override) ok=%v err=%v, want ok", ok, err)
+	}
+	if gotOverride.ItemCount != 1 {
+		t.Fatalf("override item_count = %d, want 1", gotOverride.ItemCount)
+	}
+
+	gotGlobal, ok, err := repo.GetFeed(globalFeed.ID)
+	if err != nil || !ok {
+		t.Fatalf("GetFeed(global) ok=%v err=%v, want ok", ok, err)
+	}
+	if gotGlobal.ItemCount != 0 {
+		t.Fatalf("global item_count = %d, want 0", gotGlobal.ItemCount)
 	}
 }
 

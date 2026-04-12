@@ -118,9 +118,13 @@ export class ApiClient {
   }
 
   async updateFeedFolder(id: number, folderID: number | null): Promise<Feed> {
+    return this.updateFeedSettings(id, { folder_id: folderID });
+  }
+
+  async updateFeedSettings(id: number, payload: { folder_id?: number | null; retention_days?: number }): Promise<Feed> {
     return this.request<Feed>(`/api/v1/feeds/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ folder_id: folderID }),
+      body: JSON.stringify(payload),
     });
   }
 

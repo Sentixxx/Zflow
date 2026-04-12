@@ -8,3 +8,13 @@
 
 # Local dev scratch scripts
 frontend/screenshot.mjs
+
+# Local backend build artifacts
+/backend/server
+/backend/migrate-sqlite-to-pg
+/backend/*.test
+/backend/*.out
+/backend/*.exe
+/backend/*.dll
+/backend/*.so
+/backend/*.dylib

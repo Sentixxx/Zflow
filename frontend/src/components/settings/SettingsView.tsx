@@ -16,8 +16,10 @@ export type SettingsViewProps = {
   newFeedFolderID: number | null;
   onNewFeedFolderIDChange: (value: number | null) => void;
   folders: Folder[];
+  articleRetentionDays: string;
   onCreateRootFolder: () => void;
   onAddFeed: () => void;
+  onSaveFeedRetentionDays: (feedID: number, retentionDays: number) => Promise<boolean>;
   onRefreshFeeds: () => void;
   onRefreshFeedsFromNetwork: () => void;
   onRefreshArticles: () => void;
@@ -60,7 +62,6 @@ export type SettingsViewProps = {
   onEmbeddingModelChange: (value: string) => void;
   onSaveAISettings: () => void;
   isSavingAISettings: boolean;
-  articleRetentionDays: string;
   selectedArticleID: number | null;
   selectedArticleTitle: string;
   isRefreshingCurrentArticleAISummary: boolean;
@@ -128,13 +129,16 @@ export function SettingsView(props: SettingsViewProps) {
 
         {settingsTab === "subscription" && (
           <SubscriptionSettingsCard
+            feeds={rest.feeds}
             feedURL={rest.feedURL}
             onFeedURLChange={rest.onFeedURLChange}
             newFeedFolderID={rest.newFeedFolderID}
             onNewFeedFolderIDChange={rest.onNewFeedFolderIDChange}
+            articleRetentionDays={rest.articleRetentionDays}
             folders={rest.folders}
             onCreateRootFolder={rest.onCreateRootFolder}
             onAddFeed={rest.onAddFeed}
+            onSaveFeedRetentionDays={rest.onSaveFeedRetentionDays}
             onRefreshFeeds={rest.onRefreshFeeds}
             onRefreshFeedsFromNetwork={rest.onRefreshFeedsFromNetwork}
             onRefreshArticles={rest.onRefreshArticles}

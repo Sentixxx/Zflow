@@ -20,11 +20,18 @@ export function buildSingleArticlesPageData(articles: Article[]): InfiniteData<A
 
 export function shouldHydrateArticlePool(options: {
   loadedCount: number;
+  targetCount: number;
   hasNextPage: boolean;
   isFetching: boolean;
   isFetchingNextPage: boolean;
 }): boolean {
-  return options.loadedCount > 0 && options.hasNextPage && !options.isFetching && !options.isFetchingNextPage;
+  return (
+    options.loadedCount > 0 &&
+    options.loadedCount < options.targetCount &&
+    options.hasNextPage &&
+    !options.isFetching &&
+    !options.isFetchingNextPage
+  );
 }
 
 export function flattenArticlePages(data: InfiniteData<ArticlesPage, unknown> | undefined): Article[] {

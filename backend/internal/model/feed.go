@@ -11,6 +11,7 @@ type Feed struct {
 	IconPath         string `json:"-"`
 	IconFetchedAt    string `json:"-"`
 	ItemCount        int    `json:"item_count"`
+	RetentionDays    int    `json:"retention_days"`
 	LastFetchedAt    string `json:"last_fetched_at"`
 	LastFetchStatus  string `json:"last_fetch_status"`
 	LastFetchError   string `json:"last_fetch_error,omitempty"`

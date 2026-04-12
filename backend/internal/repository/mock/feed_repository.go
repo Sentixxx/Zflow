@@ -14,6 +14,7 @@ type MockFeedRepository struct {
 	DeleteFolderFunc                      func(id int64) (bool, error)
 	AddInFolderFunc                       func(url, title string, items []repository.ArticleSeed, fetchErr string, folderID *int64, etag string, lastModified string) (model.Feed, error)
 	UpdateFeedFolderFunc                  func(id int64, folderID *int64) (model.Feed, bool, error)
+	UpdateFeedRetentionDaysFunc           func(id int64, retentionDays int) (model.Feed, bool, error)
 	DeleteFeedFunc                        func(id int64) (bool, error)
 	GetFeedFunc                           func(id int64) (model.Feed, bool, error)
 	GetFeedByURLFunc                      func(rawURL string) (model.Feed, bool, error)
@@ -92,6 +93,13 @@ func (m *MockFeedRepository) AddInFolder(url, title string, items []repository.A
 func (m *MockFeedRepository) UpdateFeedFolder(id int64, folderID *int64) (model.Feed, bool, error) {
 	if m.UpdateFeedFolderFunc != nil {
 		return m.UpdateFeedFolderFunc(id, folderID)
+	}
+	return model.Feed{}, false, nil
+}
+
+func (m *MockFeedRepository) UpdateFeedRetentionDays(id int64, retentionDays int) (model.Feed, bool, error) {
+	if m.UpdateFeedRetentionDaysFunc != nil {
+		return m.UpdateFeedRetentionDaysFunc(id, retentionDays)
 	}
 	return model.Feed{}, false, nil
 }

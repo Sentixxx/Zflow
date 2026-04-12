@@ -38,6 +38,7 @@ type FeedRepository interface {
 	DeleteFolder(id int64) (bool, error)
 	AddInFolder(url, title string, items []ArticleSeed, fetchErr string, folderID *int64, etag string, lastModified string) (model.Feed, error)
 	UpdateFeedFolder(id int64, folderID *int64) (model.Feed, bool, error)
+	UpdateFeedRetentionDays(id int64, retentionDays int) (model.Feed, bool, error)
 	DeleteFeed(id int64) (bool, error)
 	GetFeed(id int64) (model.Feed, bool, error)
 	GetFeedByURL(rawURL string) (model.Feed, bool, error)

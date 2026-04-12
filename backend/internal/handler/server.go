@@ -52,7 +52,7 @@ const (
 	defaultAIModel          = "gpt-4o-mini"
 	defaultAIProtocol       = "openai"
 	defaultAITargetLang     = "zh-CN"
-	defaultRetentionDays    = 90
+	defaultRetentionDays    = 7
 )
 
 type createFeedRequest struct {

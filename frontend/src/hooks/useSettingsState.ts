@@ -15,7 +15,7 @@ export function useSettingsState() {
   const [embeddingAPIKeyConfigured, setEmbeddingAPIKeyConfigured] = useState(false);
   const [embeddingBaseURL, setEmbeddingBaseURL] = useState("");
   const [embeddingModel, setEmbeddingModel] = useState("");
-  const [articleRetentionDays, setArticleRetentionDays] = useState("90");
+  const [articleRetentionDays, setArticleRetentionDays] = useState("7");
   const [scriptFeedID, setScriptFeedID] = useState<number | null>(null);
   const [scriptContent, setScriptContent] = useState("");
   const [scriptLang, setScriptLang] = useState<ScriptLang>("shell");

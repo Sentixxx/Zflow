@@ -113,8 +113,16 @@ func buildArticleListQuerySQL(query ArticleListQuery) (string, []any) {
 	return queryText, args
 }
 
+func countFeedEntriesTx(tx *sql.Tx, feedID int64) (int, error) {
+	var count int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM entries WHERE feed_id = ?`, feedID).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (s *SQLiteFeedRepository) List() []model.Feed {
-	rows, err := s.db.Query(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds ORDER BY id DESC`)
+	rows, err := s.db.Query(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, retention_days, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds ORDER BY id DESC`)
 	if err != nil {
 		return []model.Feed{}
 	}
@@ -127,7 +135,7 @@ func (s *SQLiteFeedRepository) List() []model.Feed {
 		if err := rows.Scan(
 			&feed.ID, &feed.URL, &feed.Title, &folderID,
 			&feed.CustomScript, &feed.CustomScriptLang, &feed.IconPath, &feed.IconFetchedAt,
-			&feed.ItemCount, &feed.LastFetchedAt, &feed.LastFetchStatus, &feed.LastFetchError,
+			&feed.ItemCount, &feed.RetentionDays, &feed.LastFetchedAt, &feed.LastFetchStatus, &feed.LastFetchError,
 			&feed.ETag, &feed.LastModified, &feed.CreatedAt,
 		); err != nil {
 			continue
@@ -242,8 +250,8 @@ func (s *SQLiteFeedRepository) AddInFolder(url, title string, items []ArticleSee
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`INSERT INTO feeds(url, title, folder_id, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at, updated_at)
-		 VALUES(?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO feeds(url, title, folder_id, item_count, retention_days, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at, updated_at)
+		 VALUES(?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
 		url, title, nullableInt(folderID), now, status, fetchErr, etag, lastModified, now, now,
 	)
 	if err != nil {
@@ -261,7 +269,11 @@ func (s *SQLiteFeedRepository) AddInFolder(url, title string, items []ArticleSee
 	if err != nil {
 		return model.Feed{}, err
 	}
-	if _, err := tx.Exec(`UPDATE feeds SET item_count = ? WHERE id = ?`, insertedCount, feedID); err != nil {
+	currentCount, err := countFeedEntriesTx(tx, feedID)
+	if err != nil {
+		return model.Feed{}, err
+	}
+	if _, err := tx.Exec(`UPDATE feeds SET item_count = ? WHERE id = ?`, currentCount, feedID); err != nil {
 		return model.Feed{}, err
 	}
 
@@ -279,6 +291,7 @@ func (s *SQLiteFeedRepository) AddInFolder(url, title string, items []ArticleSee
 		IconPath:         "",
 		IconFetchedAt:    "",
 		ItemCount:        insertedCount,
+		RetentionDays:    0,
 		LastFetchedAt:    now,
 		LastFetchStatus:  status,
 		LastFetchError:   fetchErr,
@@ -305,6 +318,23 @@ func (s *SQLiteFeedRepository) UpdateFeedFolder(id int64, folderID *int64) (mode
 	return feed, ok, nil
 }
 
+func (s *SQLiteFeedRepository) UpdateFeedRetentionDays(id int64, retentionDays int) (model.Feed, bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(`UPDATE feeds SET retention_days = ?, updated_at = ? WHERE id = ?`, retentionDays, now, id)
+	if err != nil {
+		return model.Feed{}, false, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return model.Feed{}, false, nil
+	}
+	feed, ok, err := s.GetFeed(id)
+	if err != nil {
+		return model.Feed{}, false, err
+	}
+	return feed, ok, nil
+}
+
 func (s *SQLiteFeedRepository) DeleteFeed(id int64) (bool, error) {
 	res, err := s.db.Exec(`DELETE FROM feeds WHERE id = ?`, id)
 	if err != nil {
@@ -315,13 +345,13 @@ func (s *SQLiteFeedRepository) DeleteFeed(id int64) (bool, error) {
 }
 
 func (s *SQLiteFeedRepository) GetFeed(id int64) (model.Feed, bool, error) {
-	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE id = ?`, id)
+	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, retention_days, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE id = ?`, id)
 	var feed model.Feed
 	var folderID sql.NullInt64
 	if err := row.Scan(
 		&feed.ID, &feed.URL, &feed.Title, &folderID,
 		&feed.CustomScript, &feed.CustomScriptLang, &feed.IconPath, &feed.IconFetchedAt,
-		&feed.ItemCount, &feed.LastFetchedAt, &feed.LastFetchStatus, &feed.LastFetchError,
+		&feed.ItemCount, &feed.RetentionDays, &feed.LastFetchedAt, &feed.LastFetchStatus, &feed.LastFetchError,
 		&feed.ETag, &feed.LastModified, &feed.CreatedAt,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -340,13 +370,13 @@ func (s *SQLiteFeedRepository) GetFeed(id int64) (model.Feed, bool, error) {
 }
 
 func (s *SQLiteFeedRepository) GetFeedByURL(rawURL string) (model.Feed, bool, error) {
-	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE url = ?`, strings.TrimSpace(rawURL))
+	row := s.db.QueryRow(`SELECT id, url, title, folder_id, custom_script, custom_script_lang, icon_path, icon_fetched_at, item_count, retention_days, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at FROM feeds WHERE url = ?`, strings.TrimSpace(rawURL))
 	var feed model.Feed
 	var folderID sql.NullInt64
 	if err := row.Scan(
 		&feed.ID, &feed.URL, &feed.Title, &folderID,
 		&feed.CustomScript, &feed.CustomScriptLang, &feed.IconPath, &feed.IconFetchedAt,
-		&feed.ItemCount, &feed.LastFetchedAt, &feed.LastFetchStatus, &feed.LastFetchError,
+		&feed.ItemCount, &feed.RetentionDays, &feed.LastFetchedAt, &feed.LastFetchStatus, &feed.LastFetchError,
 		&feed.ETag, &feed.LastModified, &feed.CreatedAt,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -383,8 +413,8 @@ func (s *SQLiteFeedRepository) CreateFeedPlaceholder(url string, title string, f
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := s.db.Exec(
-		`INSERT INTO feeds(url, title, folder_id, item_count, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at, updated_at)
-		 VALUES(?, ?, ?, 0, ?, 'idle', '', '', '', ?, ?)`,
+		`INSERT INTO feeds(url, title, folder_id, item_count, retention_days, last_fetched_at, last_fetch_status, last_fetch_error, etag, last_modified, created_at, updated_at)
+		 VALUES(?, ?, ?, 0, 0, ?, 'idle', '', '', '', ?, ?)`,
 		url, title, nullableInt(folderID), now, now, now,
 	)
 	if err != nil {
@@ -407,6 +437,7 @@ func (s *SQLiteFeedRepository) CreateFeedPlaceholder(url string, title string, f
 		IconPath:         "",
 		IconFetchedAt:    "",
 		ItemCount:        0,
+		RetentionDays:    0,
 		LastFetchedAt:    now,
 		LastFetchStatus:  "idle",
 		LastFetchError:   "",
@@ -429,12 +460,15 @@ func (s *SQLiteFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string
 	}
 	defer tx.Rollback()
 
-	inserted := 0
 	if fetchErr == "" {
-		inserted, err = s.insertEntriesTx(tx, feedID, items, now)
+		_, err = s.insertEntriesTx(tx, feedID, items, now)
 		if err != nil {
 			return err
 		}
+	}
+	currentCount, err := countFeedEntriesTx(tx, feedID)
+	if err != nil {
+		return err
 	}
 
 	if title == "" {
@@ -443,8 +477,8 @@ func (s *SQLiteFeedRepository) UpdateFeedAfterRefresh(feedID int64, title string
 		}
 	}
 	if _, err := tx.Exec(
-		`UPDATE feeds SET title = ?, item_count = item_count + ?, last_fetched_at = ?, last_fetch_status = ?, last_fetch_error = ?, etag = ?, last_modified = ?, updated_at = ? WHERE id = ?`,
-		title, inserted, now, status, fetchErr, etag, lastModified, now, feedID,
+		`UPDATE feeds SET title = ?, item_count = ?, last_fetched_at = ?, last_fetch_status = ?, last_fetch_error = ?, etag = ?, last_modified = ?, updated_at = ? WHERE id = ?`,
+		title, currentCount, now, status, fetchErr, etag, lastModified, now, feedID,
 	); err != nil {
 		return err
 	}
@@ -745,27 +779,35 @@ func (s *SQLiteFeedRepository) PurgeExpiredArticles(retentionDays int) (int, err
 	if retentionDays <= 0 {
 		return 0, nil
 	}
-	cutoff := time.Now().UTC().Add(-time.Duration(retentionDays) * 24 * time.Hour)
-	rows, err := s.db.Query(`SELECT id, published_at, created_at FROM entries WHERE is_favorite = 0`)
+	rows, err := s.db.Query(`SELECT e.id, e.feed_id, f.retention_days, e.published_at, e.created_at FROM entries e JOIN feeds f ON f.id = e.feed_id WHERE e.is_favorite = 0`)
 	if err != nil {
 		return 0, err
 	}
 	defer rows.Close()
 
 	var expiredIDs []int64
+	affectedFeedIDs := make(map[int64]struct{})
 	for rows.Next() {
 		var id int64
+		var feedID int64
+		var feedRetentionDays int
 		var publishedAt string
 		var createdAt string
-		if err := rows.Scan(&id, &publishedAt, &createdAt); err != nil {
+		if err := rows.Scan(&id, &feedID, &feedRetentionDays, &publishedAt, &createdAt); err != nil {
 			continue
 		}
 		ts, ok := parseArticleTimestamp(publishedAt, createdAt)
 		if !ok {
 			continue
 		}
-		if ts.Before(cutoff) {
+		effectiveRetentionDays := retentionDays
+		if feedRetentionDays > 0 {
+			effectiveRetentionDays = feedRetentionDays
+		}
+		effectiveCutoff := time.Now().UTC().Add(-time.Duration(effectiveRetentionDays) * 24 * time.Hour)
+		if ts.Before(effectiveCutoff) {
 			expiredIDs = append(expiredIDs, id)
+			affectedFeedIDs[feedID] = struct{}{}
 		}
 	}
 	if len(expiredIDs) == 0 {
@@ -787,6 +829,15 @@ func (s *SQLiteFeedRepository) PurgeExpiredArticles(retentionDays int) (int, err
 		affected, _ := res.RowsAffected()
 		if affected > 0 {
 			deleted += int(affected)
+		}
+	}
+	for feedID := range affectedFeedIDs {
+		currentCount, err := countFeedEntriesTx(tx, feedID)
+		if err != nil {
+			return deleted, err
+		}
+		if _, err := tx.Exec(`UPDATE feeds SET item_count = ?, updated_at = ? WHERE id = ?`, currentCount, time.Now().UTC().Format(time.RFC3339), feedID); err != nil {
+			return deleted, err
 		}
 	}
 	if err := tx.Commit(); err != nil {

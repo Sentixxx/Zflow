@@ -1486,6 +1486,92 @@ func TestDataSettingsAndRetentionCleanupKeepFavorites(t *testing.T) {
 	if !listResp2.Articles[0].IsFavorite {
 		t.Fatalf("remaining article is_favorite = false, want true")
 	}
+
+	reqFeeds := httptest.NewRequest(http.MethodGet, "/api/v1/feeds", nil)
+	rrFeeds := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rrFeeds, reqFeeds)
+	if rrFeeds.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/feeds status = %d, want %d", rrFeeds.Code, http.StatusOK)
+	}
+	var feedsResp struct {
+		Feeds []struct {
+			ID        int64 `json:"id"`
+			ItemCount int   `json:"item_count"`
+		} `json:"feeds"`
+	}
+	if err := json.Unmarshal(rrFeeds.Body.Bytes(), &feedsResp); err != nil {
+		t.Fatalf("unmarshal feeds response error = %v", err)
+	}
+	if len(feedsResp.Feeds) != 1 {
+		t.Fatalf("feeds len = %d, want 1", len(feedsResp.Feeds))
+	}
+	if feedsResp.Feeds[0].ItemCount != 1 {
+		t.Fatalf("feed item_count after cleanup = %d, want 1", feedsResp.Feeds[0].ItemCount)
+	}
+}
+
+func TestDataSettingsDefaultRetentionDays(t *testing.T) {
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/data", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/settings/data status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		RetentionDays int `json:"retention_days"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal data settings response error = %v", err)
+	}
+	if resp.RetentionDays != 7 {
+		t.Fatalf("retention_days = %d, want 7", resp.RetentionDays)
+	}
+}
+
+func TestUpdateFeedRetentionDays(t *testing.T) {
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	feed, err := repo.CreateFeedPlaceholder("https://example.com/feed.xml", "Example Feed", nil)
+	if err != nil {
+		t.Fatalf("CreateFeedPlaceholder() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/feeds/"+strconv.FormatInt(feed.ID, 10), bytes.NewReader([]byte(`{"retention_days":30}`)))
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/v1/feeds/:id status = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp struct {
+		ID            int64 `json:"id"`
+		RetentionDays int   `json:"retention_days"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal feed response error = %v", err)
+	}
+	if resp.RetentionDays != 30 {
+		t.Fatalf("retention_days = %d, want 30", resp.RetentionDays)
+	}
+
+	got, ok, err := repo.GetFeed(feed.ID)
+	if err != nil || !ok {
+		t.Fatalf("GetFeed() ok=%v err=%v, want ok", ok, err)
+	}
+	if got.RetentionDays != 30 {
+		t.Fatalf("stored feed retention_days = %d, want 30", got.RetentionDays)
+	}
 }
 
 func TestRegenerateSummariesEndpoint(t *testing.T) {
