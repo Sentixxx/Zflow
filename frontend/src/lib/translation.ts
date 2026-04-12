@@ -76,16 +76,27 @@ export function renderTranslatedHTML(
 
     const translation = translationByIndex.get(index);
     if (translation?.status === "done" && translation.translated.trim() !== "") {
-      target.insertAdjacentElement("afterend", buildTranslationNode(translation.translated));
+      insertTranslationAfter(target, buildTranslationNode(translation.translated));
       continue;
     }
 
     if (isTranslatingArticle) {
-      target.insertAdjacentElement("afterend", buildPendingNode());
+      insertTranslationAfter(target, buildPendingNode());
     }
   }
 
   return template.innerHTML;
+}
+
+// For table cells (td/th), append inside the cell to keep table structure valid.
+// For all other elements, insert as a sibling after the element.
+function insertTranslationAfter(target: HTMLElement, node: HTMLElement): void {
+  const tag = target.tagName.toLowerCase();
+  if (tag === "td" || tag === "th") {
+    target.appendChild(node);
+  } else {
+    target.insertAdjacentElement("afterend", node);
+  }
 }
 
 function annotateTranslationTargets(root: ParentNode, sources: string[]) {

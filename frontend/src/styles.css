@@ -174,6 +174,18 @@
     margin-top: 6px;
     margin-bottom: 2px;
   }
+  /* Table cells: translation appended inside td/th, flush with cell padding */
+  .prose-article td > .immersive-translation,
+  .prose-article th > .immersive-translation {
+    border-radius: 4px;
+    margin: 4px 0 0;
+    padding: 4px 8px;
+  }
+  .prose-article td > .immersive-translation-pending,
+  .prose-article th > .immersive-translation-pending {
+    margin: 4px 0 0;
+    padding: 4px 8px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -59,4 +59,36 @@ describe("renderTranslatedHTML", () => {
     expect(rendered.match(/translation-block/g)?.length).toBe(2);
     expect(rendered.match(/immersive-translation/g)?.length).toBeGreaterThanOrEqual(2);
   });
+
+  it("appends translation inside table cells instead of as sibling to preserve table structure", () => {
+    const template = buildTranslationTemplate(
+      '<table><tr><td>Cell one</td><td>Cell two</td></tr></table>',
+    );
+
+    const rendered = renderTranslatedHTML(
+      template.html,
+      [
+        { index: 1, translated: "单元格一", status: "done" },
+        { index: 2, translated: "单元格二", status: "done" },
+      ],
+      false,
+    );
+
+    const container = document.createElement("div");
+    container.innerHTML = rendered;
+
+    // Translation blocks must be children of <td>, not siblings
+    const tds = container.querySelectorAll("td");
+    expect(tds.length).toBe(2);
+    for (const td of tds) {
+      expect(td.querySelector(".translation-block")).not.toBeNull();
+    }
+
+    // The <tr> must still have exactly 2 children (the two <td>s)
+    const tr = container.querySelector("tr");
+    expect(tr?.children.length).toBe(2);
+
+    expect(rendered).toContain("单元格一");
+    expect(rendered).toContain("单元格二");
+  });
 });
