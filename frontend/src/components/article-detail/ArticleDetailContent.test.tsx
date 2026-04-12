@@ -237,6 +237,95 @@ describe("ArticleDetailContent", () => {
     expect(container.textContent).toContain("Encoded body");
   });
 
+  it("renders table article with translations inside cells, preserving table structure", () => {
+    const globalWithAct = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    globalWithAct.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    // Simulate article with table content (like a comparison/benchmark article)
+    const tableHTML = [
+      "<p>Performance comparison across runtimes:</p>",
+      "<table><thead><tr><th>Runtime</th><th>Throughput</th></tr></thead>",
+      "<tbody><tr><td>Native Rust</td><td>142k req/s</td></tr>",
+      "<tr><td>Wasm</td><td>128k req/s</td></tr></tbody></table>",
+      "<p>Wasm achieves 90% of native throughput.</p>",
+    ].join("");
+    const template = buildTranslationTemplate(tableHTML);
+
+    // Simulate backend streaming response: translations for p, th, td elements
+    const translationParagraphs = template.sources.map((source, i) => ({
+      index: i + 1,
+      source,
+      translated: `翻译${i + 1}`,
+      status: "done" as const,
+    }));
+
+    act(() => {
+      root.render(
+        <TooltipProvider>
+          <ArticleDetailContent
+            article={{ ...makeArticle(), full_content: tableHTML }}
+            sanitizedSummaryHTML=""
+            sanitizedFullContentHTML={tableHTML}
+            translationTemplateHTML={template.html}
+            canMarkUnread={false}
+            canToggleFavorite={false}
+            isFavorite={false}
+            canOpenSourceSite={false}
+            canExtractReadable={false}
+            isExtractingReadable={false}
+            canRefreshArticleCache={false}
+            isRefreshingArticleCache={false}
+            isTranslatingArticle={false}
+            isTranslationVisible={true}
+            sourceSiteURL=""
+            detailProgressText=""
+            canGoPrev={false}
+            canGoNext={false}
+            translationParagraphs={translationParagraphs}
+            onMarkUnread={() => undefined}
+            onToggleFavorite={() => undefined}
+            onOpenSourceSite={() => undefined}
+            onExtractReadable={() => undefined}
+            onRefreshArticleCache={() => undefined}
+            onTranslateArticle={() => undefined}
+            onGoPrev={() => undefined}
+            onGoNext={() => undefined}
+          />
+        </TooltipProvider>,
+      );
+    });
+
+    // Table structure must be preserved
+    const table = container.querySelector("table");
+    expect(table).not.toBeNull();
+    expect(container.querySelectorAll("th").length).toBe(2);
+    expect(container.querySelectorAll("td").length).toBe(4);
+
+    // Each <tr> must have exactly 2 children (no div siblings breaking table layout)
+    for (const tr of container.querySelectorAll("tr")) {
+      expect(tr.children.length).toBe(2);
+    }
+
+    // Translation blocks must be inside th/td, not outside
+    for (const cell of container.querySelectorAll("th, td")) {
+      expect(cell.querySelector(".translation-block")).not.toBeNull();
+    }
+
+    // Paragraph translations must be sibling divs (not inside <p>)
+    const paragraphs = container.querySelectorAll("p[data-translation-index]");
+    for (const p of paragraphs) {
+      const next = p.nextElementSibling;
+      expect(next?.classList.contains("immersive-translation")).toBe(true);
+    }
+
+    // All translated text must be present
+    for (const tp of translationParagraphs) {
+      expect(container.textContent).toContain(tp.translated);
+    }
+  });
+
   it("falls back to article core fields when source payload is missing", () => {
     const globalWithAct = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
     globalWithAct.IS_REACT_ACT_ENVIRONMENT = true;

@@ -6,7 +6,7 @@ import { renderTranslatedHTML, splitTranslatedTextBlocks } from "@/lib/translati
 import { ArticleDetailTopBar } from "./ArticleDetailTopBar";
 import { ArticleFloatingActions } from "./ArticleFloatingActions";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+
 
 function getSummaryStatusMeta(status: string | undefined): { label: string; tone: "ready" | "fallback" | "neutral" } {
   switch ((status || "").trim()) {
@@ -236,28 +236,25 @@ export function ArticleDetailContent({
                 dangerouslySetInnerHTML={{ __html: renderedTranslatedHTML }}
               />
             ) : showTranslation ? (
-              <div className="space-y-6">
+              <div className="prose-article space-y-4">
                 {translationParagraphs.map((item) => (
-                  <div key={item.index} className="space-y-2">
-                    <p className="text-[15px] leading-[1.85] text-muted-foreground break-words [overflow-wrap:anywhere]">
+                  <div key={item.index}>
+                    <p className="text-[15px] leading-[1.85] break-words [overflow-wrap:anywhere]">
                       {item.source || "(原文段落加载中...)"}
                     </p>
                     {item.status === "done" ? (
-                      <div className="space-y-3 border-l-2 border-primary/50 pl-4">
+                      <div className="immersive-translation">
                         {splitTranslatedTextBlocks(item.translated).map((block, blockIndex) => (
                           <div
                             key={`${item.index}-${blockIndex}`}
-                            className={cn(
-                              "text-base leading-[1.85] whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
-                              blockIndex > 0 && "pt-1",
-                            )}
+                            className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
                           >
                             {block}
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+                      <div className="immersive-translation-pending flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
                         <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" aria-hidden="true" />
                         <span>第 {item.index} 段翻译中...</span>
                       </div>
@@ -265,7 +262,7 @@ export function ArticleDetailContent({
                   </div>
                 ))}
                 {isTranslatingArticle && translationParagraphs.length === 0 && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+                  <div className="immersive-translation-pending flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" aria-hidden="true" />
                     <span>正在拆分段落并启动翻译...</span>
                   </div>

@@ -6,8 +6,8 @@
 .claude/worktrees/
 .claude/skills/
 
-# Local dev scratch scripts
-frontend/screenshot.mjs
+# Local dev scratch (screenshots, debug scripts, etc.)
+.scratch/
 
 # Local backend build artifacts
 /backend/server

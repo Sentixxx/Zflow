@@ -57,5 +57,115 @@ describe("renderTranslatedHTML", () => {
     expect(rendered).toContain("第一段译文");
     expect(rendered).toContain("第二段译文");
     expect(rendered.match(/translation-block/g)?.length).toBe(2);
+    expect(rendered.match(/immersive-translation/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("appends translation inside table cells instead of as sibling to preserve table structure", () => {
+    const template = buildTranslationTemplate(
+      '<table><tr><td>Cell one</td><td>Cell two</td></tr></table>',
+    );
+
+    const rendered = renderTranslatedHTML(
+      template.html,
+      [
+        { index: 1, translated: "单元格一", status: "done" },
+        { index: 2, translated: "单元格二", status: "done" },
+      ],
+      false,
+    );
+
+    const container = document.createElement("div");
+    container.innerHTML = rendered;
+
+    // Translation blocks must be children of <td>, not siblings
+    const tds = container.querySelectorAll("td");
+    expect(tds.length).toBe(2);
+    for (const td of tds) {
+      expect(td.querySelector(".translation-block")).not.toBeNull();
+    }
+
+    // The <tr> must still have exactly 2 children (the two <td>s)
+    const tr = container.querySelector("tr");
+    expect(tr?.children.length).toBe(2);
+
+    expect(rendered).toContain("单元格一");
+    expect(rendered).toContain("单元格二");
+  });
+
+  it("preserves thead/tbody multi-row table structure with th and td translations", () => {
+    const html = [
+      "<table><thead><tr><th>Name</th><th>Score</th></tr></thead>",
+      "<tbody><tr><td>Alice</td><td>95</td></tr>",
+      "<tr><td>Bob</td><td>87</td></tr></tbody></table>",
+    ].join("");
+    const template = buildTranslationTemplate(html);
+
+    // Backend returns translations for all 6 cells
+    const paragraphs = template.sources.map((_, i) => ({
+      index: i + 1,
+      translated: `翻译${i + 1}`,
+      status: "done" as const,
+    }));
+
+    const rendered = renderTranslatedHTML(template.html, paragraphs, false);
+    const container = document.createElement("div");
+    container.innerHTML = rendered;
+
+    // Table element count must be unchanged
+    const ths = container.querySelectorAll("th");
+    const tds = container.querySelectorAll("td");
+    expect(ths.length).toBe(2);
+    expect(tds.length).toBe(4);
+
+    // Every th/td must contain a .translation-block child
+    for (const cell of [...ths, ...tds]) {
+      expect(cell.querySelector(".translation-block")).not.toBeNull();
+    }
+
+    // Each <tr> child count must equal original column count (no extra siblings)
+    for (const tr of container.querySelectorAll("tr")) {
+      expect(tr.children.length).toBe(2);
+    }
+  });
+
+  it("places pending indicators inside table cells during translation", () => {
+    const template = buildTranslationTemplate(
+      "<table><tr><td>Pending cell</td></tr></table>",
+    );
+
+    const rendered = renderTranslatedHTML(template.html, [], true);
+    const container = document.createElement("div");
+    container.innerHTML = rendered;
+
+    const td = container.querySelector("td");
+    expect(td?.querySelector(".immersive-translation-pending")).not.toBeNull();
+    // <tr> still has exactly 1 child
+    expect(td?.parentElement?.children.length).toBe(1);
+  });
+
+  it("handles mixed table and paragraph content correctly", () => {
+    const html = "<p>Intro text</p><table><tr><td>Cell</td></tr></table><p>Outro text</p>";
+    const template = buildTranslationTemplate(html);
+
+    const paragraphs = template.sources.map((_, i) => ({
+      index: i + 1,
+      translated: `译文${i + 1}`,
+      status: "done" as const,
+    }));
+
+    const rendered = renderTranslatedHTML(template.html, paragraphs, false);
+    const container = document.createElement("div");
+    container.innerHTML = rendered;
+
+    // <p> translations are siblings (afterend), <td> translation is a child
+    const ps = container.querySelectorAll("p");
+    for (const p of ps) {
+      const next = p.nextElementSibling;
+      expect(next?.classList.contains("immersive-translation")).toBe(true);
+    }
+
+    const td = container.querySelector("td");
+    expect(td?.querySelector(".translation-block")).not.toBeNull();
+    expect(td?.parentElement?.children.length).toBe(1);
   });
 });

@@ -76,16 +76,27 @@ export function renderTranslatedHTML(
 
     const translation = translationByIndex.get(index);
     if (translation?.status === "done" && translation.translated.trim() !== "") {
-      target.insertAdjacentElement("afterend", buildTranslationNode(translation.translated));
+      insertTranslationAfter(target, buildTranslationNode(translation.translated));
       continue;
     }
 
     if (isTranslatingArticle) {
-      target.insertAdjacentElement("afterend", buildPendingNode());
+      insertTranslationAfter(target, buildPendingNode());
     }
   }
 
   return template.innerHTML;
+}
+
+// For table cells (td/th), append inside the cell to keep table structure valid.
+// For all other elements, insert as a sibling after the element.
+function insertTranslationAfter(target: HTMLElement, node: HTMLElement): void {
+  const tag = target.tagName.toLowerCase();
+  if (tag === "td" || tag === "th") {
+    target.appendChild(node);
+  } else {
+    target.insertAdjacentElement("afterend", node);
+  }
 }
 
 function annotateTranslationTargets(root: ParentNode, sources: string[]) {
@@ -135,11 +146,11 @@ function isTranslationTarget(element: Element): boolean {
 
 function buildTranslationNode(translated: string): HTMLDivElement {
   const wrapper = document.createElement("div");
-  wrapper.className = "translation-block mt-3 space-y-3 border-l-2 border-primary/50 pl-4";
+  wrapper.className = "translation-block immersive-translation";
 
   for (const block of splitTranslatedTextBlocks(translated)) {
     const paragraph = document.createElement("div");
-    paragraph.className = "text-base leading-[1.85] whitespace-pre-wrap break-words [overflow-wrap:anywhere]";
+    paragraph.className = "whitespace-pre-wrap break-words [overflow-wrap:anywhere]";
     paragraph.textContent = block;
     wrapper.appendChild(paragraph);
   }
@@ -149,7 +160,7 @@ function buildTranslationNode(translated: string): HTMLDivElement {
 
 function buildPendingNode(): HTMLDivElement {
   const wrapper = document.createElement("div");
-  wrapper.className = "translation-pending mt-3 flex items-center gap-2 text-xs text-muted-foreground";
+  wrapper.className = "translation-block immersive-translation-pending flex items-center gap-2 text-xs text-muted-foreground";
   wrapper.setAttribute("aria-live", "polite");
 
   const dot = document.createElement("span");
