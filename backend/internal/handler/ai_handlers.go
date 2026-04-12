@@ -509,37 +509,63 @@ func (s *Server) translateParagraphs(
 	return nil
 }
 
+// buildTranslationContext constructs a sliding window of prior translated
+// segments for prompt injection. The first segment is always pinned (it
+// typically establishes key terminology), then the most recent segments
+// fill the remaining budget. This prevents terminology drift in long
+// articles where early terminology would otherwise slide out of view.
 func buildTranslationContext(history []translationPair) string {
 	if len(history) == 0 {
 		return "(none)"
 	}
 	const (
-		maxPairs = 4
-		maxChars = 2200
+		maxPairs = 5
+		maxChars = 2400
 	)
-	start := 0
-	if len(history) > maxPairs {
-		start = len(history) - maxPairs
-	}
+
+	// Collect indices to include: first segment + most recent ones.
+	indices := selectContextIndices(history, maxPairs)
+
 	var b strings.Builder
-	for i := start; i < len(history); i++ {
+	for _, i := range indices {
 		pair := history[i]
 		if strings.TrimSpace(pair.Source) == "" || strings.TrimSpace(pair.Translated) == "" {
 			continue
 		}
-		b.WriteString(fmt.Sprintf("Segment %d Source:\n%s\nSegment %d Translation:\n%s\n\n", i+1, pair.Source, i+1, pair.Translated))
-		if b.Len() > maxChars {
+		entry := fmt.Sprintf("Segment %d Source:\n%s\nSegment %d Translation:\n%s\n\n", i+1, pair.Source, i+1, pair.Translated)
+		if b.Len()+len(entry) > maxChars {
 			break
 		}
+		b.WriteString(entry)
 	}
 	text := strings.TrimSpace(b.String())
 	if text == "" {
 		return "(none)"
 	}
-	if len(text) > maxChars {
-		return text[len(text)-maxChars:]
-	}
 	return text
+}
+
+// selectContextIndices returns segment indices in ascending order:
+// always includes index 0 (first segment), then fills remaining slots
+// from the most recent segments.
+func selectContextIndices(history []translationPair, maxPairs int) []int {
+	if len(history) <= maxPairs {
+		indices := make([]int, len(history))
+		for i := range indices {
+			indices[i] = i
+		}
+		return indices
+	}
+	// Pin first + take most recent (maxPairs - 1).
+	tail := len(history) - (maxPairs - 1)
+	if tail <= 0 {
+		tail = 1
+	}
+	indices := []int{0}
+	for i := tail; i < len(history); i++ {
+		indices = append(indices, i)
+	}
+	return indices
 }
 
 // buildTranslationSystemPrompt constructs a system prompt enriched with
