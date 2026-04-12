@@ -205,7 +205,56 @@ You are a professional translator specializing in {domain} content.
 
 ---
 
-## 5. 参考文献
+## 5. LLM API 测试方案调研
+
+### 5.1 业界实践
+
+LLM 集成代码的测试面临三个核心挑战：**非确定性**（同一 prompt 不同返回）、**高成本**（每次调用消耗 token）、**慢速**（网络延迟）。业界主流应对策略：
+
+| 层级 | 策略 | 测什么 | 不测什么 |
+|------|------|--------|----------|
+| 纯函数 | 直接调用，零依赖 | Prompt 构建、上下文裁剪、参数校验 | — |
+| HTTP Mock | `httptest.NewServer` 模拟 API 端点 | 请求结构、header、流式解析 | LLM 实际生成质量 |
+| Prompt 快照 | 在 mock 中捕获发送的完整 prompt | 关键片段是否存在（防回归） | 语义正确性 |
+| LLM-as-Judge | 调用真实 LLM 评估输出质量 | 翻译质量、一致性 | CI 中不适合（成本+慢） |
+
+**核心原则**（来源：[Mocking OpenAI](https://laszlo.substack.com/p/mocking-openai-unit-testing-in-the)）：
+
+- Mock HTTP 层而非客户端层：`httptest` 拦截所有出站请求，无需修改业务代码
+- 测试发出的 prompt 是否正确，而非 LLM 返回什么：prompt 结构是我们的代码，LLM 行为是上游的
+- 确定性断言优先：JSON 合法性、必含字段、长度约束等零成本检查覆盖大部分回归
+
+**三层测试架构**（来源：[Rethinking Testing for LLM Applications](https://arxiv.org/abs/2508.20737)）：
+
+1. **System Shell 层**：传统单元测试直接适用
+2. **Prompt Orchestration 层**：需要"语义重新解释"传统方法 — 即 prompt 快照测试
+3. **LLM Inference Core 层**：需要全新范式 — LLM-as-Judge / 人工评估
+
+### 5.2 在 Zflow 中的落地
+
+采用 Go 标准库 `httptest` + 项目已有的 `NewTestSQLiteFeedRepository()` 测试基础设施：
+
+```
+ai_handlers_test.go
+├── 纯函数测试（11 个用例）
+│   ├── buildTranslationContext: 空/单段/首段钉住/超长截断/跳过空白
+│   ├── selectContextIndices: 小/大 history
+│   └── buildTranslationSystemPrompt: 全字段/无摘要/空/长摘要截断
+└── httptest 集成测试（3 个用例）
+    ├── PromptContainsArticleContext: 捕获请求体，断言标题+来源
+    ├── SlidingWindowProgression: 3段翻译，验证上下文递增
+    └── AnthropicProtocol: 验证 header + body 结构差异
+```
+
+关键设计决策：
+
+- mock server 同时被摘要管线和翻译管线命中 → 翻译前清空捕获列表，隔离两个管线的请求
+- 使用 `sync.Mutex` 保护捕获的请求列表（handler 可能并发调用）
+- 提取 `patchAI()`、`doRequest()`、`getFirstArticleID()` 三个 helper 避免测试样板代码
+
+---
+
+## 6. 参考文献
 
 1. He, Z. et al. "Exploring Human-Like Translation Strategy with Large Language Models." *TACL*, 2024. [arXiv:2305.04118](https://arxiv.org/abs/2305.04118)
 2. Feng, Z. et al. "Improving LLM-based Machine Translation with Systematic Self-Refinement." 2024. [arXiv:2402.16379](https://arxiv.org/abs/2402.16379)
@@ -215,3 +264,6 @@ You are a professional translator specializing in {domain} content.
 6. Ng, A. et al. "Translation Agent: Agentic Translation using Reflection Workflow." 2024. [GitHub](https://github.com/andrewyng/translation-agent)
 7. "Efficient Terminology Integration for LLM-based Translation." *WMT*, 2024. [ACL Anthology](https://aclanthology.org/2024.wmt-1.51.pdf)
 8. "GRAFT: A Graph-based Flow-aware Agentic Framework for Document-level Machine Translation." 2025. [arXiv:2507.03311](https://arxiv.org/abs/2507.03311)
+9. "Mocking OpenAI — Unit testing in the age of LLMs." [Substack](https://laszlo.substack.com/p/mocking-openai-unit-testing-in-the)
+10. "Rethinking Testing for LLM Applications: Characteristics, Challenges, and a Lightweight Interaction Protocol." 2025. [arXiv:2508.20737](https://arxiv.org/abs/2508.20737)
+11. "Mocking External APIs in Agent Tests." [Scenario / LangWatch](https://langwatch.ai/scenario/testing-guides/mocks/)
