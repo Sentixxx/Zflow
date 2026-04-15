@@ -144,7 +144,7 @@ export function ReaderPage({ initialSettingsOpen = false }: ReaderPageProps) {
     status,
     error,
     articlesInfiniteQuery,
-  } = useReaderBootstrap(apiBase, sortMode);
+  } = useReaderBootstrap(apiBase, sortMode, { feedId: selectedFeedID, folderId: selectedFolderID });
   const sanitizedSummaryHTML = useMemo(
     () => sanitizeRichHTML(selectedArticle?.display_summary || selectedArticle?.summary),
     [selectedArticle?.display_summary, selectedArticle?.summary],
