@@ -2,12 +2,17 @@ import { useState } from "react";
 import type { SortMode } from "@/lib/article-list";
 import type { RefreshFailure } from "@/components";
 import { useReaderQueries } from "@/hooks/useReaderQueries";
+import type { ArticleScope } from "@/hooks/articles-query-key";
 import { useFeeds } from "@/hooks/useFeeds";
 import { useEntries } from "@/hooks/useEntries";
 import { refreshFeedsBatch } from "@/services/feed-refresh-service";
 
-export function useReaderBootstrap(apiBase: string, sortMode: SortMode = "latest") {
-  const { client, feedsQuery, foldersQuery, articlesQueryKey, articlesInfiniteQuery } = useReaderQueries(apiBase, sortMode);
+export function useReaderBootstrap(
+  apiBase: string,
+  sortMode: SortMode = "latest",
+  scope: ArticleScope = { feedId: null, folderId: null },
+) {
+  const { client, feedsQuery, foldersQuery, articlesQueryKey, articlesInfiniteQuery } = useReaderQueries(apiBase, sortMode, scope);
   const [status, setStatus] = useState("准备就绪");
   const [error, setError] = useState("");
 
