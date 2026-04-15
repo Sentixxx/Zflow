@@ -25,11 +25,13 @@ const TRANSLATABLE_TAGS = new Set([
   "h5",
   "h6",
   "blockquote",
-  "pre",
   "td",
   "th",
   "figcaption",
 ]);
+
+// Tags that represent code/preformatted content — must never be translated.
+const CODE_TAGS = new Set(["pre", "code", "kbd", "samp"]);
 
 export function buildTranslationTemplate(html: string | undefined): TranslationTemplate {
   const source = (html || "").trim();
@@ -89,22 +91,50 @@ export function renderTranslatedHTML(
 }
 
 // For table cells (td/th), append inside the cell to keep table structure valid.
+// For grid/flex containers, wrap target + translation node together so the wrapper
+// occupies the original grid/flex slot — inserting a bare sibling would shift all
+// subsequent items by one slot, breaking grid-column/flex-order layouts.
 // For all other elements, insert as a sibling after the element.
 function insertTranslationAfter(target: HTMLElement, node: HTMLElement): void {
   const tag = target.tagName.toLowerCase();
   if (tag === "td" || tag === "th") {
     target.appendChild(node);
-  } else {
-    target.insertAdjacentElement("afterend", node);
+    return;
   }
+
+  const parent = target.parentElement;
+  if (parent && isGridOrFlexContainer(parent)) {
+    // Wrap strategy: replace target with a wrapper that holds both nodes.
+    // IMPORTANT: target's class/id/style/data-* are NOT moved — they stay on target.
+    // The wrapper only receives layout-related attributes that affect grid/flex slot
+    // placement, so the slot is preserved without breaking target's own selectors.
+    const wrapper = document.createElement("div");
+    copyLayoutAttributesToWrapper(target, wrapper);
+    parent.replaceChild(wrapper, target);
+    wrapper.appendChild(target);
+    wrapper.appendChild(node);
+    return;
+  }
+
+  target.insertAdjacentElement("afterend", node);
 }
 
 function annotateTranslationTargets(root: ParentNode, sources: string[]) {
+  // Skip entire subtree if this root is a code-like element
+  if (root instanceof Element && isCodeElement(root)) {
+    return;
+  }
+
   const childNodes = Array.from(root.childNodes);
   for (const child of childNodes) {
     if (child.nodeType === Node.TEXT_NODE) {
       const normalized = normalizeText(child.textContent || "");
       if (!normalized) {
+        continue;
+      }
+
+      // Skip bare text nodes whose ancestor is a code-like element
+      if (hasCodeAncestor(child)) {
         continue;
       }
 
@@ -120,9 +150,16 @@ function annotateTranslationTargets(root: ParentNode, sources: string[]) {
       continue;
     }
 
+    // Skip code-like elements and their entire subtree
+    if (isCodeElement(child)) {
+      continue;
+    }
+
     if (isTranslationTarget(child)) {
       child.setAttribute("data-translation-index", String(sources.length + 1));
-      sources.push(normalizeText(child.textContent || ""));
+      // Use extractTranslatableText to exclude code-like subtrees from the source,
+      // so inline <code>/<kbd>/<samp> content is not sent to the translation API.
+      sources.push(extractTranslatableText(child));
       continue;
     }
 
@@ -177,4 +214,115 @@ function buildPendingNode(): HTMLDivElement {
 
 function normalizeText(raw: string): string {
   return raw.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Recursively collect text from an element, skipping CODE_TAGS subtrees entirely.
+ * This ensures inline <code>/<kbd>/<samp>/<pre> content is excluded from the
+ * translation source string — they must not be sent to the translation API.
+ */
+function extractTranslatableText(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent || "";
+  }
+  if (node instanceof Element && isCodeElement(node)) {
+    // Skip entire code-like subtree
+    return "";
+  }
+  let result = "";
+  for (const child of Array.from(node.childNodes)) {
+    result += extractTranslatableText(child);
+  }
+  return normalizeText(result);
+}
+
+// Returns true if the element itself is a code/preformatted tag.
+function isCodeElement(el: Element): boolean {
+  return CODE_TAGS.has(el.tagName.toLowerCase());
+}
+
+// Walk up the DOM tree to check whether any ancestor is a code-like tag.
+// Used to protect bare text nodes inside inline <code> from being wrapped.
+function hasCodeAncestor(node: Node): boolean {
+  let current: Node | null = node.parentNode;
+  while (current !== null) {
+    if (current instanceof Element && isCodeElement(current)) {
+      return true;
+    }
+    current = current.parentNode;
+  }
+  return false;
+}
+
+// Tailwind class prefixes that control grid/flex slot placement.
+// Only these classes are safe to copy to the wrapper — everything else stays on target.
+const LAYOUT_CLASS_PREFIXES = [
+  "col-span-",
+  "row-span-",
+  "col-start-",
+  "col-end-",
+  "row-start-",
+  "row-end-",
+  "order-",
+  "self-",
+  "justify-self-",
+  "place-self-",
+];
+
+// Inline style properties that control grid/flex slot placement.
+const LAYOUT_STYLE_PROPS: ReadonlyArray<string> = [
+  "gridArea",
+  "gridColumn",
+  "gridRow",
+  "order",
+  "alignSelf",
+  "justifySelf",
+  "placeSelf",
+];
+
+/**
+ * Copy only layout-relevant attributes from target to wrapper.
+ * Target itself is NEVER mutated — its class/id/style/data-* all remain intact.
+ * Wrapper only gets what is needed to occupy the correct grid/flex slot.
+ */
+function copyLayoutAttributesToWrapper(target: HTMLElement, wrapper: HTMLElement): void {
+  // Extract Tailwind layout classes (whitelist only)
+  const layoutClasses = Array.from(target.classList).filter((cls) =>
+    LAYOUT_CLASS_PREFIXES.some((prefix) => cls.startsWith(prefix)),
+  );
+  if (layoutClasses.length > 0) {
+    wrapper.className = layoutClasses.join(" ");
+  }
+
+  // Extract layout-relevant inline style properties
+  const targetStyle = target.style;
+  const wrapperStyleParts: string[] = [];
+  for (const prop of LAYOUT_STYLE_PROPS) {
+    const value = targetStyle.getPropertyValue(
+      // Convert camelCase to kebab-case for getPropertyValue
+      prop.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`),
+    );
+    if (value) {
+      wrapperStyleParts.push(
+        `${prop.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}: ${value}`,
+      );
+    }
+  }
+  if (wrapperStyleParts.length > 0) {
+    wrapper.setAttribute("style", wrapperStyleParts.join("; "));
+  }
+}
+
+// Detect whether a container uses grid or flex layout by checking computed style.
+// Falls back to false when window/getComputedStyle is unavailable (SSR / jsdom without CSS).
+function isGridOrFlexContainer(el: HTMLElement): boolean {
+  if (typeof window === "undefined" || typeof window.getComputedStyle !== "function") {
+    return false;
+  }
+  try {
+    const display = window.getComputedStyle(el).display;
+    return display === "grid" || display === "inline-grid" || display === "flex" || display === "inline-flex";
+  } catch {
+    return false;
+  }
 }
