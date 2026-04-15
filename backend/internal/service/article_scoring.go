@@ -135,6 +135,10 @@ func scoreArticles(articles []model.Article) []model.ArticleFeatures {
 		if strings.TrimSpace(features[i].ScoredAt) == "" {
 			features[i].ScoredAt = time.Now().UTC().Format(time.RFC3339)
 		}
+		// Rule-only path produces no reasoning; explicitly zero it so that any
+		// previous LLM reasoning stored on a reused features struct cannot survive
+		// into the persisted result.
+		features[i].Reasoning = ""
 	}
 	return features
 }

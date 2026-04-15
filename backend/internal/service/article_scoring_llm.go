@@ -8,10 +8,17 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Sentixxx/Zflow/backend/internal/model"
 	logpkg "github.com/Sentixxx/Zflow/backend/pkg/logger"
 )
+
+// maxScoreReasoningLen is the hard upper bound (in Unicode code points) for persisted
+// LLM reasoning text. LLM outputs are unbounded in principle; without a cap, a
+// misbehaving model could write many kilobytes into TEXT columns and then have those
+// bytes echoed back verbatim by every endpoint that returns a full Article.
+const maxScoreReasoningLen = 1024
 
 // ScoringAIConfig holds the AI provider configuration for LLM-enhanced scoring.
 type ScoringAIConfig struct {
@@ -234,12 +241,21 @@ func parseLLMScoringResponse(raw string) (llmScoringResult, error) {
 // blendLLMScores merges rule-based features with LLM scores.
 // The blend ratio is 40% rule-based, 60% LLM for the three dimensions the LLM evaluates.
 // Freshness and novelty remain purely rule-based.
-// LLM reasoning is always persisted even when it does not affect numeric scores.
+// LLM reasoning is persisted with a hard cap of maxScoreReasoningLen runes to prevent
+// unbounded LLM output from inflating stored TEXT size and being echoed back by every
+// endpoint that returns a full Article object.
 func blendLLMScores(features model.ArticleFeatures, llm llmScoringResult) model.ArticleFeatures {
 	features.Quality = blendScore(features.Quality, llm.Quality, 0.4, 0.6)
 	features.Depth = blendScore(features.Depth, llm.Depth, 0.4, 0.6)
 	features.Relevance = blendScore(features.Relevance, llm.Relevance, 0.4, 0.6)
-	features.Reasoning = strings.TrimSpace(llm.Reasoning)
+	reasoning := strings.TrimSpace(llm.Reasoning)
+	if utf8.RuneCountInString(reasoning) > maxScoreReasoningLen {
+		// Truncate at a rune boundary to avoid splitting multibyte characters, then
+		// append an ellipsis so callers can detect truncation if needed.
+		runes := []rune(reasoning)
+		reasoning = string(runes[:maxScoreReasoningLen]) + "…"
+	}
+	features.Reasoning = reasoning
 	return features
 }
 

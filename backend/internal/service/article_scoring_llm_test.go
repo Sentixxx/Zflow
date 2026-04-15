@@ -516,6 +516,127 @@ func TestRefreshStaleScoresLLMFailureFallsBack(t *testing.T) {
 	}
 }
 
+// TestBlendLLMScoresReasoningTruncation verifies that reasoning longer than
+// maxScoreReasoningLen runes is truncated at a rune boundary and marked with "…".
+// This guards against unbounded LLM output inflating persisted TEXT size.
+func TestBlendLLMScoresReasoningTruncation(t *testing.T) {
+	// Build a 2000-rune ASCII string (well above the 1024-rune cap).
+	longReasoning := strings.Repeat("a", 2000)
+	llm := llmScoringResult{
+		Quality:   70,
+		Depth:     60,
+		Relevance: 50,
+		Reasoning: longReasoning,
+	}
+	blended := blendLLMScores(model.ArticleFeatures{Quality: 50, Depth: 50, Relevance: 50}, llm)
+
+	runeCount := len([]rune(blended.Reasoning))
+	// Expect exactly 1024 runes + 1 rune for "…" = 1025 total runes.
+	const wantRunes = maxScoreReasoningLen + 1 // +1 for the ellipsis rune
+	if runeCount != wantRunes {
+		t.Errorf("truncated reasoning rune count = %d, want %d", runeCount, wantRunes)
+	}
+	if !strings.HasSuffix(blended.Reasoning, "…") {
+		t.Errorf("truncated reasoning must end with '…', got: %.30q", blended.Reasoning)
+	}
+	// Result must be valid UTF-8.
+	if !isValidUTF8(blended.Reasoning) {
+		t.Error("truncated reasoning is not valid UTF-8")
+	}
+}
+
+// TestBlendLLMScoresReasoningTruncationMultibyte verifies that multibyte (CJK) runes are
+// not split when reasoning is truncated.
+func TestBlendLLMScoresReasoningTruncationMultibyte(t *testing.T) {
+	// Each "中" is 3 bytes; 2000 of them is well above the 1024-rune cap.
+	longReasoning := strings.Repeat("中", 2000)
+	llm := llmScoringResult{Quality: 60, Depth: 50, Relevance: 40, Reasoning: longReasoning}
+	blended := blendLLMScores(model.ArticleFeatures{Quality: 50, Depth: 50, Relevance: 50}, llm)
+
+	if !isValidUTF8(blended.Reasoning) {
+		t.Error("truncated multibyte reasoning is not valid UTF-8")
+	}
+	runeCount := len([]rune(blended.Reasoning))
+	const wantRunes = maxScoreReasoningLen + 1
+	if runeCount != wantRunes {
+		t.Errorf("rune count = %d, want %d", runeCount, wantRunes)
+	}
+}
+
+// isValidUTF8 returns true when every byte in s is part of a valid UTF-8 sequence.
+func isValidUTF8(s string) bool {
+	for _, r := range s {
+		if r == '\uFFFD' {
+			return false
+		}
+	}
+	return true
+}
+
+// TestRuleOnlyScoringClearsReasoning verifies that running pure rule-based scoring on
+// an article that previously had LLM reasoning stored will result in an empty Reasoning
+// field, preventing stale LLM text from surviving into the persisted result.
+func TestRuleOnlyScoringClearsReasoning(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "scoring-clear-reasoning.db")
+	repo, err := repository.NewTestSQLiteFeedRepository(dbPath)
+	if err != nil {
+		t.Fatalf("NewTestSQLiteFeedRepository() error = %v", err)
+	}
+
+	// No AI configured — pure rule path.
+	svc := NewArticleService(repo, func() *http.Client { return http.DefaultClient })
+
+	contentBody := strings.Repeat("Some article content for rule scoring. ", 30)
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", scoreTestSeeds([]repository.ArticleSeed{
+		{
+			Title:       "Rule-Only Article",
+			Link:        "https://example.com/rule-only",
+			Summary:     "Summary.",
+			FullContent: contentBody,
+			PublishedAt: time.Now().UTC().Format(time.RFC3339),
+		},
+	}), "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+
+	articles := repo.ListArticles()
+	if len(articles) == 0 {
+		t.Fatal("no articles inserted")
+	}
+	articleID := articles[0].ID
+
+	// Simulate a previous LLM scoring round by writing a non-empty Reasoning into
+	// article_features with an outdated FeatureVersion so it triggers re-scoring.
+	oldFeatures := model.ArticleFeatures{
+		Reasoning:      "Old LLM reasoning that must be cleared.",
+		FeatureVersion: 0, // stale — triggers RefreshStaleScores
+	}
+	if err := repo.UpdateArticleFeatures(articleID, oldFeatures); err != nil {
+		t.Fatalf("UpdateArticleFeatures() error = %v", err)
+	}
+
+	refreshed, err := svc.RefreshStaleScores(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("RefreshStaleScores() error = %v", err)
+	}
+	if refreshed != 1 {
+		t.Fatalf("refreshed = %d, want 1", refreshed)
+	}
+
+	updated, ok := repo.GetArticle(articleID)
+	if !ok {
+		t.Fatal("article not found after rule-only re-scoring")
+	}
+	if updated.ArticleFeatures == nil {
+		t.Fatal("article_features must be populated after scoring")
+	}
+	// Rule path must have zeroed out the old LLM reasoning.
+	if updated.ArticleFeatures.Reasoning != "" {
+		t.Errorf("Reasoning = %q after rule-only rescoring, want empty string", updated.ArticleFeatures.Reasoning)
+	}
+}
+
 // TestRefreshStaleScoresNoAIConfig tests that scoring works without AI configured.
 func TestRefreshStaleScoresNoAIConfig(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "scoring-noai.db")

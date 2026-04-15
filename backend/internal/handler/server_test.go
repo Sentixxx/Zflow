@@ -1920,3 +1920,66 @@ func TestArticleDetailReasoningPersistedAfterScoring(t *testing.T) {
 		t.Errorf("score_freshness = %d, want > 0", detailResp.ScoreFreshness)
 	}
 }
+
+// TestArticleListDoesNotLeakScoreReasoning verifies that the list endpoint
+// (GET /api/v1/articles) never emits "score_reasoning" in its JSON output,
+// even when article_features contains a non-empty reasoning string.
+// The list response uses articleListItem which deliberately omits this field;
+// this test guards against accidental future regressions that would expose
+// potentially large LLM text to every list call.
+func TestArticleListDoesNotLeakScoreReasoning(t *testing.T) {
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewTestSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+		{
+			Title:   "Reasoning leak test article",
+			Link:    "https://example.com/leak",
+			Summary: "summary",
+		},
+	}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+
+	articles := repo.ListArticles()
+	if len(articles) != 1 {
+		t.Fatalf("articles len = %d, want 1", len(articles))
+	}
+	articleID := articles[0].ID
+
+	// Persist a features row with non-empty reasoning so the condition is exercised.
+	features := service.RecomputeArticleFeatures(articles[0])
+	features.Reasoning = "Some LLM reasoning that must not appear in list responses."
+	if err := repo.UpdateArticleFeatures(articleID, features); err != nil {
+		t.Fatalf("UpdateArticleFeatures() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/articles", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	// Parse raw JSON to check for the presence of the key regardless of value.
+	var listResp struct {
+		Articles []map[string]any `json:"articles"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("unmarshal list response error = %v", err)
+	}
+	if len(listResp.Articles) != 1 {
+		t.Fatalf("articles len = %d, want 1", len(listResp.Articles))
+	}
+	if _, ok := listResp.Articles[0]["score_reasoning"]; ok {
+		t.Errorf("GET /api/v1/articles response contains 'score_reasoning' field; list endpoint must not expose LLM reasoning")
+	}
+	// Sanity: the article should still be present with its id.
+	if listResp.Articles[0]["id"] == nil {
+		t.Errorf("list article missing 'id' field")
+	}
+}
