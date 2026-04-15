@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -320,10 +321,10 @@ func TestFeedRefreshService_When_Server304_Should_NotModifyExistingArticles(t *t
 // when the 304 response omits the ETag header, the existing ETag is preserved (not cleared).
 func TestFeedRefreshService_When_Server304WithNoNewETag_Should_PreserveOldETag(t *testing.T) {
 	const storedETag = `"etag-preserved"`
-	callCount := 0
+	var callCount atomic.Int64
 	feedXML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
-		if callCount == 1 {
+		callCount.Add(1)
+		if callCount.Load() == 1 {
 			// First call: serve content with ETag
 			w.Header().Set("Content-Type", "application/rss+xml")
 			w.Header().Set("ETag", storedETag)

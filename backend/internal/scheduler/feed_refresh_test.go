@@ -2,10 +2,11 @@ package scheduler
 
 import (
 	"context"
-	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	schedulermock "github.com/Sentixxx/Zflow/backend/internal/scheduler/mock"
 )
 
 type stubRunner struct {
@@ -48,21 +49,8 @@ func TestStartRunsImmediatelyAndThenTicks(t *testing.T) {
 
 // --- ArticleScoreRefreshScheduler ---
 
-type stubScoreRunner struct {
-	count     atomic.Int64
-	returnErr bool
-}
-
-func (r *stubScoreRunner) RefreshStaleScores(_ context.Context, _ int) (int, error) {
-	r.count.Add(1)
-	if r.returnErr {
-		return 0, errors.New("stub refresh error")
-	}
-	return 1, nil
-}
-
 func TestArticleScoreRefreshScheduler_When_ZeroParams_Should_UseDefaults(t *testing.T) {
-	runner := &stubScoreRunner{}
+	runner := &schedulermock.MockArticleScoreRefreshRunner{}
 	s := NewArticleScoreRefreshScheduler(runner, 0, 0)
 	if s.interval != time.Minute {
 		t.Fatalf("interval = %s, want 1m", s.interval)
@@ -73,7 +61,7 @@ func TestArticleScoreRefreshScheduler_When_ZeroParams_Should_UseDefaults(t *test
 }
 
 func TestArticleScoreRefreshScheduler_When_CtxCancelled_Should_Stop(t *testing.T) {
-	runner := &stubScoreRunner{}
+	runner := &schedulermock.MockArticleScoreRefreshRunner{}
 	s := NewArticleScoreRefreshScheduler(runner, 10*time.Millisecond, 10)
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -83,18 +71,19 @@ func TestArticleScoreRefreshScheduler_When_CtxCancelled_Should_Stop(t *testing.T
 		close(done)
 	}()
 
-	time.Sleep(35 * time.Millisecond)
+	// 120ms 给高负载 CI 的 ticker 抖动留 12x 余量（interval=10ms）
+	time.Sleep(120 * time.Millisecond)
 	cancel()
 	<-done
 
 	// Must have run at least twice (startup + >=1 tick)
-	if got := runner.count.Load(); got < 2 {
+	if got := runner.Count.Load(); got < 2 {
 		t.Fatalf("refresh count = %d, want >= 2", got)
 	}
 }
 
 func TestArticleScoreRefreshScheduler_When_RunnerErrors_Should_NotPanic(t *testing.T) {
-	runner := &stubScoreRunner{returnErr: true}
+	runner := &schedulermock.MockArticleScoreRefreshRunner{ReturnErr: true}
 	s := NewArticleScoreRefreshScheduler(runner, 10*time.Millisecond, 5)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
@@ -102,7 +91,7 @@ func TestArticleScoreRefreshScheduler_When_RunnerErrors_Should_NotPanic(t *testi
 	// Must not panic even when runner returns an error on every call
 	s.Start(ctx)
 
-	if runner.count.Load() < 1 {
+	if runner.Count.Load() < 1 {
 		t.Fatal("runner was never called")
 	}
 }
