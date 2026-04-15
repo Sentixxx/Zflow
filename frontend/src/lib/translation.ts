@@ -105,16 +105,11 @@ function insertTranslationAfter(target: HTMLElement, node: HTMLElement): void {
   const parent = target.parentElement;
   if (parent && isGridOrFlexContainer(parent)) {
     // Wrap strategy: replace target with a wrapper that holds both nodes.
-    // The wrapper inherits layout-relevant classes (col-span-*, order-*, etc.)
-    // so the grid slot is preserved exactly.
+    // IMPORTANT: target's class/id/style/data-* are NOT moved — they stay on target.
+    // The wrapper only receives layout-related attributes that affect grid/flex slot
+    // placement, so the slot is preserved without breaking target's own selectors.
     const wrapper = document.createElement("div");
-    wrapper.className = target.className;
-    // Copy layout attributes that may affect grid placement
-    const colSpan = target.getAttribute("data-col-span") || "";
-    if (colSpan) {
-      wrapper.setAttribute("data-col-span", colSpan);
-    }
-    target.removeAttribute("class");
+    copyLayoutAttributesToWrapper(target, wrapper);
     parent.replaceChild(wrapper, target);
     wrapper.appendChild(target);
     wrapper.appendChild(node);
@@ -162,7 +157,9 @@ function annotateTranslationTargets(root: ParentNode, sources: string[]) {
 
     if (isTranslationTarget(child)) {
       child.setAttribute("data-translation-index", String(sources.length + 1));
-      sources.push(normalizeText(child.textContent || ""));
+      // Use extractTranslatableText to exclude code-like subtrees from the source,
+      // so inline <code>/<kbd>/<samp> content is not sent to the translation API.
+      sources.push(extractTranslatableText(child));
       continue;
     }
 
@@ -219,6 +216,26 @@ function normalizeText(raw: string): string {
   return raw.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Recursively collect text from an element, skipping CODE_TAGS subtrees entirely.
+ * This ensures inline <code>/<kbd>/<samp>/<pre> content is excluded from the
+ * translation source string — they must not be sent to the translation API.
+ */
+function extractTranslatableText(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent || "";
+  }
+  if (node instanceof Element && isCodeElement(node)) {
+    // Skip entire code-like subtree
+    return "";
+  }
+  let result = "";
+  for (const child of Array.from(node.childNodes)) {
+    result += extractTranslatableText(child);
+  }
+  return normalizeText(result);
+}
+
 // Returns true if the element itself is a code/preformatted tag.
 function isCodeElement(el: Element): boolean {
   return CODE_TAGS.has(el.tagName.toLowerCase());
@@ -235,6 +252,65 @@ function hasCodeAncestor(node: Node): boolean {
     current = current.parentNode;
   }
   return false;
+}
+
+// Tailwind class prefixes that control grid/flex slot placement.
+// Only these classes are safe to copy to the wrapper — everything else stays on target.
+const LAYOUT_CLASS_PREFIXES = [
+  "col-span-",
+  "row-span-",
+  "col-start-",
+  "col-end-",
+  "row-start-",
+  "row-end-",
+  "order-",
+  "self-",
+  "justify-self-",
+  "place-self-",
+];
+
+// Inline style properties that control grid/flex slot placement.
+const LAYOUT_STYLE_PROPS: ReadonlyArray<string> = [
+  "gridArea",
+  "gridColumn",
+  "gridRow",
+  "order",
+  "alignSelf",
+  "justifySelf",
+  "placeSelf",
+];
+
+/**
+ * Copy only layout-relevant attributes from target to wrapper.
+ * Target itself is NEVER mutated — its class/id/style/data-* all remain intact.
+ * Wrapper only gets what is needed to occupy the correct grid/flex slot.
+ */
+function copyLayoutAttributesToWrapper(target: HTMLElement, wrapper: HTMLElement): void {
+  // Extract Tailwind layout classes (whitelist only)
+  const layoutClasses = Array.from(target.classList).filter((cls) =>
+    LAYOUT_CLASS_PREFIXES.some((prefix) => cls.startsWith(prefix)),
+  );
+  if (layoutClasses.length > 0) {
+    wrapper.className = layoutClasses.join(" ");
+  }
+
+  // Extract layout-relevant inline style properties
+  const targetStyle = target.style;
+  const wrapperStyleParts: string[] = [];
+  for (const prop of LAYOUT_STYLE_PROPS) {
+    const value = targetStyle.getPropertyValue(
+      // Convert camelCase to kebab-case for getPropertyValue
+      prop.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`),
+    );
+    if (value) {
+      wrapperStyleParts.push(
+        `${prop.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}: ${value}`,
+      );
+    }
+  }
+  if (wrapperStyleParts.length > 0) {
+    wrapper.setAttribute("style", wrapperStyleParts.join("; "));
+  }
 }
 
 // Detect whether a container uses grid or flex layout by checking computed style.
