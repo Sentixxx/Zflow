@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -233,4 +234,227 @@ func newFeedXMLServer(t *testing.T, payload string) *httptest.Server {
 		w.Header().Set("Content-Type", "application/rss+xml")
 		_, _ = w.Write([]byte(payload))
 	}))
+}
+
+// --- Conditional GET (ETag / 304) ---
+
+// TestFeedRefreshService_When_Server304_Should_NotModifyExistingArticles verifies that
+// when the server returns HTTP 304, the service does not overwrite existing articles.
+func TestFeedRefreshService_When_Server304_Should_NotModifyExistingArticles(t *testing.T) {
+	const storedETag = `"abc123"`
+
+	feedXML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") == storedETag {
+			// Honour the conditional request — nothing has changed.
+			w.Header().Set("ETag", storedETag)
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		// First fetch: return fresh content.
+		w.Header().Set("Content-Type", "application/rss+xml")
+		w.Header().Set("ETag", storedETag)
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Conditional Feed</title>
+    <item>
+      <title>Original Item</title>
+      <link>https://example.com/items/cond-1</link>
+      <description><![CDATA[<p>original summary</p>]]></description>
+      <pubDate>Mon, 14 Apr 2026 10:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>`))
+	}))
+	t.Cleanup(feedXML.Close)
+
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "cond.db"))
+	if err != nil {
+		t.Fatalf("NewTestSQLiteFeedRepository() error = %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+
+	svc := NewFeedRefreshService(repo, t.TempDir(), func() *http.Client { return feedXML.Client() }, nil)
+
+	// First refresh — populates feed + article
+	if err := svc.RefreshFeed(context.Background(), func() int64 {
+		feed, ferr := repo.AddInFolder(feedXML.URL, "", nil, "", nil, "", "")
+		if ferr != nil {
+			t.Fatalf("AddInFolder() error = %v", ferr)
+		}
+		return feed.ID
+	}()); err != nil {
+		t.Fatalf("first RefreshFeed() error = %v", err)
+	}
+
+	articlesAfterFirst := repo.ListArticles()
+	if len(articlesAfterFirst) != 1 {
+		t.Fatalf("articles after first refresh = %d, want 1", len(articlesAfterFirst))
+	}
+
+	// Store the ETag so the next refresh sends If-None-Match
+	feedList := repo.List()
+	if len(feedList) == 0 {
+		t.Fatal("no feeds stored after first refresh")
+	}
+	feedID := feedList[0].ID
+	if feedList[0].ETag != storedETag {
+		t.Fatalf("stored ETag = %q, want %q", feedList[0].ETag, storedETag)
+	}
+
+	// Second refresh — server responds 304, articles must remain unchanged
+	if err := svc.RefreshFeed(context.Background(), feedID); err != nil {
+		t.Fatalf("second RefreshFeed() error = %v", err)
+	}
+
+	articlesAfterSecond := repo.ListArticles()
+	if len(articlesAfterSecond) != 1 {
+		t.Fatalf("articles after 304 refresh = %d, want unchanged (1)", len(articlesAfterSecond))
+	}
+	if articlesAfterSecond[0].Title != articlesAfterFirst[0].Title {
+		t.Fatalf("article title changed after 304: got %q, want %q",
+			articlesAfterSecond[0].Title, articlesAfterFirst[0].Title)
+	}
+}
+
+// TestFeedRefreshService_When_Server304WithNoNewETag_Should_PreserveOldETag verifies that
+// when the 304 response omits the ETag header, the existing ETag is preserved (not cleared).
+func TestFeedRefreshService_When_Server304WithNoNewETag_Should_PreserveOldETag(t *testing.T) {
+	const storedETag = `"etag-preserved"`
+	var callCount atomic.Int64
+	feedXML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		if callCount.Load() == 1 {
+			// First call: serve content with ETag
+			w.Header().Set("Content-Type", "application/rss+xml")
+			w.Header().Set("ETag", storedETag)
+			_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Etag Feed</title>
+<item><title>Item</title><link>https://example.com/x</link><pubDate>Mon, 14 Apr 2026 10:00:00 GMT</pubDate></item>
+</channel></rss>`))
+			return
+		}
+		// Subsequent calls: 304 with no ETag header (server omits it)
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	t.Cleanup(feedXML.Close)
+
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "etag.db"))
+	if err != nil {
+		t.Fatalf("NewTestSQLiteFeedRepository() error = %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+
+	feed, err := repo.AddInFolder(feedXML.URL, "", nil, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+
+	svc := NewFeedRefreshService(repo, t.TempDir(), func() *http.Client { return feedXML.Client() }, nil)
+
+	// First refresh: store ETag
+	if err := svc.RefreshFeed(context.Background(), feed.ID); err != nil {
+		t.Fatalf("first RefreshFeed() error = %v", err)
+	}
+	storedFeed, ok, _ := repo.GetFeed(feed.ID)
+	if !ok || storedFeed.ETag != storedETag {
+		t.Fatalf("stored ETag after first refresh = %q, want %q", storedFeed.ETag, storedETag)
+	}
+
+	// Second refresh: 304, no ETag header — existing ETag must be preserved
+	if err := svc.RefreshFeed(context.Background(), feed.ID); err != nil {
+		t.Fatalf("second RefreshFeed() error = %v", err)
+	}
+	updatedFeed, ok, _ := repo.GetFeed(feed.ID)
+	if !ok || updatedFeed.ETag != storedETag {
+		t.Fatalf("ETag after 304 without header = %q, want preserved %q", updatedFeed.ETag, storedETag)
+	}
+}
+
+// TestFeedRefreshService_When_ScriptReturnsOkFalse_Should_FallbackToRawItem verifies
+// that when a script runs successfully but returns ok=false, the raw item is kept.
+func TestFeedRefreshService_When_ScriptReturnsOkFalse_Should_FallbackToRawItem(t *testing.T) {
+	feedXML := newFeedXMLServer(t, `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Script Feed</title>
+<item>
+  <title>Original Title</title>
+  <link>https://example.com/script-item</link>
+  <description><![CDATA[<p>original summary</p>]]></description>
+  <pubDate>Mon, 14 Apr 2026 10:00:00 GMT</pubDate>
+</item>
+</channel></rss>`)
+
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "scriptok.db"))
+	if err != nil {
+		t.Fatalf("NewTestSQLiteFeedRepository() error = %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+
+	feed, err := repo.AddInFolder(feedXML.URL, "", nil, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+	// Script outputs valid JSON but ok=false with a debug message
+	script := `import sys, json; print(json.dumps({"ok": False, "debug": "intentional rejection"}))`
+	if _, _, err := repo.UpdateFeedScript(feed.ID, script, "python"); err != nil {
+		t.Fatalf("UpdateFeedScript() error = %v", err)
+	}
+
+	svc := NewFeedRefreshService(repo, t.TempDir(), func() *http.Client { return feedXML.Client() }, nil)
+	if err := svc.RefreshFeed(context.Background(), feed.ID); err != nil {
+		t.Fatalf("RefreshFeed() error = %v", err)
+	}
+
+	articles := repo.ListArticles()
+	if len(articles) != 1 {
+		t.Fatalf("articles = %d, want 1", len(articles))
+	}
+	if articles[0].Title != "Original Title" {
+		t.Fatalf("title = %q, want original title (script ok=false fallback)", articles[0].Title)
+	}
+}
+
+// TestFeedRefreshService_When_RetentionDaysSettingMissing_Should_UseDefault7 verifies
+// that the default 7-day retention is applied when the setting key is absent.
+func TestFeedRefreshService_When_RetentionDaysSettingMissing_Should_UseDefault7(t *testing.T) {
+	// Build a feed with an old article (9 days old) and no retention setting
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "retention.db"))
+	if err != nil {
+		t.Fatalf("NewTestSQLiteFeedRepository() error = %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+
+	oldDate := time.Now().UTC().Add(-9 * 24 * time.Hour).Format(time.RFC3339)
+	feedXML := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>T</title></channel></rss>`))
+	}))
+	t.Cleanup(feedXML.Close)
+
+	_, err = repo.AddInFolder(feedXML.URL, "Retention Feed", []repository.ArticleSeed{{
+		Title:       "Old",
+		Link:        "https://example.com/old",
+		Summary:     "<p>old</p>",
+		PublishedAt: oldDate,
+	}}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+
+	// Confirm no retention setting exists
+	_, ok, _ := repo.GetSetting("article_retention_days")
+	if ok {
+		t.Fatal("retention setting unexpectedly exists")
+	}
+
+	svc := NewFeedRefreshService(repo, t.TempDir(), func() *http.Client { return feedXML.Client() }, nil)
+	if err := svc.RefreshAllFeeds(context.Background()); err != nil {
+		t.Fatalf("RefreshAllFeeds() error = %v", err)
+	}
+
+	// 9 days > 7 days default → old article must be purged
+	articles := repo.ListArticles()
+	if len(articles) != 0 {
+		t.Fatalf("articles after purge = %d, want 0 (default 7-day retention removes 9-day-old article)", len(articles))
+	}
 }
