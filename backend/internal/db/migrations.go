@@ -137,6 +137,13 @@ ALTER TABLE entries ADD COLUMN source_payload TEXT NOT NULL DEFAULT '';
 ALTER TABLE feeds ADD COLUMN retention_days INTEGER NOT NULL DEFAULT 0;
 `,
 	},
+	{
+		Version:     5,
+		Description: "add score_reasoning to article_features",
+		SQL: `
+ALTER TABLE article_features ADD COLUMN score_reasoning TEXT NOT NULL DEFAULT '';
+`,
+	},
 }
 
 func RunMigrations(ctx context.Context, db *sql.DB) error {

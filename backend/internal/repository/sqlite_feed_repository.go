@@ -496,11 +496,12 @@ func scanFullArticle(scanner interface{ Scan(dest ...any) error }) (model.Articl
 	var features model.ArticleFeatures
 	var featureVersion sql.NullInt64
 	var scoredAt sql.NullString
+	var reasoning sql.NullString
 	if err := scanner.Scan(
 		&article.ID, &article.FeedID, &article.Title, &article.Link, &article.Summary, &sourcePayload, &article.AISummary, &article.AISummaryStatus, &article.AISummaryAt,
 		&article.DisplaySummary, &article.DisplaySummaryStatus, &article.DisplaySummaryAt, &article.FullContent, &article.CoverURL, &article.PublishedAt,
 		&readFlag, &favoriteFlag, &article.FavoritedAt, &scores.Quality, &scores.Relevance, &scores.Novelty, &scores.Composite, &article.CreatedAt,
-		&gateStatus, &features.Quality, &features.Relevance, &features.Depth, &features.Freshness, &features.Novelty, &features.Composite, &features.ContentFingerprint, &featureVersion, &scoredAt,
+		&gateStatus, &features.Quality, &features.Relevance, &features.Depth, &features.Freshness, &features.Novelty, &features.Composite, &features.ContentFingerprint, &featureVersion, &scoredAt, &reasoning,
 	); err != nil {
 		return model.Article{}, err
 	}
@@ -514,6 +515,9 @@ func scanFullArticle(scanner interface{ Scan(dest ...any) error }) (model.Articl
 		if scoredAt.Valid {
 			features.ScoredAt = scoredAt.String
 		}
+		if reasoning.Valid {
+			features.Reasoning = reasoning.String
+		}
 		article.ArticleFeatures = &features
 	}
 	return article, nil
@@ -524,7 +528,7 @@ const fullArticleSelectSQL = `
 		e.id, e.feed_id, e.title, e.link, e.summary, e.source_payload, e.ai_summary, e.ai_summary_status, e.ai_summary_updated_at,
 		e.display_summary, e.display_summary_status, e.display_summary_updated_at, e.full_content, e.cover_url, e.published_at,
 		e.is_read, e.is_favorite, e.favorited_at, e.quality_score, e.relevance_score, e.novelty_score, e.composite_score, e.created_at,
-		af.gate_status, COALESCE(af.quality_score, 0), COALESCE(af.relevance_score, 0), COALESCE(af.depth_score, 0), COALESCE(af.freshness_score, 0), COALESCE(af.novelty_score, 0), COALESCE(af.composite_score, 0), COALESCE(af.content_fingerprint, ''), COALESCE(af.feature_version, 0), COALESCE(af.scored_at, '')
+		af.gate_status, COALESCE(af.quality_score, 0), COALESCE(af.relevance_score, 0), COALESCE(af.depth_score, 0), COALESCE(af.freshness_score, 0), COALESCE(af.novelty_score, 0), COALESCE(af.composite_score, 0), COALESCE(af.content_fingerprint, ''), COALESCE(af.feature_version, 0), COALESCE(af.scored_at, ''), COALESCE(af.score_reasoning, '')
 	FROM entries e
 	LEFT JOIN article_features af ON af.article_id = e.id`
 
@@ -709,8 +713,8 @@ func (s *SQLiteFeedRepository) UpdateArticleFeatures(id int64, features model.Ar
 		scoredAt = now
 	}
 	_, err := s.db.Exec(
-		`INSERT INTO article_features(article_id, gate_status, quality_score, relevance_score, depth_score, freshness_score, novelty_score, composite_score, content_fingerprint, feature_version, scored_at, updated_at)
-		 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO article_features(article_id, gate_status, quality_score, relevance_score, depth_score, freshness_score, novelty_score, composite_score, content_fingerprint, feature_version, scored_at, score_reasoning, updated_at)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(article_id) DO UPDATE SET
 		 gate_status = excluded.gate_status,
 		 quality_score = excluded.quality_score,
@@ -722,6 +726,7 @@ func (s *SQLiteFeedRepository) UpdateArticleFeatures(id int64, features model.Ar
 		 content_fingerprint = excluded.content_fingerprint,
 		 feature_version = excluded.feature_version,
 		 scored_at = excluded.scored_at,
+		 score_reasoning = excluded.score_reasoning,
 		 updated_at = excluded.updated_at`,
 		id,
 		string(features.GateStatus),
@@ -734,6 +739,7 @@ func (s *SQLiteFeedRepository) UpdateArticleFeatures(id int64, features model.Ar
 		features.ContentFingerprint,
 		features.FeatureVersion,
 		scoredAt,
+		features.Reasoning,
 		now,
 	)
 	return err
@@ -991,8 +997,8 @@ func upsertArticleFeaturesTx(tx *sql.Tx, articleID int64, features model.Article
 		scoredAt = now
 	}
 	_, err := tx.Exec(
-		`INSERT INTO article_features(article_id, gate_status, quality_score, relevance_score, depth_score, freshness_score, novelty_score, composite_score, content_fingerprint, feature_version, scored_at, updated_at)
-		 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO article_features(article_id, gate_status, quality_score, relevance_score, depth_score, freshness_score, novelty_score, composite_score, content_fingerprint, feature_version, scored_at, score_reasoning, updated_at)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(article_id) DO UPDATE SET
 		 gate_status = excluded.gate_status,
 		 quality_score = excluded.quality_score,
@@ -1004,6 +1010,7 @@ func upsertArticleFeaturesTx(tx *sql.Tx, articleID int64, features model.Article
 		 content_fingerprint = excluded.content_fingerprint,
 		 feature_version = excluded.feature_version,
 		 scored_at = excluded.scored_at,
+		 score_reasoning = excluded.score_reasoning,
 		 updated_at = excluded.updated_at`,
 		articleID,
 		string(features.GateStatus),
@@ -1016,6 +1023,7 @@ func upsertArticleFeaturesTx(tx *sql.Tx, articleID int64, features model.Article
 		features.ContentFingerprint,
 		features.FeatureVersion,
 		scoredAt,
+		features.Reasoning,
 		now,
 	)
 	return err
