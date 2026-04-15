@@ -1,6 +1,7 @@
 /* @vitest-environment jsdom */
 import { describe, expect, it } from "vitest";
 import { buildTranslationTemplate, renderTranslatedHTML, splitTranslatedTextBlocks } from "./translation";
+import { sanitizeRichHTML } from "./sanitize";
 
 describe("splitTranslatedTextBlocks", () => {
   it("splits translated text into safe display blocks on blank lines", () => {
@@ -167,5 +168,64 @@ describe("renderTranslatedHTML", () => {
     const td = container.querySelector("td");
     expect(td?.querySelector(".translation-block")).not.toBeNull();
     expect(td?.parentElement?.children.length).toBe(1);
+  });
+});
+
+describe("sanitizeRichHTML applied to renderTranslatedHTML output", () => {
+  it("preserves data-translation-index, translation-block class, and aria-live after sanitize", () => {
+    const template = buildTranslationTemplate(
+      '<div class="article-body"><p>Original paragraph</p></div>',
+    );
+
+    const raw = renderTranslatedHTML(
+      template.html,
+      [{ index: 1, translated: "译文段落", status: "done" }],
+      false,
+    );
+    const sanitized = sanitizeRichHTML(raw);
+
+    // data-translation-index attribute must survive sanitize
+    expect(sanitized).toContain('data-translation-index="1"');
+    // translation-block class must survive sanitize
+    expect(sanitized).toContain("translation-block");
+    expect(sanitized).toContain("immersive-translation");
+    // translation text must be present
+    expect(sanitized).toContain("译文段落");
+  });
+
+  it("preserves aria-live and aria-hidden on pending nodes after sanitize", () => {
+    const template = buildTranslationTemplate(
+      '<p>Pending paragraph</p>',
+    );
+
+    const raw = renderTranslatedHTML(template.html, [], true);
+    const sanitized = sanitizeRichHTML(raw);
+
+    // aria-live="polite" must survive sanitize
+    expect(sanitized).toContain('aria-live="polite"');
+    // aria-hidden="true" on the dot span must survive sanitize
+    expect(sanitized).toContain('aria-hidden="true"');
+    // pending class must be preserved
+    expect(sanitized).toContain("immersive-translation-pending");
+  });
+
+  it("strips <script> tags injected via attacker-controlled translation text (defense-in-depth)", () => {
+    // buildTranslationNode uses textContent (auto-escapes), so <script> is text-safe.
+    // This test verifies that even if a future change uses innerHTML, sanitize acts as backstop.
+    const template = buildTranslationTemplate('<p>Safe paragraph</p>');
+
+    const raw = renderTranslatedHTML(
+      template.html,
+      [{ index: 1, translated: "safe text", status: "done" }],
+      false,
+    );
+    // Manually inject a script tag into the raw HTML to simulate a future innerHTML regression
+    const injected = raw + '<script>alert(1)<\/script>';
+    const sanitized = sanitizeRichHTML(injected);
+
+    expect(sanitized).not.toContain('<script>');
+    expect(sanitized).not.toContain('alert(1)');
+    // Safe content should still be there
+    expect(sanitized).toContain("safe text");
   });
 });

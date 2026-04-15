@@ -124,8 +124,12 @@ export function ArticleDetailContent({
   const hasSummaryCard = Boolean((sanitizedSummaryHTML || "").trim());
   const summaryStatusMeta = getSummaryStatusMeta(article?.display_summary_status);
   const appendixPayload = useMemo(() => buildAppendixPayload(article), [article]);
+  // sanitizeRichHTML is applied after renderTranslatedHTML to comply with the
+  // CLAUDE.md rule: dangerouslySetInnerHTML only with DOMPurify-sanitized content.
+  // DOMPurify (USE_PROFILES: html) preserves data-* and aria-* by default, so
+  // translation markers (data-translation-index, aria-live, etc.) are not stripped.
   const renderedTranslatedHTML = useMemo(
-    () => renderTranslatedHTML(translationTemplateHTML, translationParagraphs, isTranslatingArticle),
+    () => sanitizeRichHTML(renderTranslatedHTML(translationTemplateHTML, translationParagraphs, isTranslatingArticle)),
     [translationTemplateHTML, translationParagraphs, isTranslatingArticle],
   );
   const appendixSummaryHTML = useMemo(() => sanitizeRichHTML(appendixPayload?.summary), [appendixPayload?.summary]);
