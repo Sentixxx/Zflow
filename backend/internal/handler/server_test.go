@@ -1794,3 +1794,129 @@ func TestClearRecentAISummariesEndpoint(t *testing.T) {
 		}
 	}
 }
+
+// TestArticleDetailExposesFiveDimScores verifies that GET /api/v1/articles/:id
+// returns score_depth and score_freshness from article_features after scoring.
+func TestArticleDetailExposesFiveDimScores(t *testing.T) {
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", scoreHandlerTestSeeds([]repository.ArticleSeed{
+		{
+			Title:       "Five dim article",
+			Link:        "https://example.com/five",
+			Summary:     "Testing depth freshness novelty scoring pipeline.",
+			FullContent: strings.Repeat("Detailed analysis of distributed consensus algorithms with rich technical context. ", 20),
+			PublishedAt: "2026-04-01T00:00:00Z",
+		},
+	}), "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+
+	articles := repo.ListArticles()
+	if len(articles) != 1 {
+		t.Fatalf("articles len = %d, want 1", len(articles))
+	}
+
+	articleID := articles[0].ID
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/articles/"+strconv.FormatInt(articleID, 10), nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles/:id status = %d, want %d, body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var detailResp struct {
+		ScoreDepth     int    `json:"score_depth"`
+		ScoreFreshness int    `json:"score_freshness"`
+		ScoreReasoning string `json:"score_reasoning"`
+		Scores         struct {
+			Quality   int `json:"quality"`
+			Relevance int `json:"relevance"`
+			Novelty   int `json:"novelty"`
+			Composite int `json:"composite"`
+		} `json:"recommendation_scores"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &detailResp); err != nil {
+		t.Fatalf("unmarshal detail response error = %v", err)
+	}
+
+	// score_depth and score_freshness must be > 0 for a valid article with full content
+	if detailResp.ScoreDepth <= 0 {
+		t.Errorf("score_depth = %d, want > 0", detailResp.ScoreDepth)
+	}
+	if detailResp.ScoreFreshness <= 0 {
+		t.Errorf("score_freshness = %d, want > 0", detailResp.ScoreFreshness)
+	}
+	// score_reasoning should be empty when no LLM has run (rule-based only)
+	if detailResp.ScoreReasoning != "" {
+		t.Errorf("score_reasoning = %q, want empty for rule-based-only scoring", detailResp.ScoreReasoning)
+	}
+	// existing four-dim recommendation_scores must still be present
+	if detailResp.Scores.Composite <= 0 {
+		t.Errorf("composite = %d, want > 0", detailResp.Scores.Composite)
+	}
+}
+
+// TestArticleDetailReasoningPersistedAfterScoring verifies that LLM reasoning stored
+// in article_features is surfaced in the detail response via score_reasoning.
+func TestArticleDetailReasoningPersistedAfterScoring(t *testing.T) {
+	repo, err := repository.NewTestSQLiteFeedRepository(filepath.Join(t.TempDir(), "feeds.db"))
+	if err != nil {
+		t.Fatalf("NewSQLiteFeedRepository() error = %v", err)
+	}
+	server := NewServer(repo, t.TempDir())
+
+	_, err = repo.AddInFolder("https://example.com/feed", "Feed", []repository.ArticleSeed{
+		{
+			Title:   "Reasoning article",
+			Link:    "https://example.com/reason",
+			Summary: "summary",
+		},
+	}, "", nil, "", "")
+	if err != nil {
+		t.Fatalf("AddInFolder() error = %v", err)
+	}
+
+	articles := repo.ListArticles()
+	if len(articles) != 1 {
+		t.Fatalf("articles len = %d, want 1", len(articles))
+	}
+	articleID := articles[0].ID
+
+	// Manually persist a features row that includes reasoning
+	features := service.RecomputeArticleFeatures(articles[0])
+	features.Reasoning = "Excellent depth of analysis."
+	if err := repo.UpdateArticleFeatures(articleID, features); err != nil {
+		t.Fatalf("UpdateArticleFeatures() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/articles/"+strconv.FormatInt(articleID, 10), nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/articles/:id status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var detailResp struct {
+		ScoreReasoning string `json:"score_reasoning"`
+		ScoreDepth     int    `json:"score_depth"`
+		ScoreFreshness int    `json:"score_freshness"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &detailResp); err != nil {
+		t.Fatalf("unmarshal detail response error = %v", err)
+	}
+	if detailResp.ScoreReasoning != "Excellent depth of analysis." {
+		t.Errorf("score_reasoning = %q, want %q", detailResp.ScoreReasoning, "Excellent depth of analysis.")
+	}
+	if detailResp.ScoreDepth <= 0 {
+		t.Errorf("score_depth = %d, want > 0", detailResp.ScoreDepth)
+	}
+	if detailResp.ScoreFreshness <= 0 {
+		t.Errorf("score_freshness = %d, want > 0", detailResp.ScoreFreshness)
+	}
+}

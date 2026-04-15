@@ -230,6 +230,12 @@ func attachStoredRecommendationScores(article model.Article) model.Article {
 			scores := recommendationScoresFromFeatures(*article.ArticleFeatures)
 			article.RecommendationScores = &scores
 		}
+		// Expose depth/freshness/reasoning directly on Article for API consumers.
+		// These dimensions are stored in article_features but not in the entries table,
+		// so we surface them here rather than changing the scores aggregate struct.
+		article.ScoreDepth = article.ArticleFeatures.Depth
+		article.ScoreFreshness = article.ArticleFeatures.Freshness
+		article.ScoreReasoning = article.ArticleFeatures.Reasoning
 		return article
 	}
 	return article

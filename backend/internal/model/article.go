@@ -48,6 +48,7 @@ type ArticleFeatures struct {
 	Freshness          int               `json:"-"`
 	Novelty            int               `json:"-"`
 	Composite          int               `json:"-"`
+	Reasoning          string            `json:"-"`
 	ContentFingerprint string            `json:"-"`
 	FeatureVersion     int               `json:"-"`
 	ScoredAt           string            `json:"-"`
@@ -75,5 +76,10 @@ type Article struct {
 	CreatedAt            string                `json:"created_at"`
 	SummaryDebug         *SummaryDebug         `json:"summary_debug,omitempty"`
 	RecommendationScores *RecommendationScores `json:"recommendation_scores,omitempty"`
-	ArticleFeatures      *ArticleFeatures      `json:"-"`
+	// ScoreDepth, ScoreFreshness, ScoreReasoning expose five-dim scoring fields
+	// that are populated from ArticleFeatures when serving article detail responses.
+	ScoreDepth      int    `json:"score_depth,omitempty"`
+	ScoreFreshness  int    `json:"score_freshness,omitempty"`
+	ScoreReasoning  string `json:"score_reasoning,omitempty"`
+	ArticleFeatures *ArticleFeatures `json:"-"`
 }

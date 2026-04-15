@@ -234,10 +234,12 @@ func parseLLMScoringResponse(raw string) (llmScoringResult, error) {
 // blendLLMScores merges rule-based features with LLM scores.
 // The blend ratio is 40% rule-based, 60% LLM for the three dimensions the LLM evaluates.
 // Freshness and novelty remain purely rule-based.
+// LLM reasoning is always persisted even when it does not affect numeric scores.
 func blendLLMScores(features model.ArticleFeatures, llm llmScoringResult) model.ArticleFeatures {
 	features.Quality = blendScore(features.Quality, llm.Quality, 0.4, 0.6)
 	features.Depth = blendScore(features.Depth, llm.Depth, 0.4, 0.6)
 	features.Relevance = blendScore(features.Relevance, llm.Relevance, 0.4, 0.6)
+	features.Reasoning = strings.TrimSpace(llm.Reasoning)
 	return features
 }
 

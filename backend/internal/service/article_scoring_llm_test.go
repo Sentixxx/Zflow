@@ -112,6 +112,43 @@ func TestBlendLLMScores(t *testing.T) {
 	}
 }
 
+func TestBlendLLMScoresReasoningPassthrough(t *testing.T) {
+	features := model.ArticleFeatures{
+		Quality:   50,
+		Depth:     50,
+		Relevance: 50,
+	}
+	llm := llmScoringResult{
+		Quality:   70,
+		Depth:     60,
+		Relevance: 55,
+		Reasoning: "  Well-reasoned technical content with novel insights.  ",
+	}
+
+	blended := blendLLMScores(features, llm)
+
+	// Reasoning must be trimmed and present after blending
+	if blended.Reasoning != "Well-reasoned technical content with novel insights." {
+		t.Errorf("reasoning = %q, want trimmed reasoning string", blended.Reasoning)
+	}
+}
+
+func TestBlendLLMScoresEmptyReasoningPreservesEmpty(t *testing.T) {
+	features := model.ArticleFeatures{
+		Quality: 60,
+	}
+	llm := llmScoringResult{
+		Quality:   70,
+		Reasoning: "",
+	}
+
+	blended := blendLLMScores(features, llm)
+
+	if blended.Reasoning != "" {
+		t.Errorf("reasoning should be empty, got %q", blended.Reasoning)
+	}
+}
+
 func TestBuildLLMScoringUserPrompt(t *testing.T) {
 	article := model.Article{
 		Title:       "Test Article Title",
@@ -395,6 +432,21 @@ func TestRefreshStaleScoresWithLLM(t *testing.T) {
 	// Blended should be higher than pure rule due to LLM boost
 	if updated.RecommendationScores.Quality <= 0 || updated.RecommendationScores.Quality > 100 {
 		t.Errorf("quality = %d, want 1-100 range", updated.RecommendationScores.Quality)
+	}
+
+	// Verify LLM reasoning was persisted to article_features
+	if updated.ArticleFeatures == nil {
+		t.Fatal("article_features should be set after LLM scoring")
+	}
+	if updated.ArticleFeatures.Reasoning != "High quality." {
+		t.Errorf("reasoning = %q, want %q", updated.ArticleFeatures.Reasoning, "High quality.")
+	}
+	// Verify depth and freshness are populated
+	if updated.ArticleFeatures.Depth <= 0 {
+		t.Errorf("depth = %d, want > 0", updated.ArticleFeatures.Depth)
+	}
+	if updated.ArticleFeatures.Freshness <= 0 {
+		t.Errorf("freshness = %d, want > 0", updated.ArticleFeatures.Freshness)
 	}
 }
 
