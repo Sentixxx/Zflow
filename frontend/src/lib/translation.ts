@@ -25,11 +25,13 @@ const TRANSLATABLE_TAGS = new Set([
   "h5",
   "h6",
   "blockquote",
-  "pre",
   "td",
   "th",
   "figcaption",
 ]);
+
+// Tags that represent code/preformatted content — must never be translated.
+const CODE_TAGS = new Set(["pre", "code", "kbd", "samp"]);
 
 export function buildTranslationTemplate(html: string | undefined): TranslationTemplate {
   const source = (html || "").trim();
@@ -89,22 +91,55 @@ export function renderTranslatedHTML(
 }
 
 // For table cells (td/th), append inside the cell to keep table structure valid.
+// For grid/flex containers, wrap target + translation node together so the wrapper
+// occupies the original grid/flex slot — inserting a bare sibling would shift all
+// subsequent items by one slot, breaking grid-column/flex-order layouts.
 // For all other elements, insert as a sibling after the element.
 function insertTranslationAfter(target: HTMLElement, node: HTMLElement): void {
   const tag = target.tagName.toLowerCase();
   if (tag === "td" || tag === "th") {
     target.appendChild(node);
-  } else {
-    target.insertAdjacentElement("afterend", node);
+    return;
   }
+
+  const parent = target.parentElement;
+  if (parent && isGridOrFlexContainer(parent)) {
+    // Wrap strategy: replace target with a wrapper that holds both nodes.
+    // The wrapper inherits layout-relevant classes (col-span-*, order-*, etc.)
+    // so the grid slot is preserved exactly.
+    const wrapper = document.createElement("div");
+    wrapper.className = target.className;
+    // Copy layout attributes that may affect grid placement
+    const colSpan = target.getAttribute("data-col-span") || "";
+    if (colSpan) {
+      wrapper.setAttribute("data-col-span", colSpan);
+    }
+    target.removeAttribute("class");
+    parent.replaceChild(wrapper, target);
+    wrapper.appendChild(target);
+    wrapper.appendChild(node);
+    return;
+  }
+
+  target.insertAdjacentElement("afterend", node);
 }
 
 function annotateTranslationTargets(root: ParentNode, sources: string[]) {
+  // Skip entire subtree if this root is a code-like element
+  if (root instanceof Element && isCodeElement(root)) {
+    return;
+  }
+
   const childNodes = Array.from(root.childNodes);
   for (const child of childNodes) {
     if (child.nodeType === Node.TEXT_NODE) {
       const normalized = normalizeText(child.textContent || "");
       if (!normalized) {
+        continue;
+      }
+
+      // Skip bare text nodes whose ancestor is a code-like element
+      if (hasCodeAncestor(child)) {
         continue;
       }
 
@@ -117,6 +152,11 @@ function annotateTranslationTargets(root: ParentNode, sources: string[]) {
     }
 
     if (!(child instanceof Element)) {
+      continue;
+    }
+
+    // Skip code-like elements and their entire subtree
+    if (isCodeElement(child)) {
       continue;
     }
 
@@ -177,4 +217,36 @@ function buildPendingNode(): HTMLDivElement {
 
 function normalizeText(raw: string): string {
   return raw.replace(/\s+/g, " ").trim();
+}
+
+// Returns true if the element itself is a code/preformatted tag.
+function isCodeElement(el: Element): boolean {
+  return CODE_TAGS.has(el.tagName.toLowerCase());
+}
+
+// Walk up the DOM tree to check whether any ancestor is a code-like tag.
+// Used to protect bare text nodes inside inline <code> from being wrapped.
+function hasCodeAncestor(node: Node): boolean {
+  let current: Node | null = node.parentNode;
+  while (current !== null) {
+    if (current instanceof Element && isCodeElement(current)) {
+      return true;
+    }
+    current = current.parentNode;
+  }
+  return false;
+}
+
+// Detect whether a container uses grid or flex layout by checking computed style.
+// Falls back to false when window/getComputedStyle is unavailable (SSR / jsdom without CSS).
+function isGridOrFlexContainer(el: HTMLElement): boolean {
+  if (typeof window === "undefined" || typeof window.getComputedStyle !== "function") {
+    return false;
+  }
+  try {
+    const display = window.getComputedStyle(el).display;
+    return display === "grid" || display === "inline-grid" || display === "flex" || display === "inline-flex";
+  } catch {
+    return false;
+  }
 }
