@@ -25,6 +25,10 @@ describe("canRequestReadability", () => {
     expect(canRequestReadability(article({ id: 1, link: "" }))).toBe(true);
   });
 
+  it("allows readability when article has a concrete link", () => {
+    expect(canRequestReadability(article({ id: 1, link: "https://example.com/a" }))).toBe(true);
+  });
+
   it("disables readability when article is missing", () => {
     expect(canRequestReadability(null)).toBe(false);
   });
@@ -33,11 +37,41 @@ describe("canRequestReadability", () => {
 describe("shouldAutoFetchReadability", () => {
   it("auto fetches when article has no readable content even if link is empty", () => {
     const target = article({ id: 2, link: "", full_content: "" });
-    expect(shouldAutoFetchReadability({ article: target, hasUsableFullContent: false, isExtractingReadable: false })).toBe(true);
+    expect(
+      shouldAutoFetchReadability({ article: target, hasUsableFullContent: false, isExtractingReadable: false }),
+    ).toBe(true);
   });
 
   it("skips auto fetch while readability is in progress", () => {
     const target = article({ id: 3, link: "", full_content: "" });
-    expect(shouldAutoFetchReadability({ article: target, hasUsableFullContent: false, isExtractingReadable: true })).toBe(false);
+    expect(
+      shouldAutoFetchReadability({ article: target, hasUsableFullContent: false, isExtractingReadable: true }),
+    ).toBe(false);
+  });
+
+  it("skips auto fetch when the article already has usable full content", () => {
+    // Even without an in-flight extraction, a present full_content should
+    // short-circuit the auto-fetch decision — avoids clobbering existing data.
+    const target = article({ id: 4, full_content: "<p>body</p>" });
+    expect(
+      shouldAutoFetchReadability({ article: target, hasUsableFullContent: true, isExtractingReadable: false }),
+    ).toBe(false);
+  });
+
+  it("prefers the usable-content branch over the in-progress branch", () => {
+    // Both flags true: usable content wins (order of guards), still returns false.
+    const target = article({ id: 5, full_content: "<p>body</p>" });
+    expect(
+      shouldAutoFetchReadability({ article: target, hasUsableFullContent: true, isExtractingReadable: true }),
+    ).toBe(false);
+  });
+
+  it("returns false when article is null regardless of other flags", () => {
+    expect(
+      shouldAutoFetchReadability({ article: null, hasUsableFullContent: false, isExtractingReadable: false }),
+    ).toBe(false);
+    expect(
+      shouldAutoFetchReadability({ article: null, hasUsableFullContent: true, isExtractingReadable: true }),
+    ).toBe(false);
   });
 });
