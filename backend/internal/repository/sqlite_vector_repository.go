@@ -3,10 +3,10 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"math"
-
-	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
+	"sort"
 )
 
 type SQLiteVectorRepository struct {
@@ -18,85 +18,31 @@ func NewSQLiteVectorRepository(db *sql.DB) *SQLiteVectorRepository {
 }
 
 func (r *SQLiteVectorRepository) StoreEmbedding(ctx context.Context, sourceType string, sourceID int64, model string, embedding []float32) error {
-	tx, err := r.db.BeginTx(ctx, nil)
+	serialized := serializeFloat32(embedding)
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO embeddings(source_type, source_id, model, dimensions, embedding_blob, created_at)
+		 VALUES(?, ?, ?, ?, ?, datetime('now'))
+		 ON CONFLICT(source_type, source_id, model) DO UPDATE SET
+		 	dimensions = excluded.dimensions,
+		 	embedding_blob = excluded.embedding_blob,
+		 	created_at = datetime('now')`,
+		sourceType, sourceID, model, len(embedding), serialized,
+	)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-
-	// Upsert metadata row and get its rowid
-	var metaID int64
-	err = tx.QueryRowContext(ctx,
-		`SELECT id FROM embeddings WHERE source_type = ? AND source_id = ? AND model = ?`,
-		sourceType, sourceID, model,
-	).Scan(&metaID)
-
-	if errors.Is(err, sql.ErrNoRows) {
-		res, err := tx.ExecContext(ctx,
-			`INSERT INTO embeddings(source_type, source_id, model, dimensions, created_at)
-			 VALUES(?, ?, ?, ?, datetime('now'))`,
-			sourceType, sourceID, model, len(embedding),
-		)
-		if err != nil {
-			return err
-		}
-		metaID, err = res.LastInsertId()
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	} else {
-		// Update existing
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE embeddings SET dimensions = ?, created_at = datetime('now') WHERE id = ?`,
-			len(embedding), metaID,
-		); err != nil {
-			return err
-		}
-		// Delete old vec entry so we can re-insert
-		if _, err := tx.ExecContext(ctx, `DELETE FROM vec_embeddings WHERE rowid = ?`, metaID); err != nil {
-			return err
-		}
-	}
-
-	// Insert into vec0 virtual table
-	serialized, err := sqlite_vec.SerializeFloat32(embedding)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO vec_embeddings(rowid, embedding) VALUES(?, ?)`,
-		metaID, serialized,
-	); err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	return nil
 }
 
 func (r *SQLiteVectorRepository) SearchSimilar(ctx context.Context, sourceType string, queryEmbedding []float32, limit int) ([]VectorMatch, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-
-	serialized, err := sqlite_vec.SerializeFloat32(queryEmbedding)
-	if err != nil {
-		return nil, err
-	}
-
-	// Over-fetch because KNN k is applied before the JOIN filter on source_type.
-	fetchK := limit * 3
-	if fetchK < 50 {
-		fetchK = 50
-	}
-
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT e.source_type, e.source_id, v.distance
-		 FROM vec_embeddings v
-		 JOIN embeddings e ON e.id = v.rowid
-		 WHERE v.embedding MATCH ? AND k = ?`,
-		serialized, fetchK,
+		`SELECT source_type, source_id, embedding_blob
+		 FROM embeddings
+		 WHERE source_type = ? AND dimensions = ? AND length(embedding_blob) > 0`,
+		sourceType, len(queryEmbedding),
 	)
 	if err != nil {
 		return nil, err
@@ -106,20 +52,30 @@ func (r *SQLiteVectorRepository) SearchSimilar(ctx context.Context, sourceType s
 	var matches []VectorMatch
 	for rows.Next() {
 		var m VectorMatch
-		var distance float64
-		if err := rows.Scan(&m.SourceType, &m.SourceID, &distance); err != nil {
+		var blob []byte
+		if err := rows.Scan(&m.SourceType, &m.SourceID, &blob); err != nil {
 			return nil, err
 		}
-		if m.SourceType != sourceType {
+		embedding := deserializeFloat32(blob)
+		if len(embedding) != len(queryEmbedding) {
 			continue
 		}
-		m.Score = 1 - distance
+		m.Score = cosineSimilarity(queryEmbedding, embedding)
 		matches = append(matches, m)
-		if len(matches) >= limit {
-			break
-		}
 	}
-	return matches, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].Score == matches[j].Score {
+			return matches[i].SourceID < matches[j].SourceID
+		}
+		return matches[i].Score > matches[j].Score
+	})
+	if len(matches) > limit {
+		matches = matches[:limit]
+	}
+	return matches, nil
 }
 
 func (r *SQLiteVectorRepository) FindSimilarToSource(ctx context.Context, sourceType string, sourceID int64, threshold float64, limit int) ([]VectorMatch, error) {
@@ -136,87 +92,38 @@ func (r *SQLiteVectorRepository) FindSimilarToSource(ctx context.Context, source
 		return nil, nil
 	}
 
-	// Search for similar, fetch extra to filter by threshold
-	fetchLimit := limit * 3
-	if fetchLimit < 50 {
-		fetchLimit = 50
-	}
-
-	serialized, err := sqlite_vec.SerializeFloat32(embedding)
+	matches, err := r.SearchSimilar(ctx, sourceType, embedding, limit+1)
 	if err != nil {
 		return nil, err
 	}
-
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT e.source_type, e.source_id, v.distance
-		 FROM vec_embeddings v
-		 JOIN embeddings e ON e.id = v.rowid
-		 WHERE v.embedding MATCH ? AND k = ?`,
-		serialized, fetchLimit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var matches []VectorMatch
-	for rows.Next() {
-		var m VectorMatch
-		var distance float64
-		if err := rows.Scan(&m.SourceType, &m.SourceID, &distance); err != nil {
-			return nil, err
-		}
-		m.Score = 1 - distance
-		// Skip wrong type, self, and below threshold
-		if m.SourceType != sourceType {
-			continue
-		}
+	filtered := matches[:0]
+	for _, m := range matches {
 		if m.SourceID == sourceID {
 			continue
 		}
 		if m.Score < threshold {
 			continue
 		}
-		matches = append(matches, m)
-		if len(matches) >= limit {
+		filtered = append(filtered, m)
+		if len(filtered) >= limit {
 			break
 		}
 	}
-	return matches, rows.Err()
+	return filtered, nil
 }
 
 func (r *SQLiteVectorRepository) DeleteEmbedding(ctx context.Context, sourceType string, sourceID int64) error {
-	var metaID int64
-	err := r.db.QueryRowContext(ctx,
-		`SELECT id FROM embeddings WHERE source_type = ? AND source_id = ?`,
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM embeddings WHERE source_type = ? AND source_id = ?`,
 		sourceType, sourceID,
-	).Scan(&metaID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM vec_embeddings WHERE rowid = ?`, metaID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM embeddings WHERE id = ?`, metaID); err != nil {
-		return err
-	}
-	return tx.Commit()
+	)
+	return err
 }
 
 func (r *SQLiteVectorRepository) HasEmbedding(ctx context.Context, sourceType string, sourceID int64) (bool, error) {
 	var exists int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT 1 FROM embeddings WHERE source_type = ? AND source_id = ? LIMIT 1`,
+		`SELECT 1 FROM embeddings WHERE source_type = ? AND source_id = ? AND length(embedding_blob) > 0 LIMIT 1`,
 		sourceType, sourceID,
 	).Scan(&exists)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -231,9 +138,9 @@ func (r *SQLiteVectorRepository) HasEmbedding(ctx context.Context, sourceType st
 func (r *SQLiteVectorRepository) GetEmbedding(ctx context.Context, sourceType string, sourceID int64) ([]float32, error) {
 	var blob []byte
 	err := r.db.QueryRowContext(ctx,
-		`SELECT v.embedding FROM vec_embeddings v
-		 JOIN embeddings e ON e.id = v.rowid
-		 WHERE e.source_type = ? AND e.source_id = ?
+		`SELECT embedding_blob FROM embeddings
+		 WHERE source_type = ? AND source_id = ? AND length(embedding_blob) > 0
+		 ORDER BY created_at DESC, id DESC
 		 LIMIT 1`,
 		sourceType, sourceID,
 	).Scan(&blob)
@@ -244,6 +151,17 @@ func (r *SQLiteVectorRepository) GetEmbedding(ctx context.Context, sourceType st
 		return nil, err
 	}
 	return deserializeFloat32(blob), nil
+}
+
+func serializeFloat32(values []float32) []byte {
+	if len(values) == 0 {
+		return nil
+	}
+	buf := make([]byte, len(values)*4)
+	for i, value := range values {
+		binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(value))
+	}
+	return buf
 }
 
 // deserializeFloat32 converts a raw byte slice (little-endian float32 array) back to []float32.
@@ -258,4 +176,24 @@ func deserializeFloat32(b []byte) []float32 {
 		result[i] = math.Float32frombits(bits)
 	}
 	return result
+}
+
+func cosineSimilarity(left []float32, right []float32) float64 {
+	if len(left) == 0 || len(left) != len(right) {
+		return 0
+	}
+	var dot float64
+	var leftNorm float64
+	var rightNorm float64
+	for i := range left {
+		l := float64(left[i])
+		r := float64(right[i])
+		dot += l * r
+		leftNorm += l * l
+		rightNorm += r * r
+	}
+	if leftNorm == 0 || rightNorm == 0 {
+		return 0
+	}
+	return dot / (math.Sqrt(leftNorm) * math.Sqrt(rightNorm))
 }
