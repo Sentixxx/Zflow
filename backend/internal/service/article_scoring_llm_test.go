@@ -12,7 +12,7 @@ import (
 
 	"github.com/Sentixxx/Zflow/backend/internal/model"
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 func TestParseLLMScoringResponse(t *testing.T) {
@@ -223,9 +223,9 @@ func TestCallLLMForScoringOpenAI(t *testing.T) {
 	}
 
 	article := model.Article{
-		ID:    42,
-		Title: "Understanding Distributed Consensus",
-		Summary: "An in-depth look at Raft and Paxos.",
+		ID:          42,
+		Title:       "Understanding Distributed Consensus",
+		Summary:     "An in-depth look at Raft and Paxos.",
 		FullContent: "Detailed explanation of consensus algorithms...",
 	}
 
@@ -288,8 +288,8 @@ func TestCallLLMForScoringAnthropic(t *testing.T) {
 	}
 
 	result, err := callLLMForScoring(context.Background(), aiMock.Client(), cfg, model.Article{
-		ID:    1,
-		Title: "Test",
+		ID:          1,
+		Title:       "Test",
 		FullContent: "Some content for scoring.",
 	}, nil)
 	if err != nil {
@@ -316,8 +316,8 @@ func TestCallLLMForScoringAPIError(t *testing.T) {
 	}
 
 	_, err := callLLMForScoring(context.Background(), aiMock.Client(), cfg, model.Article{
-		ID:    1,
-		Title: "Test",
+		ID:          1,
+		Title:       "Test",
 		FullContent: "Content.",
 	}, nil)
 	if err == nil {
@@ -344,8 +344,8 @@ func TestCallLLMForScoringMalformedJSON(t *testing.T) {
 	}
 
 	_, err := callLLMForScoring(context.Background(), aiMock.Client(), cfg, model.Article{
-		ID:    1,
-		Title: "Test",
+		ID:          1,
+		Title:       "Test",
 		FullContent: "Content.",
 	}, nil)
 	if err == nil {

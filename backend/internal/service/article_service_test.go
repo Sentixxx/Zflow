@@ -13,7 +13,7 @@ import (
 
 	"github.com/Sentixxx/Zflow/backend/internal/model"
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 func createArticleServiceFixture(t *testing.T) (*ArticleService, repository.FeedRepository) {
@@ -249,7 +249,7 @@ func TestArticleServiceGetDoesNotBackfillLegacyScoresAndFeatures(t *testing.T) {
 		t.Fatalf("ListArticles len = %d, want 1", len(articles))
 	}
 
-	legacyDB, err := sql.Open("sqlite3", "file:"+dbPath)
+	legacyDB, err := sql.Open("sqlite", "file:"+dbPath)
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
 	}
@@ -305,7 +305,7 @@ func TestArticleServiceRefreshStaleScoresBackfillsLegacyScoresAndFeatures(t *tes
 		t.Fatalf("ListArticles len = %d, want 1", len(articles))
 	}
 
-	legacyDB, err := sql.Open("sqlite3", "file:"+dbPath)
+	legacyDB, err := sql.Open("sqlite", "file:"+dbPath)
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
 	}

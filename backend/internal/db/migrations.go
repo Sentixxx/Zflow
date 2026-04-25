@@ -104,7 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_article_features_scored_at ON article_features(sc
 	},
 	{
 		Version:     2,
-		Description: "embeddings table and vec0 virtual table for vector search",
+		Description: "embeddings table for vector search metadata and blobs",
 		SQL: `
 CREATE TABLE IF NOT EXISTS embeddings (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,15 +112,12 @@ CREATE TABLE IF NOT EXISTS embeddings (
 	source_id INTEGER NOT NULL,
 	model TEXT NOT NULL DEFAULT '',
 	dimensions INTEGER NOT NULL DEFAULT 1536,
+	embedding_blob BLOB NOT NULL DEFAULT X'',
 	created_at TEXT NOT NULL DEFAULT '',
 	UNIQUE(source_type, source_id, model)
 );
 
 CREATE INDEX IF NOT EXISTS idx_embeddings_source ON embeddings(source_type, source_id);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS vec_embeddings USING vec0(
-	embedding float[1536]
-);
 `,
 	},
 	{
@@ -142,6 +139,13 @@ ALTER TABLE feeds ADD COLUMN retention_days INTEGER NOT NULL DEFAULT 0;
 		Description: "add score_reasoning to article_features",
 		SQL: `
 ALTER TABLE article_features ADD COLUMN score_reasoning TEXT NOT NULL DEFAULT '';
+`,
+	},
+	{
+		Version:     6,
+		Description: "store embeddings in plain blob column for non-CGO sqlite",
+		SQL: `
+ALTER TABLE embeddings ADD COLUMN embedding_blob BLOB NOT NULL DEFAULT X'';
 `,
 	},
 }
@@ -168,6 +172,22 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 	for _, m := range sorted {
 		if applied[m.Version] {
 			continue
+		}
+		if m.Version == 6 {
+			hasColumn, err := tableHasColumn(ctx, db, "embeddings", "embedding_blob")
+			if err != nil {
+				return fmt.Errorf("inspect migration v%d (%s): %w", m.Version, m.Description, err)
+			}
+			if hasColumn {
+				now := "datetime('now')"
+				if _, err := db.ExecContext(ctx,
+					`INSERT INTO schema_migrations(version, applied_at) VALUES(?, `+now+`)`,
+					m.Version,
+				); err != nil {
+					return fmt.Errorf("record migration v%d: %w", m.Version, err)
+				}
+				continue
+			}
 		}
 		if _, err := db.ExecContext(ctx, m.SQL); err != nil {
 			return fmt.Errorf("migration v%d (%s): %w", m.Version, m.Description, err)
@@ -199,4 +219,28 @@ func loadAppliedVersions(ctx context.Context, db *sql.DB) (map[int]bool, error) 
 		applied[v] = true
 	}
 	return applied, nil
+}
+
+func tableHasColumn(ctx context.Context, db *sql.DB, table string, column string) (bool, error) {
+	rows, err := db.QueryContext(ctx, fmt.Sprintf(`PRAGMA table_info(%s)`, table))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name string
+		var dataType string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }

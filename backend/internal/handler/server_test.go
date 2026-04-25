@@ -16,7 +16,7 @@ import (
 
 	"github.com/Sentixxx/Zflow/backend/internal/repository"
 	"github.com/Sentixxx/Zflow/backend/internal/service"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 func scoreHandlerTestSeeds(items []repository.ArticleSeed) []repository.ArticleSeed {
@@ -444,7 +444,7 @@ func TestArticleDetailDoesNotBackfillLegacyScores(t *testing.T) {
 		t.Fatalf("ListArticles len = %d, want 1", len(articles))
 	}
 
-	legacyDB, err := sql.Open("sqlite3", "file:"+dbPath)
+	legacyDB, err := sql.Open("sqlite", "file:"+dbPath)
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
 	}
