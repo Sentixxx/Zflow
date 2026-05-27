@@ -62,23 +62,16 @@ describe("resolveInitialAPIBase", () => {
     );
   });
 
-  it("returns relative path when stored value is empty in a reverse-proxy build", () => {
-    // Vitest leaves VITE_API_BASE unset, which collapses to "" — the Nginx
-    // reverse-proxy contract: with no explicit stored value, the frontend
-    // should emit relative URLs so the proxy resolves them against the page
-    // origin. Hostname derivation is only hit when a build-time base was
-    // explicitly injected as non-empty (covered indirectly by the default
-    // resolver above).
-    expect(resolveInitialAPIBase("", "192.168.1.10")).toBe("");
-  });
-
-  it("treats null / undefined stored value as unset (relative-path fallback)", () => {
-    expect(resolveInitialAPIBase(null, "localhost")).toBe("");
-    expect(resolveInitialAPIBase(undefined, "127.0.0.1")).toBe("");
-  });
-
-  it("treats a whitespace-only stored value as unset (relative-path fallback)", () => {
-    expect(resolveInitialAPIBase("   ", "localhost")).toBe("");
+  it("falls back to hostname-derived base in dev mode when VITE_API_BASE is unset", async () => {
+    // Dev contract: `npm run dev` leaves VITE_API_BASE unset. There is no
+    // reverse proxy, so the frontend must talk to the Go backend on :8080.
+    // Relative paths would hit Vite (404).
+    const mod = await importWithEnv(undefined);
+    expect(mod.resolveInitialAPIBase("", "192.168.1.10")).toBe("http://192.168.1.10:8080");
+    expect(mod.resolveInitialAPIBase("", "localhost")).toBe("http://localhost:8080");
+    expect(mod.resolveInitialAPIBase(null, "127.0.0.1")).toBe("http://localhost:8080");
+    expect(mod.resolveInitialAPIBase("   ", "localhost")).toBe("http://localhost:8080");
+    expect(mod.resolveInitialAPIBase(undefined, "localhost")).toBe("http://localhost:8080");
   });
 });
 
@@ -101,5 +94,15 @@ describe("build-time VITE_API_BASE injection", () => {
     expect(mod.resolveInitialAPIBase("http://override.example", "any.host")).toBe(
       "http://override.example",
     );
+  });
+
+  it("returns relative path in a prod reverse-proxy build (DEV=false, base empty)", async () => {
+    vi.stubEnv("VITE_API_BASE", "");
+    vi.stubEnv("DEV", false);
+    vi.resetModules();
+    const mod = await import("./api-base");
+    expect(mod.resolveInitialAPIBase("", "192.168.1.10")).toBe("");
+    expect(mod.resolveInitialAPIBase(null, "localhost")).toBe("");
+    expect(mod.resolveInitialAPIBase("   ", "127.0.0.1")).toBe("");
   });
 });

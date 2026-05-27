@@ -1,11 +1,10 @@
-// VITE_API_BASE is injected at build time. When building for Docker Compose
-// (Nginx reverse proxy), set VITE_API_BASE="" so all /api requests go to the
-// current origin. For local dev, leave it unset to fall back to :8080.
+// VITE_API_BASE is injected at build time.
+//   unset               → dev: derive from page hostname (http://<host>:8080)
+//   ""                  → prod build behind a reverse proxy: use relative paths
+//   "http://host:port"  → explicit absolute base
 const BUILD_TIME_API_BASE: string = import.meta.env.VITE_API_BASE ?? "";
 
 export function resolveDefaultAPIBase(hostname?: string): string {
-  // If a build-time base was injected (e.g. empty string for reverse-proxy
-  // deployments), honour it over the hostname-based heuristic.
   if (BUILD_TIME_API_BASE !== "") {
     return BUILD_TIME_API_BASE;
   }
@@ -21,10 +20,8 @@ export function resolveInitialAPIBase(storedValue?: string | null, hostname?: st
   if (saved) {
     return saved;
   }
-  // In Docker Compose (Nginx reverse proxy) BUILD_TIME_API_BASE is "", which
-  // means "use relative paths" — the API client prepends nothing, so requests
-  // go to the same origin as the page (handled by Nginx).
-  if (BUILD_TIME_API_BASE === "") {
+  if (BUILD_TIME_API_BASE === "" && !import.meta.env.DEV) {
+    // Prod build with empty base → reverse-proxy deploy, emit relative URLs.
     return "";
   }
   return resolveDefaultAPIBase(hostname);
